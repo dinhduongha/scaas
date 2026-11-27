@@ -20,7 +20,7 @@ import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
 import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
 import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
 import {PqChatTreeMembers} from "../../src/pqchat/PqChatTreeMembers.sol";
-import {PqChatRecordLib} from "../../src/pqchat/PqChatRecordLib.sol";
+import {PqChatLib} from "../../src/pqchat/PqChatLib.sol";
 
 /// @dev `PqChatTypes` over calldata, run in the script's own EVM (never broadcast): the typed digests and ids.
 contract PqChatDigests {
@@ -192,7 +192,7 @@ contract PqChatOnchain is OnchainBase {
                 e.params = new bytes32[](1);
                 e.params[0] = bytes32(vm.envOr("CHAIN_CODE_LIMIT", uint256(131_072)));
                 // CTR-CHAT-32: the release's linked library first (forge deploys and links it), then the modules
-                address lib = address(PqChatRecordLib);
+                address lib = address(PqChatLib);
                 (e.libs, e.libCodeHashes) = (new address[](5), new bytes32[](5));
                 (e.libs[0], e.libCodeHashes[0]) = (lib, lib.codehash);
                 (e.libs[1], e.libCodeHashes[1]) = (topics, topics.codehash);
@@ -224,7 +224,7 @@ contract PqChatOnchain is OnchainBase {
         // CTR-CHAT-32 (Fable D-3): the library the release runs, `libs[0]` of its class env, held in the release's code
         IFactoryToken.Env memory ce = f.classEnvOf(3, 0, f.classReleaseOf(IOpenFactory.ReleaseId(3, 0, 1)).envVersion);
         require(_holds(impl.code, abi.encodePacked(ce.libs[0])), "PqChat: libs[0] is not the release's linked library");
-        _book(ce.libs[0], "PqChatRecordLib");
+        _book(ce.libs[0], "PqChatLib");
     }
 
     function _holds(bytes memory code, bytes memory x) internal pure returns (bool) {

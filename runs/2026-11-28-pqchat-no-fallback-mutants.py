@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """PqChat with no fallback (CTR-CHAT-32, ARCH-POS-29, owner 2026-11-27/28): the tree views declared in PqChat's ABI and the
-signed-record step in the linked library PqChatRecordLib. One mutant per new check, each killed by its named test.
+signed-record step in the linked library PqChatLib. One mutant per new check, each killed by its named test.
 python3 runs/2026-11-28-pqchat-no-fallback-mutants.py check | run [name...]"""
 
 import sys
@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from mutants_lib import main  # noqa: E402
 
 C = "smartcontracts/evm/src/pqchat/PqChat.sol"
-L = "smartcontracts/evm/src/pqchat/PqChatRecordLib.sol"
+L = "smartcontracts/evm/src/pqchat/PqChatLib.sol"
 D = "smartcontracts/evm/script/DeployBase.sol"
 F = "cd smartcontracts/evm && ../../scripts/capped forge test --match-path "
 V = F + "test/pqchat/PqChatTreeViews.t.sol --match-test "
@@ -56,14 +56,14 @@ MUTANTS = [
     ("the fallback back", [(C, "    /// @dev A tree view: `_forward`", FALLBACK)],
      V + "test_abiListsTheViewsAndNoFallback", "test_abiListsTheViewsAndNoFallback"),
     ("the library unpinned from the class env",
-     [(D, "        e.libs = new address[](5);\n        (e.libs[0], e.libs[1], e.libs[2], e.libs[3], e.libs[4]) =\n"
-          "        (address(PqChatRecordLib), topics, tree, views, members);\n        e.libCodeHashes = new bytes32[](5);\n"
+     [(D, "        e.libs = new address[](5);\n        (e.libs[0], e.libs[1], e.libs[2], e.libs[3], e.libs[4]) = (address(PqChatLib), topics, tree, views, members);\n"
+          "        e.libCodeHashes = new bytes32[](5);\n"
           "        for (uint256 i; i < 5; ++i) {",
        "        e.libs = new address[](4);\n        (e.libs[0], e.libs[1], e.libs[2], e.libs[3]) = (topics, tree, views, members);\n"
        "        e.libCodeHashes = new bytes32[](4);\n        for (uint256 i; i < 4; ++i) {")],
      GD, "test_deployPqChatPath"),
     ("createSession through the epoch record",
-     [(C, "_record(PqChatRecordLib.sessionRecord.selector)", "_record(PqChatRecordLib.epochRecord.selector)")],
+     [(C, "_record(PqChatLib.sessionRecord.selector)", "_record(PqChatLib.epochRecord.selector)")],
      S + "test_createSession_forgedRecordBurnsNoNonce", "test_createSession_forgedRecordBurnsNoNonce"),
     ("the library skips the session signature",
      [(L, "        _auth(s.creator, PqChatTypes.hashSession(s), sig);\n", "")],
@@ -73,15 +73,15 @@ MUTANTS = [
      F + "test/pqchat/PqChatMessages.t.sol --match-test test_postMessage_forgedBurnsNoNonce",
      "test_postMessage_forgedBurnsNoNonce"),
     ("the nonce before the signature (createSession)",
-     [(C, "            bytes memory rec = _record(PqChatRecordLib.sessionRecord.selector);\n"
+     [(C, "            bytes memory rec = _record(PqChatLib.sessionRecord.selector);\n"
           "            _useNonce(PqChatTypes.scopeSession(s.creator), s.nonce);",
        "            _useNonce(PqChatTypes.scopeSession(s.creator), s.nonce);\n"
-       "            bytes memory rec = _record(PqChatRecordLib.sessionRecord.selector);")],
+       "            bytes memory rec = _record(PqChatLib.sessionRecord.selector);")],
      S + "test_createSession_signatureBeforeNonce", "test_createSession_signatureBeforeNonce"),
     ("the library's message inputs reordered (no longer the entry's)",
      [(L, "    function messageRecord(IPqChat.PqChatMessage calldata m, IUARegistry.UASig calldata sig)",
        "    function messageRecord(IUARegistry.UASig calldata sig, IPqChat.PqChatMessage calldata m)")],
-     F + "test/pqchat/PqChatRecordLib.t.sol --match-test test_entriesAndLibraryTakeTheSameInputs",
+     F + "test/pqchat/PqChatLib.t.sol --match-test test_entriesAndLibraryTakeTheSameInputs",
      "test_entriesAndLibraryTakeTheSameInputs"),
     ("the tree path stores the message in another form",
      [("smartcontracts/evm/src/pqchat/PqChatCore.sol", "bytes memory blob = _blob(abi.encode(m), sig);",

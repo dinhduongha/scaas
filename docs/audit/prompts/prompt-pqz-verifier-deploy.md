@@ -198,7 +198,7 @@ k. **The round's deploy changes** (added 2026-11-26): `DeployBase.sol` deploys a
    that no script or book reads a tier or splits a rule by it (one rule on every chain).
 l. **PENDING LANDING (`pqchat-no-fallback`): the linked library** (added 2026-11-28; ARCH-POS-29, CTR-CHAT-32):
    `DeployBase.sol`, `Deploy.s.sol`, `script/onchain/PqChat.s.sol`, `script/onchain/groups.json` and
-   `smartcontracts/scripts/deploy.sh` deploy `PqChatRecordLib` and link it into `PqChat` at the address the verified contract
+   `smartcontracts/scripts/deploy.sh` deploy `PqChatLib` and link it into `PqChat` at the address the verified contract
    shows (forge places linked libraries by CREATE2 on every deploy run); a run that reuses a library already at its address
    links that one; `verify-blockscout.sh` and the completeness check cover the library; `size-baseline.json` moves with a
    reason.

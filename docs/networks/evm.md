@@ -473,9 +473,9 @@ block 0's hash; past block 256 `CHAIN_UID` is required). The script stops when t
 chain, deploy it first (the keyless presigned deployment transaction of that proxy, funded by a transfer to its signer)
 and re-run. `forge script … --broadcast` needs `--sender <deployer address>`, which `deploy.sh` and the e2e pass; forge
 places every library the script links, through the deterministic deployer by CREATE2 (checked 2026-11-28 on a local
-chain: each library's transaction is `CREATE2`, `PqChatRecordLib` at the same address in forge's tests and on the chain),
+chain: each library's transaction is `CREATE2`, `PqChatLib` at the same address in forge's tests and on the chain),
 so a release whose init code links a library has the same address on every chain; it places them on every run, whatever
-the script's flags (`PqChatRecordLib` too without `DEPLOY_PQCHAT`, about 8.5 M gas asked). It deploys `OpenFactory` (notice period `NOTICE_PERIOD`
+the script's flags (`PqChatLib` too without `DEPLOY_PQCHAT`, about 8.5 M gas asked). It deploys `OpenFactory` (notice period `NOTICE_PERIOD`
 seconds; owner ruling 2026-10-20: every mainnet — any chain outside `DeployBase._isTestChain`'s fixed list of test /
 dev chains, so 22777, Hedera 295 and an unknown chain too — defaults to and may not go below 3 days; the SCaaS testnet defaults to 10
 minutes, the other listed test / dev chains to 0; at most 30 days, the factory's `MAX_NOTICE_PERIOD`; `DEMO_SUPPLY`
@@ -789,7 +789,7 @@ default `PqChat`, owner 2026-11-28) is verified with `--libraries <source>:<name
 address from the deployed code at the artifact's link offset; `verify-blockscout.sh` from the broadcast), and its row
 passes only when Blockscout lists every one of them in the contract's `external_libraries`. With `bytecode_hash = "none"`
 no metadata hash is in the bytecode, so declaring the libraries keeps a full match: the verify request for `PqChat` (its
-`--show-standard-json-input`, `settings.libraries` naming `PqChatRecordLib`) compiles to the linked release's runtime byte
+`--show-standard-json-input`, `settings.libraries` naming `PqChatLib`) compiles to the linked release's runtime byte
 for byte (checked 2026-11-28 with solc 0.8.37); every other linked contract keeps the library transformation;
 upstream v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so the live stack uses a locally patched verifier
 image (built outside the repo, `~dockers/mba-chain-nethermind/blockscout/sc-verifier/`), temporary until upstream supports

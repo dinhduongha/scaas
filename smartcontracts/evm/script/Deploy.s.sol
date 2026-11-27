@@ -21,7 +21,7 @@ import {DeployBase} from "./DeployBase.sol";
 ///      (CTR-GOV-19, GD-4); the SCaaS testnet after the next reset: 131,072 (`maxCodeSize` `0x20000`). RELEASE_GAS_GATE
 ///      (optional, testnet / public; Q4 of CTR-MTX-30): the release gas gate, `DeployBase._publicGate`. DEPLOY_PQCHAT
 ///      (optional, true/false; plan 3c T92): `PqChat` on the generic path (class 3, kind 0), its linked library
-///      `PqChatRecordLib` and its body modules, and one instance when NOTICE_PERIOD is 0 (`_deployPqChat`; JSON
+///      `PqChatLib` and its body modules, and one instance when NOTICE_PERIOD is 0 (`_deployPqChat`; JSON
 ///      `pqchat_record_lib`, `pqchat_topics`, `pqchat_tree`, `pqchat_tree_views`, `pqchat_tree_members`,
 ///      `pqchat_implementation`, `pqchat_instance`). DEPLOY_PQVAULT (optional, true/false; PqVault plan V7): `PqVault` on the generic
 ///      path (class 4, kind 0, no body module) and one instance when NOTICE_PERIOD is 0 (`_deployPqVault`; JSON

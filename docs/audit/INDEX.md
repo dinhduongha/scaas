@@ -74,7 +74,7 @@ as not covered ([plan](README.md#pending-landing)). The crypto and cross-cutting
 | The SDK's relay of a signed app record | `clients/scaas-sdk/src/{app_core,pqchat_records}.rs` `AppCore::relay_app_call` | `dev` (from `pqchat-core-confirm`) | 19 `scaas-sdk` | BUILT, UNAUDITED |
 | The node's door A for the six topic records (NODE-GW-09) | `scaas-node/src/{gateway,guard}.rs` | `dev` (from `pqchat-core-confirm`) | 18 `scaas-node` | BUILT, UNAUDITED |
 | The CLI's topic calls | `clients/scaas-cli/src/calls.rs` | `dev` (from `pqchat-core-confirm`) | 24 `bindings-cli-ci` | BUILT, UNAUDITED |
-| `PqChat` declared views, no `fallback()`, the linked library (the no-fallback rules of that branch) | `smartcontracts/evm/src/pqchat/{PqChat,PqChatRecordLib,PqChatTreeViews}.sol` | `pqchat-no-fallback` | 9 `evm-pqchat` | pending landing |
+| `PqChat` declared views, no `fallback()`, the linked library (the no-fallback rules of that branch) | `smartcontracts/evm/src/pqchat/{PqChat,PqChatLib,PqChatTreeViews}.sol` | `pqchat-no-fallback` | 9 `evm-pqchat` | pending landing |
 | The library's deploy and link | `smartcontracts/evm/script/{Deploy.s.sol,DeployBase.sol,onchain/PqChat.s.sol,onchain/groups.json}`, `smartcontracts/scripts/deploy.sh` | `pqchat-no-fallback` | 23 `pqz-verifier-deploy` | pending landing |
 | The user profiles' store | `clients/scaas-profile/` | `user-profiles` | 34 `scaas-profile` | pending landing |
 | The profile arena (`key-handles`, `ProfileKeys`, `ExportKey`) | `clients/ua-rs/src/wallet/profile.rs`, `Cargo.toml` features, the changes to `wallet/{appkey,manifest,store,vault,mod}.rs` | `user-profiles` | 15 `ua-rs-custody` | pending landing |
@@ -221,7 +221,7 @@ is cut from the run copy if the branch did not land in the tag ([plan](README.md
 - `scaas-sdk` (19): the tree calls (l), `quote_app_call` and `relay_app_call` (m; the latter landed with `pqchat-core-confirm`); the profile layer,
   pending landing (n).
 - `evm-pqchat` (9): path-less Adds (12), G1 / G2 / G5 (13), and, pending landing, the declared views and
-  `PqChatRecordLib` (14).
+  `PqChatLib` (14).
 - `scaas-node` (18): `tree_set.rs` and path-less commits (n); NODE-GW-09, landed with `pqchat-core-confirm` (o).
 - `ua-rs-custody` (15): `wallet/appkey.rs` (held by no layer unit before) and the profile arena, pending landing (8);
   path-less and F-1 in `wallet/tree.rs` (9).

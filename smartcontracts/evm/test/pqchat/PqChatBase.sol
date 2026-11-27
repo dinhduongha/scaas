@@ -13,7 +13,7 @@ import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
 import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
 import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
 import {PqChatTreeMembers} from "../../src/pqchat/PqChatTreeMembers.sol";
-import {PqChatRecordLib} from "../../src/pqchat/PqChatRecordLib.sol";
+import {PqChatLib} from "../../src/pqchat/PqChatLib.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {UARegistryBase} from "../ua/UARegistryBase.sol";
@@ -142,7 +142,7 @@ abstract contract PqChatBase is UARegistryBase {
         }
     }
 
-    /// The class env: the registry, the code-size limit `params[0]`, in `libs` the linked library `PqChatRecordLib`
+    /// The class env: the registry, the code-size limit `params[0]`, in `libs` the linked library `PqChatLib`
     /// (CTR-CHAT-32) and then the body modules (3C-D2), as the deploy pins them.
     function _classEnv(address registry, uint256 limit) internal view returns (IFactoryToken.Env memory e) {
         e.registry = registry;
@@ -150,7 +150,7 @@ abstract contract PqChatBase is UARegistryBase {
         e.params[0] = bytes32(limit);
         e.libs = new address[](5);
         (e.libs[0], e.libs[1], e.libs[2], e.libs[3], e.libs[4]) =
-        (address(PqChatRecordLib), address(topics), address(treeModule), address(viewsModule), address(membersModule));
+        (address(PqChatLib), address(topics), address(treeModule), address(viewsModule), address(membersModule));
         e.libCodeHashes = new bytes32[](5);
         for (uint256 i; i < 5; ++i) {
             e.libCodeHashes[i] = e.libs[i].codehash;

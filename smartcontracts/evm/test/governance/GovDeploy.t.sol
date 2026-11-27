@@ -29,7 +29,7 @@ import {WrappedZetherRegulatedToken} from "../../src/regulated/WrappedZetherRegu
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
-import {PqChatRecordLib} from "../../src/pqchat/PqChatRecordLib.sol";
+import {PqChatLib} from "../../src/pqchat/PqChatLib.sol";
 import {PqVault} from "../../src/pqvault/PqVault.sol";
 import {IPqVault} from "../../src/pqvault/IPqVault.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
@@ -178,7 +178,7 @@ contract GovDeployTest is Test {
         {
             // CTR-CHAT-32 (owner 2026-11-28): the linked library first (the release's link closure), then the modules
             address lib = vm.parseJsonAddress(json, ".pqchat_record_lib");
-            assertEq(lib, address(PqChatRecordLib), "the linked library");
+            assertEq(lib, address(PqChatLib), "the linked library");
             assertEq(e.libs[0], lib, "the linked library pinned in libs");
             assertEq(e.libCodeHashes[0], lib.codehash);
             assertTrue(_holds(r.implementation.code, abi.encodePacked(lib)), "the release links it");

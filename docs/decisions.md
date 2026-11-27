@@ -6602,7 +6602,7 @@ Change (2026-11-25, the path-less [delta spec](superpowers/specs/2026-11-25-tree
 **Cost if wrong.** A view only.
 **Source.** owner 2026-11-27; research §1, §8. It replaces the owner's Change of 2026-11-22 under CLI-PQC-08 that left the nonce view for the release after the audit: the view is in this release, before the 8b-6 reset. Status: BUILT on branch `pqchat-g125` (EVM; `pqchat-core` decodes it), UNAUDITED; the digest check in `pqchat-core`'s `resolve_ref` is not built yet (`HashUnchecked` stays).
 
-### CTR-CHAT-32 — `PqChat` has no `fallback`: the 13 tree views are declared in its ABI; the signed-record step is the linked library `PqChatRecordLib`
+### CTR-CHAT-32 — `PqChat` has no `fallback`: the 13 tree views are declared in its ABI; the signed-record step is the linked library `PqChatLib`
 - old: — · status: current · owner: yes · date: 2026-11-28 · normative: contracts/pqchat.md#CTR-CHAT-32 · superseded-by: —
 
 **Rule.** Owner 2026-11-27/28 under ARCH-POS-29:
@@ -6613,7 +6613,7 @@ Change (2026-11-25, the path-less [delta spec](superpowers/specs/2026-11-25-tree
   which a library cannot inherit (controller call).
 - **The size split (owner: yes).** Declaring the views alone would make the release 36,022 B, over the plain form's T-1 line
   of 35,286 B (the release transaction would ask more than 60 M). So the signed-record step of `createSession`, `rekey` and
-  `postMessage` moves into the linked external library `PqChatRecordLib`: the signer's portable signature over the record's
+  `postMessage` moves into the linked external library `PqChatLib`: the signer's portable signature over the record's
   typed digest, and `abi.encode(record)`.
 - **How the library is called.** `PqChat` forwards the entry's own calldata under the library selector by `DELEGATECALL`,
   nothing appended. The library reads the registry from the instance's own code (`ChainEnvCode`), touches no storage and
@@ -6624,6 +6624,10 @@ Change (2026-11-25, the path-less [delta spec](superpowers/specs/2026-11-25-tree
 code, so a new library means a new release.
 **Source.** Owner rulings 2026-11-27 (no fallback, the library preferred) and 2026-11-27/28 (the split approved); sizes
 measured 2026-11-28 (contracts/pqchat.md §12). Status: BUILT on branch `pqchat-no-fallback`, UNAUDITED.
+
+Change (owner: yes, 2026-11-28): the library is named `PqChatLib` (`src/pqchat/PqChatLib.sol`), first built as
+`PqChatRecordLib`. The rename moves no bytecode: every contract's runtime and init code and the library's own code are
+unchanged, and so is its CREATE2 address.
 
 ### CTR-PQV-01 — PqVault: PqChat's group rules with at least one member plus a topics-style item model
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-01 · superseded-by: —

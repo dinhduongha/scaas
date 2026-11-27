@@ -4,17 +4,17 @@ pragma solidity ^0.8.24;
 import {stdJson} from "forge-std/StdJson.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
-import {PqChatRecordLib} from "../../src/pqchat/PqChatRecordLib.sol";
+import {PqChatLib} from "../../src/pqchat/PqChatLib.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {PqChatBase} from "./PqChatBase.sol";
 
-/// CTR-CHAT-32 (owner 2026-11-28): `PqChat`'s size split is the external library `PqChatRecordLib`, linked (a verified
+/// CTR-CHAT-32 (owner 2026-11-28): `PqChat`'s size split is the external library `PqChatLib`, linked (a verified
 /// source shows its address): the release links it, the library holds no state opcode and does nothing on its own, and the
 /// three entries that use it keep their checks (their own suites: `PqChat.t.sol`, `PqChatEpochs.t.sol`,
 /// `PqChatMessages.t.sol`). **UNAUDITED.**
-contract PqChatRecordLibTest is PqChatBase {
+contract PqChatLibTest is PqChatBase {
     using stdJson for string;
 
     function _art(string memory name) internal view returns (string memory) {
@@ -38,9 +38,9 @@ contract PqChatRecordLibTest is PqChatBase {
     function test_pqchatLinksTheLibrary() public view {
         string[] memory refs = vm.parseJsonKeys(_art("PqChat"), ".deployedBytecode.linkReferences");
         assertEq(refs.length, 1, "one linked source");
-        assertEq(refs[0], "src/pqchat/PqChatRecordLib.sol");
-        assertTrue(_has(address(impl).code, address(PqChatRecordLib)), "the release holds the library's address");
-        assertTrue(address(PqChatRecordLib).code.length > 0, "linked and deployed");
+        assertEq(refs[0], "src/pqchat/PqChatLib.sol");
+        assertTrue(_has(address(impl).code, address(PqChatLib)), "the release holds the library's address");
+        assertTrue(address(PqChatLib).code.length > 0, "linked and deployed");
     }
 
     /// The first opcode of `code` that reads or writes state, logs, reads the caller or the value, makes code, or calls
@@ -65,7 +65,7 @@ contract PqChatRecordLibTest is PqChatBase {
     /// The library's runtime holds none of those opcodes (its one call, the registry's `requirePortable`, is a STATICCALL);
     /// the scan finds `PqChat`'s SSTORE (positive control).
     function test_libraryHoldsNoStateOpcode() public view {
-        assertEq(_stateOp(address(PqChatRecordLib).code), 0, "PqChatRecordLib: no state opcode");
+        assertEq(_stateOp(address(PqChatLib).code), 0, "PqChatLib: no state opcode");
         assertTrue(_stateOp(address(impl).code) != 0, "the scan finds PqChat's");
     }
 
@@ -75,7 +75,7 @@ contract PqChatRecordLibTest is PqChatBase {
         (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(2, 41, address(chat));
         IUARegistry.UASig memory sig = _sig(s.creator, h.session(s));
         (bool ok, bytes memory ret) =
-            address(PqChatRecordLib).call(abi.encodeWithSelector(PqChatRecordLib.sessionRecord.selector, s, w, sig));
+            address(PqChatLib).call(abi.encodeWithSelector(PqChatLib.sessionRecord.selector, s, w, sig));
         assertFalse(ok, "no env, no record");
         assertEq(ret.length, 0, "the registry it names (none) has no code: an empty revert");
         assertTrue(chat.createSession(s, w, sig) != 0, "through the instance");
@@ -91,22 +91,22 @@ contract PqChatRecordLibTest is PqChatBase {
     function test_libraryWithoutCodeFailsClosed() public {
         (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(2, 61, address(chat));
         IUARegistry.UASig memory sig = _sig(s.creator, h.session(s));
-        bytes memory code = address(PqChatRecordLib).code;
-        vm.etch(address(PqChatRecordLib), "");
+        bytes memory code = address(PqChatLib).code;
+        vm.etch(address(PqChatLib), "");
         vm.expectRevert();
         chat.createSession(s, w, sig);
         assertFalse(chat.nonceUsed(PqChatTypes.scopeSession(s.creator), 61), "no nonce used");
-        vm.etch(address(PqChatRecordLib), code);
+        vm.etch(address(PqChatLib), code);
         bytes32 sid = chat.createSession(s, w, sig);
         IPqChat.PqChatMessage memory m;
         (m.sessionId, m.epochId, m.sender, m.device, m.counter, m.ciphertext) =
         (sid, sid, ids[1], bytes16(uint128(3)), 9, hex"0102");
         IUARegistry.UASig memory ms = _sig(m.sender, h.message(m));
-        vm.etch(address(PqChatRecordLib), "");
+        vm.etch(address(PqChatLib), "");
         vm.expectRevert();
         chat.postMessage(m, ms);
         assertFalse(chat.nonceUsed(PqChatTypes.scopeMessage(sid, m.sender, m.device), 9), "no message nonce used");
-        vm.etch(address(PqChatRecordLib), code);
+        vm.etch(address(PqChatLib), code);
         assertEq(chat.postMessage(m, ms), 0, "the control");
     }
 
@@ -123,7 +123,7 @@ contract PqChatRecordLibTest is PqChatBase {
     /// `_record` forwards an entry's calldata to a library function: the compiler does not tie their inputs, so this pins
     /// them: the same number of inputs, each of the same `internalType` (the same struct, the same array).
     function test_entriesAndLibraryTakeTheSameInputs() public view {
-        (string memory chatArt, string memory libArt) = (_art("PqChat"), _art("PqChatRecordLib"));
+        (string memory chatArt, string memory libArt) = (_art("PqChat"), _art("PqChatLib"));
         string[2][3] memory pairs =
             [["createSession", "sessionRecord"], ["rekey", "epochRecord"], ["postMessage", "messageRecord"]];
         for (uint256 k; k < 3; ++k) {
@@ -150,7 +150,7 @@ contract PqChatRecordLibTest is PqChatBase {
         }
         IFactoryToken.Env memory e = f.classEnvOf(3, 0, 1);
         assertEq(e.libs.length, 5);
-        assertEq(e.libs[0], address(PqChatRecordLib), "the closure first");
+        assertEq(e.libs[0], address(PqChatLib), "the closure first");
         address[] memory m = PqChat(impl).modules();
         for (uint256 i; i < 4; ++i) {
             assertEq(e.libs[1 + i], m[i], "then the modules, in order");

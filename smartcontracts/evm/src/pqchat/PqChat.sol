@@ -8,7 +8,7 @@ import {PqChatTopics} from "./PqChatTopics.sol";
 import {PqChatTree} from "./PqChatTree.sol";
 import {PqChatTreeViews} from "./PqChatTreeViews.sol";
 import {PqChatTreeMembers} from "./PqChatTreeMembers.sol";
-import {PqChatRecordLib} from "./PqChatRecordLib.sol";
+import {PqChatLib} from "./PqChatLib.sol";
 import {IPqChatTreeViews} from "./IPqChatTreeViews.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
@@ -28,7 +28,7 @@ import {RescueLib} from "../governance/RescueLib.sol";
 ///         views (`IPqChatTreeViews`) are declared here and run in the read-only body module `PqChatTreeViews`. No
 ///         `fallback`, no `receive`: every entry is in this contract's ABI (CTR-CHAT-32, owner 2026-11-28). The signed-record
 ///         step of `createSession`, `rekey` and `postMessage` (the signature check and the record's encoding) is the linked
-///         external library `PqChatRecordLib` (the size split, CTR-CHAT-32). **UNAUDITED.**
+///         external library `PqChatLib` (the size split, CTR-CHAT-32). **UNAUDITED.**
 contract PqChat is IPqChat, IPqChatTreeViews, PqChatCore {
     uint16 internal constant CLASS = 3;
     uint16 internal constant KIND = 0;
@@ -134,7 +134,7 @@ contract PqChat is IPqChat, IPqChatTreeViews, PqChatCore {
         _checkSession(reg, s);
         Epoch storage ep;
         {
-            bytes memory rec = _record(PqChatRecordLib.sessionRecord.selector);
+            bytes memory rec = _record(PqChatLib.sessionRecord.selector);
             _useNonce(PqChatTypes.scopeSession(s.creator), s.nonce);
             sid = PqChatTypes.sessionId(s.creator, s.nonce);
             ep = _s().epochs[sid];
@@ -179,7 +179,7 @@ contract PqChat is IPqChat, IPqChatTreeViews, PqChatCore {
         (IUARegistry reg, uint256 limit,) = _env();
         if (_isTree(e.sessionId)) revert PqChatModeEntry(1); // CTR-CHAT-27: a tree session's epochs are commits
         _indexAdded(e, _rightsOf(reg, _parentOf(e.parentEpochId, e.sessionId, e.epoch), e));
-        bytes memory rec = _record(PqChatRecordLib.epochRecord.selector);
+        bytes memory rec = _record(PqChatLib.epochRecord.selector);
         _useNonce(PqChatTypes.scopeEpoch(e.sessionId, e.author), e.nonce);
         eid = PqChatTypes.epochId(e.sessionId, e.author, e.nonce);
         Epoch storage ep = _s().epochs[eid];
@@ -299,7 +299,7 @@ contract PqChat is IPqChat, IPqChatTreeViews, PqChatCore {
         if (child != 0) revert PqChatEpochTaken(m.epochId, child);
         (, MemberKey[] memory mk,) = _lists(ep);
         if (_memberAt(mk, m.sender) == type(uint256).max) revert PqChatNotMember(m.sender);
-        (bytes32 hm, bytes memory rec) = abi.decode(_record(PqChatRecordLib.messageRecord.selector), (bytes32, bytes));
+        (bytes32 hm, bytes memory rec) = abi.decode(_record(PqChatLib.messageRecord.selector), (bytes32, bytes));
         _useNonce(PqChatTypes.scopeMessage(m.epochId, m.sender, m.device), m.counter);
         bytes memory blob = _blob(rec, sig);
         if (blob.length + 2 > _codeCap(limit)) revert PqChatShape(); // one blob (P16), the kept signature included
@@ -309,15 +309,15 @@ contract PqChat is IPqChat, IPqChatTreeViews, PqChatCore {
         emit PqChatMessagePosted(m.sessionId, PqChatTypes.typed(hm), m.sender, index, sig);
     }
 
-    /// @dev CTR-CHAT-32: this entry's calldata under `sel` to the linked `PqChatRecordLib` by `DELEGATECALL` (the record's
+    /// @dev CTR-CHAT-32: this entry's calldata under `sel` to the linked `PqChatLib` by `DELEGATECALL` (the record's
     ///      signature check and its encoding); its revert data verbatim; `sessionRecord` and `epochRecord` return the bytes
     ///      as they are, `messageRecord` its ABI tuple.
     function _record(bytes4 sel) private returns (bytes memory) {
-        (bool ok, bytes memory ret) = address(PqChatRecordLib).delegatecall(bytes.concat(sel, msg.data[4:]));
+        (bool ok, bytes memory ret) = address(PqChatLib).delegatecall(bytes.concat(sel, msg.data[4:]));
         assembly ("memory-safe") {
             if iszero(ok) { revert(add(ret, 32), mload(ret)) }
         }
-        return sel == PqChatRecordLib.messageRecord.selector ? ret : abi.decode(ret, (bytes));
+        return sel == PqChatLib.messageRecord.selector ? ret : abi.decode(ret, (bytes));
     }
 
     /// @notice P29: no signature, membership or nonce; the payload `abi.encode(v, hint, env)` raw in one blob.

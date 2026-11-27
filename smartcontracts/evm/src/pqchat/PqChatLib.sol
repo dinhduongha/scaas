@@ -7,7 +7,7 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
 
-/// @title `PqChatRecordLib`: the signed-record step of `PqChat`'s `createSession`, `rekey` and `postMessage` (owner 2026-11-28:
+/// @title `PqChatLib`: the signed-record step of `PqChat`'s `createSession`, `rekey` and `postMessage` (owner 2026-11-28:
 ///        the release's size split is an external library, linked; CTR-CHAT-32).
 /// @notice Each function takes its entry's calldata as the entry received it (`PqChat` forwards `msg.data` under this
 ///         function's selector by `DELEGATECALL`, nothing appended), so it decodes the same record from the same bytes. It
@@ -15,7 +15,7 @@ import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
 ///         registry the instance's own code names (`ChainEnvCode`; `PqChat` read and checked that env first), and returns
 ///         `abi.encode(record)`, the bytes `PqChat` stores. It reads and writes no storage, emits nothing, holds no state and
 ///         never uses `msg.sender` or `msg.value`; a registry revert bubbles unchanged. **UNAUDITED.**
-library PqChatRecordLib {
+library PqChatLib {
     /// @notice `createSession`'s record: `s.creator`'s signature (P7), then `abi.encode(s)`.
     function sessionRecord(IPqChat.PqChatSession calldata s, IPqChat.Wrap[] calldata, IUARegistry.UASig calldata sig)
         external

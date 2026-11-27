@@ -102,7 +102,7 @@
       {"label": "PqChatTree", "artifact": "PqChatTree.sol/PqChatTree", "via": ["PqChat"]},
       {"label": "PqChatTreeViews", "artifact": "PqChatTreeViews.sol/PqChatTreeViews", "via": ["PqChat"]},
       {"label": "PqChatTreeMembers", "artifact": "PqChatTreeMembers.sol/PqChatTreeMembers", "via": ["PqChat"]},
-      {"label": "PqChatRecordLib", "artifact": "PqChatRecordLib.sol/PqChatRecordLib", "via": ["PqChat"]}
+      {"label": "PqChatLib", "artifact": "PqChatLib.sol/PqChatLib", "via": ["PqChat"]}
     ]
   }
 }

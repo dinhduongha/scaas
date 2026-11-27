@@ -417,7 +417,7 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
     }
 
     /// Fable A-1, E-5: a tree session's message goes through `PqChatTree`'s own copy of the store step (`PqChatCore._post`),
-    /// not the library; it is stored in the same form as a flat session's (`PqChatRecordLib.t.sol` test_flatMessageBlobForm):
+    /// not the library; it is stored in the same form as a flat session's (`PqChatLib.t.sol` test_flatMessageBlobForm):
     /// the code's STOP byte, the flag 0, `abi.encode(m, sigHash, sig)`.
     function test_treeMessageBlobIsTheFlatForm() public {
         (M memory m, Step memory st,) = _grown();

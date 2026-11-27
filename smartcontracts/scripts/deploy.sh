@@ -72,7 +72,7 @@
 #                            broadcast/DeploySend.s.sol/<chain>/run-batches.json. Forge's full output in DEPLOY_LOG (default
 #                            runs/<date>-deploy-<key>.log, git-ignored). Never a key.
 #                            DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether stack. DEPLOY_PQCHAT=1 adds PqChat
-#                            (plan 3c T92: its linked library PqChatRecordLib and its four body modules, class env (3, 0) with
+#                            (plan 3c T92: its linked library PqChatLib and its four body modules, class env (3, 0) with
 #                            the library then the modules in libs, release 1, the switch on; one instance when NOTICE_PERIOD=0;
 #                            JSON pqchat_record_lib, pqchat_topics, pqchat_tree, pqchat_tree_views, pqchat_tree_members,
 #                            pqchat_implementation, pqchat_instance), replayed by DeploySend.s.sol like every other transaction.

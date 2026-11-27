@@ -74,7 +74,7 @@ Status: **BUILT** (`test/pqchat/PqChat.t.sol`, plan T85; the deploy script's reg
 reads its chain values from its own `ChainEnv`, is initialised once by the factory, and its owner UA has no power**
 (owner 2026-11-07, D22 and Q2; the env check 3C-D1 is a controller call, owner may override).
 
-- **Registration** (registrar): the linked library `PqChatRecordLib` ([CTR-CHAT-32](#CTR-CHAT-32); forge places it and
+- **Registration** (registrar): the linked library `PqChatLib` ([CTR-CHAT-32](#CTR-CHAT-32); forge places it and
   links its address into `PqChat`'s init code), the four body modules, `PqChatTopics(factory)`, `PqChatTree(factory)`,
   `PqChatTreeViews(factory)` and `PqChatTreeMembers(factory)` (below), then
   `publishClassEnv(3, 0, envVersion, env)` with `env.libs` = the library, then the modules in `modules()` order (their
@@ -122,8 +122,8 @@ reads its chain values from its own `ChainEnv`, is initialised once by the facto
   in that order: topics, tree, views, members.
 
 <a id="CTR-CHAT-32"></a>**CTR-CHAT-32** — **No `fallback`: every entry is in `PqChat`'s ABI; the size split is the linked
-library `PqChatRecordLib`** (owner 2026-11-27/28, [ARCH-POS-29](../decisions.md#ARCH-POS-29)). Status: **BUILT**
-(`test/pqchat/PqChatTreeViews.t.sol`, `PqChatRecordLib.t.sol`, `PqChat.t.sol`, `test/governance/GovDeploy.t.sol`),
+library `PqChatLib`** (owner 2026-11-27/28, [ARCH-POS-29](../decisions.md#ARCH-POS-29)). Status: **BUILT**
+(`test/pqchat/PqChatTreeViews.t.sol`, `PqChatLib.t.sol`, `PqChat.t.sol`, `test/governance/GovDeploy.t.sol`),
 UNAUDITED.
 
 - **The views.** `PqChat` implements `IPqChatTreeViews`, so its ABI lists the 13 views with their selectors unchanged.
@@ -133,8 +133,8 @@ UNAUDITED.
 - **Why a module, not a library, for the views.** The views read the tree through `PqGroupTree`'s and `PqChatCore`'s
   internal, overridable hooks, which a library cannot inherit.
 - **The library.** Declaring the views alone takes the release to 36,022 B, over the plain form's T-1 line. So the
-  signed-record step of `createSession`, `rekey` and `postMessage` is the external library `PqChatRecordLib`
-  (`src/pqchat/PqChatRecordLib.sol`, 4,918 B), whose address is linked into the release's code.
+  signed-record step of `createSession`, `rekey` and `postMessage` is the external library `PqChatLib`
+  (`src/pqchat/PqChatLib.sol`, 4,918 B), whose address is linked into the release's code.
   - Each of the three entries sends its own calldata unchanged, nothing appended, under the library's `sessionRecord`,
     `epochRecord` or `messageRecord` selector, by `DELEGATECALL`.
   - The library checks the signer's portable signature over the record's typed digest under `PURPOSE_PQCHAT`, against the
@@ -158,7 +158,7 @@ UNAUDITED.
   that `libs[0]` is the address in the release's code is checked by the deploy's tests (`GovDeploy.t.sol`,
   `LinkClosure.t.sol`) and the onchain script (Fable E-4).
 - **On the explorer.** `PqChat` is verified with its library declared (`--libraries`), so Blockscout lists
-  `PqChatRecordLib` among its external libraries, and the verification step fails a `PqChat` row that does not
+  `PqChatLib` among its external libraries, and the verification step fails a `PqChat` row that does not
   ([evm.md](../networks/evm.md), owner 2026-11-28).
 - **Instances share nothing**: each keeps its sessions, epochs, messages, stored messages and topics in its own ERC-7201
   namespace `scaas.pqchat` (no plain slot; layout pinned in `test/v2/layout/PqChat.json` and `PqChatLayout.t.sol`). A
@@ -841,7 +841,7 @@ the size gate's row `PqChat` in `smartcontracts/evm/size-baseline.json`).
 with an explicit limit of 59 M (that script runs at × 1.3, which for a 33 KB module would ask about 73 M; the code
 review's A-11). The history of the release's size is in
 the pins' comments; before the first split it was 34,223 B and asked 58.0 M. Since [CTR-CHAT-32](#CTR-CHAT-32)
-(2026-11-28: no `fallback`, the 13 views declared, the linked library `PqChatRecordLib`): `PqChat` 33,605 B (2,341,506 +
+(2026-11-28: no `fallback`, the 13 views declared, the linked library `PqChatLib`): `PqChat` 33,605 B (2,341,506 +
 51,990,930, 57.0 M asked; regular + state 54,332,436, within a 60 M block); the library 4,918 B (348,379 + 7,708,140,
 8.5 M asked). The views declared without the library: 36,022 B. The split costs each session, rekey and message write
 one `DELEGATECALL`: the entry's whole calldata (record, wraps and signature) copied once into the library's frame, the
@@ -930,7 +930,7 @@ Status: **BUILT** for the files below, mutants included (T91: `smartcontracts/ev
 | `PqTopics.t.sol`, `PqTopicVotes.t.sol` | the topics spec §8 tests 1–10 |
 | `PqTopicRows.t.sol` | CTR-CHAT-29 to CTR-CHAT-31: the times of an entry and its versions, each version's nonce rebuilding its typed digest, `entryRows` field by field against `entryOf` (a chained body, a 64-B media type, an edit, votes, replies, two viewers), 64 ids answered and 65 refused, an unknown id refused |
 | `PqChatLayout.t.sol` | the ERC-7201 namespace and field slots |
-| `PqChatRecordLib.t.sol` | CTR-CHAT-32: the release links `PqChatRecordLib` (its artifact's link reference, its address in the runtime); the library holds no state opcode (the scan finds `PqChat`'s SSTORE: positive control); alone it has no env and refuses |
+| `PqChatLib.t.sol` | CTR-CHAT-32: the release links `PqChatLib` (its artifact's link reference, its address in the runtime); the library holds no state opcode (the scan finds `PqChat`'s SSTORE: positive control); alone it has no env and refuses |
 | `PqChatGas.t.sol` | the gas rows and the deployment figures of §12 (T90), the tests' instance at `sstore2` |
 | `PqChatDevices.t.sol` | CTR-CHAT-24: two keys of a member, one wrap each and one `sessionsOf` entry; `(ua, keyId)` order and a repeated key refused; 8 keys land, 9 refused; two keys of one UA are one member; a member's keys change in a plain rekey, adding a UA does not; leave and removal take every key of the UA |
 | `PqChatSigs.t.sol`, `PqChatSigGas.t.sol` | CTR-CHAT-23: the setting refused outside 0 and 2; a `none` instance stores no signature and its views refuse; an `sstore2` instance's blobs and views hold exactly the signed bytes; a mismatched signature refused at write in both modes; the gas rows of both modes (mutants: `runs/2026-11-23-pqchat-sigs-mutants.py`, 14 of 14 killed) |

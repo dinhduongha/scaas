@@ -15,7 +15,7 @@ import {PqChatBase} from "./PqChatBase.sol";
 /// and the registry's own cost plus the signature's calldata and, at `sstore2`, its bytes in the record's blob. Regular within
 /// ±500 gas, state exact; a move needs old -> new figures in its commit. At these sizes each row's regular gas is the
 /// calldata floor (EIP-7623 / EIP-7976), equal in both modes, except the FN-DSA-512 `rekey` rows: since CTR-CHAT-32 (the
-/// linked `PqChatRecordLib`) their execution is above the floor and differs by mode (393,605 `none`, 395,729 `sstore2`); `sstore2` adds the encoded signature and one head word to the
+/// linked `PqChatLib`) their execution is above the floor and differs by mode (393,605 `none`, 395,729 `sstore2`); `sstore2` adds the encoded signature and one head word to the
 /// blob at 1,530 state gas a byte: ML-DSA-65 3,552 B (5,434,560), FN-DSA-512 896 B (1,370,880).
 contract PqChatSigGasTest is PqChatBase {
     uint256 internal constant SLACK = 500;
@@ -111,14 +111,14 @@ contract PqChatSigGasTest is PqChatBase {
     function test_gas_none_fndsa512() public {
         // CTR-CHAT-25 (owner 2026-11-23, `groupMode`, one word more in calldata and the record): createSession 390,040 / 8,278,830 -> 392,088 / 8,327,790
         // the path-less delta P4 (C24, C41-C44: the session's `pathRefreshBound` and `confirmTag`, 64 B more of record): createSession 392,088 / 8,327,790 -> 396,184 / 8,425,710
-        // CTR-CHAT-32 (the linked PqChatRecordLib): rekey regular 392,088 -> 393,605
+        // CTR-CHAT-32 (the linked PqChatLib): rekey regular 392,088 -> 393,605
         _pair(none_, fn, 666, "none, FN-DSA-512", [uint256(396_184), 8_425_710, 393_605, 8_327_790]);
     }
 
     function test_gas_sstore2_fndsa512() public {
         // CTR-CHAT-25 (owner 2026-11-23, `groupMode`, one word more in calldata and the record): createSession 390,040 / 9,649,710 -> 392,088 / 9,698,670
         // the path-less delta P4 (C24, C41-C44: the session's `pathRefreshBound` and `confirmTag`, 64 B more of record): createSession 392,088 / 9,698,670 -> 396,184 / 9,796,590
-        // CTR-CHAT-32 (the linked PqChatRecordLib): rekey regular 392,088 -> 395,729
+        // CTR-CHAT-32 (the linked PqChatLib): rekey regular 392,088 -> 395,729
         _pair(chat, fn, 666, "sstore2, FN-DSA-512", [uint256(396_184), 9_796_590, 395_729, 9_698_670]);
     }
 
