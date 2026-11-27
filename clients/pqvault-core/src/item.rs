@@ -1275,7 +1275,8 @@ mod tests {
         let h: Vec<Value> = (0..SECRETS_MAX)
             .map(|i| json!({"field": "password", "value": format!("p{i}")}))
             .collect();
-        let odd = json!([{"name": "a", "secret": true, "value": "s"}, {"name": "b", "value": "x"}]);
+        // the list parses as custom fields, its first a secret, its second a value that is no text: kept as it was
+        let odd = json!([{"name": "a", "secret": true, "value": "s"}, {"name": "b", "secret": false, "value": 1}]);
         let b = content::canonical(
             &json!({"type": "login", "title": "t", "history": h, "fields": odd}),
         )
