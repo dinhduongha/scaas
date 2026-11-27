@@ -1,0 +1,7 @@
+# up2 mutants (name | outcome | commit | test | first failure line)
+a fixed nonce in seal_item (the nonce from K_name, not drawn) | killed | e926da791 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features user-profile,test-hooks,vectors --test profile two_seals_differ | panicked at tests/profile.rs:406:5:
+the part left out of the item AD | killed | e926da791 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features user-profile,test-hooks,vectors --test profile item_refusal_rows | panicked at tests/profile.rs:376:18:
+KdfOutOfMemory mapped to Argument | killed | e926da791 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features user-profile,test-hooks,vectors --test profile kdf_out_of_memory | panicked at tests/profile.rs:705:5:
+the m lower bound not checked | killed | e926da791 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features user-profile,test-hooks,vectors --test profile kdf_bound_rows | panicked at tests/profile.rs:654:9:
+lock() not wiping the arena | killed | e926da791 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features user-profile,test-hooks,vectors --test profile lock_wipes_the_arena | panicked at tests/profile.rs:740:5:
+5 mutants, 5 killed, 0 survived, 0 not loaded, 0 other failure

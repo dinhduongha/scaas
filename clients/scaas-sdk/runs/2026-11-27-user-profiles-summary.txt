@@ -13,3 +13,4 @@ UP2 | ua-clippy | 4505606cf + UP2 files | 0 | -D warnings: --all-targets default
 UP2 | ua-vault | 4505606cf + UP2 files | 0 | wallet_vault 29, wallet_custody 13, retained_key 2, wallet_import_ua 8: all pass (UP3 already committed: no foreign edits in the tree)
 UP2 | fmt rust toml | 4505606cf + UP2 files | 0 | format.sh --check rust toml: every part ok
 UP2 | docs | 4505606cf + UP2 files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
+UP2 | mutants | e926da791 | 0 | 5 mutants, 5 killed, 0 survived, 0 not loaded, 0 other failure
