@@ -38,3 +38,13 @@ UP5 | sdk-clippy (UPF and default, --all-targets -D warnings) | ea96202b7 + UP5 
 UP5 | fmt rust js toml | ea96202b7 + UP5 files (staged) | 0 | every part ok
 UP5 | docs | ea96202b7 + UP5 files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
 UP5 | mutants up5 | 22a427755 | 0 | 8 mutants, 8 killed, 0 survived, 0 not loaded, 0 other failure
+UP5-split | prof (scaas-profile cargo test, default and --features test-hooks) | c13846093 + split files | 0 | store 14 / 14 pass without test-hooks, 16 / 16 with it
+UP5-split | prof (scaas-profile clippy --all-targets -D warnings, default and test-hooks) | c13846093 + split files | 0 | 0 warnings
+UP5-split | prof-deny (cargo deny --offline check, scaas-profile) | c13846093 + split files | 0 | advisories ok, bans ok, licenses ok, sources ok (duplicate-version warnings as ua-rs's)
+UP5-split | sdk-up | c13846093 + split files | 0 | user_profile 2 / 2 pass (face, codes); --lib user_profile 0 (144 filtered out)
+UP5-split | sdk-reg | c13846093 + split files | 0 | vault 28, keystore_vectors 2, --lib vault 18: all pass
+UP5-split | sdk-clippy (UPF and default, --all-targets -D warnings) | c13846093 + split files | 0 | 0 warnings
+UP5-split | features | c13846093 + split files | 0 | check_test_features 72 manifests, 0 findings, scaas-profile row 0 findings, every control True; feature_tree 5 / 5
+UP5-split | ci_changes self-test | c13846093 + split files | 0 | ok
+UP5-split | fmt rust toml yaml py | c13846093 + split files | 0 | every part ok
+UP5-split | docs | c13846093 + split files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok; paths 0

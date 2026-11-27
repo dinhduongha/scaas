@@ -1,0 +1,93 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+//! `scaas-profile` (spec docs/superpowers/specs/2026-11-27-user-profiles.md, rules CLI-UPR-* of
+//! docs/clients/scaas-sdk.md §12): the local store of many protected profiles, without the SDK (owner 2026-11-27, CLI-UPR-02's
+//! Change); the SDK (feature `user-profile`) builds on it. Every KDF, AEAD and MAC runs in `scaas-ua`'s profile arena
+//! (`ProfileKeys`); this crate holds handles, public bytes and files. Synchronous: run every call on a blocking thread. Built so
+//! far (plan UP5): the sealed store core of one open profile ([`Core`]), the manifests and the anchor. UNAUDITED.
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+
+// user-profiles spec §7.5: the test KDF set and the store's hooks never reach a release build
+#[cfg(all(feature = "test-hooks", not(debug_assertions)))]
+compile_error!("scaas-profile's feature `test-hooks` is test-only: never in a release build");
+
+pub mod anchor;
+mod file;
+pub mod store;
+
+pub use anchor::{Anchor, Head, Verdict};
+pub use file::rev_of;
+pub use store::{Core, CoreOpen, Item, Manifest, Plain, ProfilePart, WriteGuard, PART_MAX};
+
+macro_rules! codes {
+    ($($(#[$m:meta])* $v:ident,)*) => {
+        /// The store's refusals; each code is the SDK's `SdkError` of the same name (the SDK maps them one to one). No field:
+        /// no id, name or path in an error.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub enum Error {
+            $($(#[$m])* $v,)*
+        }
+
+        impl Error {
+            /// Every code, for the tests of the mapping.
+            pub const ALL: &'static [Error] = &[$(Error::$v,)*];
+
+            /// The stable code: the variant's name.
+            pub fn code(&self) -> &'static str {
+                match self {
+                    $(Error::$v => stringify!($v),)*
+                }
+            }
+        }
+    };
+}
+
+codes! {
+    /// an input out of its form or bounds (bytes without a JSON `rev`, above 16 MiB)
+    Argument,
+    /// a file system or keychain failure
+    VaultIo,
+    /// a stored file of no form the store writes; a sealed item that does not open
+    VaultFormat,
+    /// a `put_if` at a revision that is not the item's
+    StoreConflict,
+    /// the profile's own form refused (spec §7.1): a sealed item in an unprotected profile, a manifest's duplicate name
+    ProfileFormat,
+    /// the profile arena is locked
+    ProfileLocked,
+    /// an unprotected profile holds `settings` only (spec §7.1)
+    ProfilePassphraseRequired,
+    /// a value below the anchor, its manifest or its tombstone (spec §7.2)
+    ProfileRollback,
+    /// an item its manifest lists is missing
+    ProfileDamaged,
+    /// the store write lock held past the writer's wait (spec §7.3 step 1)
+    ProfileBusy,
+    /// a part's manifest at 65,536 entries
+    ProfilePartFull,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.code())
+    }
+}
+
+impl std::error::Error for Error {}
+
+/// The app's keychain (spec §11): small items only (at most 2,560 bytes), named by the store (`scaas.profile.<id>.<what>`): the
+/// anchors, the `protected` marker, the unlock key. Synchronous, as the core that calls it; a failure is `VaultIo`.
+pub trait ProfileKeychain: Send + Sync {
+    fn get(&self, name: &str) -> Result<Option<Vec<u8>>, Error>;
+    fn put(&self, name: &str, bytes: &[u8]) -> Result<(), Error>;
+    fn delete(&self, name: &str) -> Result<(), Error>;
+}
+
+/// The keychain item `what` of profile `id`: `scaas.profile.<id>.<what>` (spec §5, §7.1, §7.2).
+pub fn keychain_name(id: &str, what: &str) -> String {
+    format!("scaas.profile.{id}.{what}")
+}

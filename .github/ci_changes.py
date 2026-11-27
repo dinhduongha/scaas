@@ -39,6 +39,9 @@ UARS = (
     + VENDOR
     + RT
 )
+# the profile store (owner 2026-11-27): its own crate, a dependency of the SDK (feature `user-profile`); every job over the SDK
+# reads it
+PROFILE = ["clients/scaas-profile/"]
 JOBS = {
     "contract-evm": ["smartcontracts/evm/"]
     + SC
@@ -101,6 +104,8 @@ JOBS = {
     + VENDOR
     + RT,
     "ua-dart": ["clients/ua-dart/", "smartcontracts/vectors/", "smartcontracts/evm/"],
+    # the profile store over ua-rs (owner 2026-11-27): its own crate and the vectors it reads (profile/items.json)
+    "scaas-profile": PROFILE + ["smartcontracts/vectors/"] + UARS,
     # the SDK (plan T20) and what it builds: ua-rs, scaas-rpc, zether-prover, pqz-core's crates, the vectors and gas tables it reads
     "scaas-sdk": [
         "clients/scaas-sdk/",
@@ -109,8 +114,9 @@ JOBS = {
         "clients/scaas-ct/",
         "smartcontracts/vectors/",
     ]
+    + PROFILE
     + UARS,
-    "scaas-sdk-wasm": ["clients/scaas-sdk/", "clients/scaas-rpc/"] + UARS,
+    "scaas-sdk-wasm": ["clients/scaas-sdk/", "clients/scaas-rpc/"] + PROFILE + UARS,
     # the CLI `scaas` (plan T22) over the SDK: what the SDK builds, and its own crate
     "scaas-cli": [
         "clients/scaas-cli/",
@@ -120,6 +126,7 @@ JOBS = {
         "clients/scaas-ct/",
         "smartcontracts/vectors/",
     ]
+    + PROFILE
     + UARS,
     # PqVault's app core (plan V10) over the SDK: what the SDK builds, and its own crate
     "pqvault-core": [
@@ -130,6 +137,7 @@ JOBS = {
         "clients/scaas-ct/",
         "smartcontracts/vectors/",
     ]
+    + PROFILE
     + UARS,
     # PqChat's app core (pqchat-core plan T2, CLI-PQC-01) over the SDK: the same inputs as pqvault-core's, and its own crate
     "pqchat-core": [
@@ -140,8 +148,11 @@ JOBS = {
         "clients/scaas-ct/",
         "smartcontracts/vectors/",
     ]
+    + PROFILE
     + UARS,
-    "keystore-vectors": ["clients/scaas-sdk/", "clients/clientkeys/", "smartcontracts/vectors/keystore/"] + UARS,
+    "keystore-vectors": ["clients/scaas-sdk/", "clients/clientkeys/", "smartcontracts/vectors/keystore/"]
+    + PROFILE
+    + UARS,
     # ARCH-POS-13 (ua-rs-sign T15c2): no test feature in a production artifact; every manifest that can reach scaas-ua,
     # zether-prover or pqz-ffi
     "test-features": ["clients/", "pqz-core/ffi/", "scaas-node/Cargo.toml", "scripts/check_test_features.py"]
@@ -161,6 +172,7 @@ GROUPS = {
         "scaas-cli",
         "pqvault-core",
         "pqchat-core",
+        "scaas-profile",
     ]
     + [j for j in JOBS if j.startswith("scaas-sdk")]
     + [j for j in JOBS if j.startswith("ua-")],
@@ -215,7 +227,7 @@ def needed(paths, forced=()):
 # every cell builds or reads (the SDK, ffi, lib.sh, the shared rows, the list itself, scaas-rpc, the vectors, ua-rs and its
 # crates) and the generator under runs/ need every enabled cell; a language left out has no cell.
 BINDINGS = "clients/scaas-sdk/bindings/"
-BIND_SHARED = ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/"] + UARS
+BIND_SHARED = ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/"] + PROFILE + UARS
 BIND_RUNS = ["clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh"]
 
 
@@ -333,6 +345,7 @@ if __name__ == "__main__":
         "scaas-cli",
         "pqvault-core",
         "pqchat-core",
+        "scaas-profile",
     }
     # plan T20: the SDK's jobs; its generator under runs/ starts the bindings' drift check, other runs/ files nothing
     sdk = {j for j, r in needed(["clients/scaas-sdk/src/lib.rs"]).items() if r}
@@ -345,6 +358,10 @@ if __name__ == "__main__":
         "pqchat-core",
     }, sdk
     assert not needed(["clients/scaas-sdk/runs/2026-11-17-scaas-sdk-summary.txt"])["scaas-sdk"]
+    # owner 2026-11-27: the profile store starts its own job and every job over the SDK; the SDK alone does not start its job
+    prof = {j for j, r in needed(["clients/scaas-profile/src/store.rs"]).items() if r}
+    assert prof >= {"scaas-profile"} | sdk and not needed(["clients/scaas-sdk/src/lib.rs"])["scaas-profile"], prof
+    assert bind_cells(["clients/scaas-profile/src/store.rs"]) == bind_cells(["clients/scaas-sdk/src/lib.rs"])
     assert needed(["smartcontracts/vectors/keystore/keystore.json"])["keystore-vectors"]
     assert all(needed(["docs/x.md"], ["ci-full"]).values())
     assert needed(["docs/x.md"], ["bug", "ci-full-node"]) == needed(
@@ -399,6 +416,7 @@ if __name__ == "__main__":
         "scaas-cli",
         "pqvault-core",
         "pqchat-core",
+        "scaas-profile",
     }
     # the network crate: its own job and the node's (the node builds it); ua-rs (its depth scan) runs it too
     assert {j for j, r in needed(["clients/scaas-rpc/src/evm.rs"]).items() if r} >= {"scaas-rpc", "node"}

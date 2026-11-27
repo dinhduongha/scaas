@@ -2,7 +2,7 @@
 //! The profile's anchor (spec §7.2, plan pinned format 8, CLI-UPR-28): `{"gen":N,"envelope":{"rev":R,"sha256":"…"},"parts":
 //! {"<part>":{"rev":M,"sha256":"…"},…}}`, parts sorted by name, `sha256` the first 16 bytes of SHA-256 of the file (the
 //! envelope; each part's manifest item), lower-case hex. Written to `profile.head` and, with a keychain, to
-//! `scaas.profile.<id>.head`; both compared by [`Anchor::compare`]. The hash is `scaas-ua`'s (no hashing in the SDK).
+//! `scaas.profile.<id>.head`; both compared by [`Anchor::compare`]. The hash is `scaas-ua`'s (no hashing here).
 use std::collections::BTreeMap;
 
 /// The anchor's largest form (a keychain item, spec §11).
@@ -47,8 +47,8 @@ pub enum Verdict {
 
 impl Anchor {
     /// The canonical bytes (pinned format 2: no whitespace, the fields in order).
-    pub fn json(&self) -> Result<Vec<u8>, crate::SdkError> {
-        serde_json::to_vec(self).map_err(|_| crate::SdkError::Argument)
+    pub fn json(&self) -> Result<Vec<u8>, crate::Error> {
+        serde_json::to_vec(self).map_err(|_| crate::Error::Argument)
     }
 
     /// An anchor read back (at most 2,560 bytes, depth 3); `None` for anything else.

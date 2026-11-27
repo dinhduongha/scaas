@@ -138,6 +138,9 @@
 #                          --test vectors); cargo clippy --locked --all-targets -- -D warnings; cargo check --target wasm32-unknown-unknown;
 #                          python3 -I runs/check_reads.py (gate pqc-reads); cargo deny check and cargo audit (its deny.toml, .cargo/audit.toml);
 #                          the chain_ and e2e runs (anvil, Docker, Synapse: gates pqc-chain, pqc-e2e) stay local
+#   scaas-profile:         in clients/scaas-profile (the profile store, owner 2026-11-27): cargo test --locked; cargo test --locked
+#                          --features test-hooks; cargo clippy --locked --all-targets -- -D warnings, default and --features test-hooks;
+#                          cargo deny check (its deny.toml)
 #   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
 #                          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js; in clients/scaas-sdk cargo test --locked --test keystore_vectors
 #   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
@@ -264,6 +267,7 @@ jobs:
       scaas_cli: ${{ steps.f.outputs.scaas_cli }}
       pqvault_core: ${{ steps.f.outputs.pqvault_core }}
       pqchat_core: ${{ steps.f.outputs.pqchat_core }}
+      scaas_profile: ${{ steps.f.outputs.scaas_profile }}
       keystore_vectors: ${{ steps.f.outputs.keystore_vectors }}
       test_features: ${{ steps.f.outputs.test_features }}
     steps:
@@ -1608,6 +1612,45 @@ jobs:
         run: |
           cargo deny check
           cargo audit
+
+  # the profile store (owner 2026-11-27, decisions CLI-UPR-02's Change): its own crate over ua-rs, below the SDK; its tests with
+  # and without the test hooks, its dependency check
+  scaas-profile:
+    needs: changes
+    if: needs.changes.outputs.scaas_profile == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-profile
+    steps:
+      - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-profile
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20.2
+      - name: cargo test
+        run: |
+          cargo test --locked
+          cargo test --locked --features test-hooks
+      - name: cargo clippy
+        run: |
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked --all-targets --features test-hooks -- -D warnings
+      - name: cargo deny
+        run: cargo deny check
 
   # the bindings (plan T20, T20b-T20h; spec §16.1, §16.4), one matrix cell per language enabled in
   # clients/scaas-sdk/bindings/langs (owner 2026-11-22, decisions CLI-SDK-33 (102)); the changes job lists the cells a change

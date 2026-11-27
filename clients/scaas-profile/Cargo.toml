@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+[package]
+name = "scaas-profile"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license-file = "../../LICENSE"
+description = "SCaaS user profiles' local store (CLI-UPR-02): the sealed store of one profile over scaas-ua's profile arena; no SDK. UNAUDITED."
+
+# Owner 2026-11-27 (decisions CLI-UPR-02's Change): the profile store is its own crate, so an app's build without the SDK holds a
+# profile; the SDK (feature `user-profile`) depends on it. Every KDF, AEAD and MAC runs in `scaas-ua`'s profile arena
+# (`ProfileKeys`); this crate holds handles, public bytes and files.
+[features]
+default = []
+# user-profiles spec §7.5: the test KDF set (scaas-ua's) and the store's test hooks; refused in a release build
+# (`compile_error!` without `debug_assertions`; scripts/check_test_features.py)
+test-hooks = ["scaas-ua/test-hooks"]
+
+[dependencies]
+# default-features = false: scaas-ua's defaults carry the Zether and PQZ facades
+scaas-ua = { path = "../ua-rs", default-features = false, features = ["user-profile"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# base64 (an encoding) for the sealed items (plan pinned format 6); zeroize the plaintexts, the pin of scaas-ua
+base64 = "0.22"
+zeroize = "=1.9.1"
+
+# the Argon2id and AEAD code crawls unoptimised: dependencies at opt-level 3, as the SDK
+[profile.dev.package."*"]
+opt-level = 3
+
+[lints.rust]
+unsafe_code = "forbid"

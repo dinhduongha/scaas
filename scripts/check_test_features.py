@@ -22,7 +22,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-GUARDED = ("scaas-ua", "zether-prover", "pqz-ffi", "scaas-ct", "scaas-sdk")
+GUARDED = ("scaas-ua", "zether-prover", "pqz-ffi", "scaas-ct", "scaas-sdk", "scaas-profile")
 TEST = ("vectors", "hazmat", "test-hooks")
 
 
@@ -75,6 +75,8 @@ ARTIFACTS = [
     ("clients/scaas-cli", "shipped"),
     # PqVault's app core (plan V10): every feature it ships; its own test feature `vectors` excepted
     ("clients/pqvault-core", "shipped"),
+    # the profile store (owner 2026-11-27): every feature it ships, its own test feature `test-hooks` excepted
+    ("clients/scaas-profile", "shipped"),
 ]
 
 
@@ -262,17 +264,19 @@ def main():
         f"positive control (graph): clients/scaas-sdk with vectors forced: {len(forced)} findings, both crates found: {ok}"
     )
     bad += [] if ok else ["positive control (graph, scaas-sdk row) failed"]
-    # user-profiles UP4: the SDK's `test-hooks` forced is found, in the SDK and in scaas-ua; `user-profile` ships
+    # user-profiles UP4: the SDK's `test-hooks` forced is found, in the SDK, in scaas-profile (owner 2026-11-27) and in scaas-ua;
+    # `user-profile` ships
     forced = check_graph("clients/scaas-sdk", ["--features", "test-hooks"])
     sdk = shipped("clients/scaas-sdk")[1].split(",")
     ok = (
         "test-hooks" not in sdk
         and "user-profile" in sdk
         and any('scaas-sdk feature "test-hooks"' in x for x in forced)
+        and any('scaas-profile feature "test-hooks"' in x for x in forced)
         and any('scaas-ua feature "test-hooks"' in x for x in forced)
     )
     print(
-        f"positive control (graph): clients/scaas-sdk with test-hooks forced: {len(forced)} findings, both crates found: {ok}"
+        f"positive control (graph): clients/scaas-sdk with test-hooks forced: {len(forced)} findings, the three crates found: {ok}"
     )
     bad += [] if ok else ["positive control (graph, scaas-sdk test-hooks) failed"]
     # T15m: the ua-rs row is not vacuous: its own `vectors` forced is found

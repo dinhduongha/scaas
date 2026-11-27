@@ -85,11 +85,11 @@ raw-native = ["wallet"]
 dev-profiles = []
 arweave = ["vault", "scaas-rpc/arweave", "scaas-rpc/node-client", "scaas-ua/fam-arweave"]
 # user-profiles plan UP4 (spec 2026-11-27-user-profiles §11; bit 33): many protected local profiles over `ua-rs`'s profile arena;
-# base64 (an encoding) for the sealed items (plan pinned format 6, UP5)
-user-profile = ["vault", "file-store", "scaas-ua/user-profile", "dep:base64"]
+# the store is the crate `scaas-profile` (owner 2026-11-27, decisions CLI-UPR-02's Change)
+user-profile = ["vault", "file-store", "scaas-ua/user-profile", "dep:scaas-profile"]
 # user-profiles spec §7.5 (bit 34): the test KDF set (8 MiB / 1 / 4) and the test hooks; refused in a release build
 # (`compile_error!` without `debug_assertions`), never in a binding (scripts/check_test_features.py, the bind-gen check)
-test-hooks = ["user-profile", "scaas-ua/test-hooks"]
+test-hooks = ["user-profile", "scaas-ua/test-hooks", "scaas-profile/test-hooks"]
 # the Dart adapter (src/frb.rs): the platform interfaces as records of async closures; no dependency of its own
 frb = []
 # T20b-T20h (spec §16.1): the UniFFI surface (src/binding.rs), async (Python, Kotlin, Swift, Java, C# and Go where their
@@ -106,6 +106,8 @@ wasm = ["dep:wasm-bindgen", "dep:js-sys", "dep:serde-wasm-bindgen"]
 # default-features = false: scaas-ua's defaults enable `pqz` with one set, so a build asking for another would carry two (§3.2)
 scaas-ua = { path = "../ua-rs", default-features = false }
 scaas-rpc = { path = "../scaas-rpc", default-features = false }
+# feature `user-profile`: the profile store (owner 2026-11-27), which depends on `scaas-ua` only
+scaas-profile = { path = "../scaas-profile", optional = true }
 # feature `zether` (T15): the storage layout of `scaas.zether` only (`state::ROOT`, `state::LAYOUT`); no cryptography is called
 zether-prover = { path = "../zether-prover", default-features = false, optional = true }
 serde = { version = "1", features = ["derive"] }
