@@ -16,7 +16,7 @@ PT = ("cd clients/pqchat-core && CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-s
       "--features vectors --test tree_scenarios the_pathless_form_from_the_state")
 K = "the_pathless_form_from_the_state"
 CT = ("cd clients/pqchat-core && PATH=$HOME/.foundry/bin:$PATH CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target "
-      "../../scripts/capped cargo test --locked --offline -j 2 --test chain_tree -- --ignored")
+      "../../scripts/capped cargo test --locked --offline -j 2 --test chain_tree -- --ignored --exact chain_tree_session")
 CK = "chain_tree_session"
 MUTANTS = [
     ("offered when the device does not hold the head", [(P, "            holds_head: r.holds_head,", "            holds_head: true,")], PT, K),
