@@ -3,6 +3,7 @@
 //! room kinds and their filter (CLI-MTX-06), the homeserver URL rule (CLI-MTX-04) and the bounded decode of the crate's own
 //! records (CLI-MTX-09).
 use crate::MatrixError;
+use matrix_sdk::ruma::RoomId;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::net::IpAddr;
@@ -40,24 +41,26 @@ pub enum Receipt {
     Public,
 }
 
+/// A room id's length at most (the Matrix spec's bound).
+pub const ROOM_ID_MAX: usize = 255;
 /// PqChat rooms marked at most per profile.
 pub const MARKS_MAX: usize = 4096;
 /// The session record's bound.
 pub const SESSION_MAX: usize = 8 * 1024;
 /// The settings record's bound.
 pub const SETTINGS_MAX: usize = 4 * 1024;
-/// The marks record's bound (4,096 room ids of at most 255 bytes, with JSON's quotes and commas).
-pub const MARKS_RECORD_MAX: usize = 2 * MARKS_MAX * 260;
+/// The marks record's bound (4,096 room ids of at most 255 bytes, with JSON's quotes, commas and frame).
+pub const MARKS_RECORD_MAX: usize = MARKS_MAX * (ROOM_ID_MAX + 3) + 64;
 /// A text to send, at most (a Matrix event is at most 65,536 bytes).
 pub const TEXT_MAX: usize = 60_000;
 /// Events of a page, at most.
 pub const PAGE_MAX: u32 = 100;
 
-/// The rooms of a profile marked PqChat, and the invites held unanswered (CLI-PQC-08). A mark is kept after a leave.
+/// The rooms of a profile marked PqChat: created, joined or used by the transport for a bound session, or an invite it holds
+/// unanswered (CLI-PQC-08). A mark is kept after a leave. Only a room id (at most 255 bytes) is marked.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Marks {
     pqchat: BTreeSet<String>,
-    held: BTreeSet<String>,
 }
 
 impl Marks {
@@ -69,28 +72,30 @@ impl Marks {
         }
     }
 
-    /// `room` marked PqChat; `Argument` past [`MARKS_MAX`].
+    /// `room` marked PqChat; `MatrixArgument` for a string that is not a room id or past [`MARKS_MAX`].
     pub fn mark(&mut self, room: &str) -> Result<(), MatrixError> {
+        // matrix-sdk turns on ruma's arbitrary-length ids: the spec's 255 bytes checked here
+        if room.len() > ROOM_ID_MAX || RoomId::parse(room).is_err() {
+            return Err(MatrixError::MatrixArgument);
+        }
         if !self.pqchat.contains(room) && self.pqchat.len() >= MARKS_MAX {
-            return Err(MatrixError::Argument);
+            return Err(MatrixError::MatrixArgument);
         }
         self.pqchat.insert(room.to_string());
         Ok(())
     }
 
-    /// An invite held (`hold`) marks the room PqChat; released, it stays marked.
-    pub fn hold(&mut self, room: &str, hold: bool) -> Result<(), MatrixError> {
-        self.mark(room)?;
-        if hold {
-            self.held.insert(room.to_string());
-        } else {
-            self.held.remove(room);
+    /// An invite held (`hold`) marks the room PqChat, unless the account is joined to it as a Matrix room (`joined_matrix`:
+    /// joined and not marked): a session someone else describes cannot take over a room the user already uses
+    /// (`MatrixRoomKind`). Released, a room stays as it is.
+    pub fn hold(&mut self, room: &str, hold: bool, joined_matrix: bool) -> Result<(), MatrixError> {
+        if !hold {
+            return Ok(());
         }
-        Ok(())
-    }
-
-    pub fn held(&self, room: &str) -> bool {
-        self.held.contains(room)
+        if joined_matrix && self.kind(room) == RoomKind::Matrix {
+            return Err(MatrixError::MatrixRoomKind);
+        }
+        self.mark(room)
     }
 
     /// Whether a room belongs in the list `filter` asks for.
@@ -149,10 +154,18 @@ pub fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8], max: usize) -> Resul
     serde_json::from_slice(bytes).map_err(|_| MatrixError::MatrixStore)
 }
 
+/// A pusher's URL: `https` only (the push gateway receives the event ids).
+pub fn pusher_url(url: &str) -> Result<(), MatrixError> {
+    match Url::parse(url) {
+        Ok(u) if u.scheme() == "https" => Ok(()),
+        _ => Err(MatrixError::MatrixArgument),
+    }
+}
+
 /// A text to send: at most [`TEXT_MAX`] bytes.
 pub fn text(t: &str) -> Result<(), MatrixError> {
     if t.len() > TEXT_MAX {
-        return Err(MatrixError::Argument);
+        return Err(MatrixError::MatrixArgument);
     }
     Ok(())
 }
@@ -205,7 +218,7 @@ mod tests {
     fn kinds_never_mix() {
         let mut m = Marks::default();
         m.mark("!p:x").unwrap();
-        m.hold("!h:x", true).unwrap();
+        m.hold("!h:x", true, false).unwrap();
         for r in ["!p:x", "!h:x"] {
             assert_eq!(m.kind(r), RoomKind::PqChat);
             assert!(!m.shows(RoomFilter::Matrix, r), "{r}");
@@ -216,10 +229,32 @@ mod tests {
         assert!(m.shows(RoomFilter::Matrix, "!m:x"));
         assert!(!m.shows(RoomFilter::PqChat, "!m:x"));
         // a released invite stays PqChat
-        assert!(m.held("!h:x"));
-        m.hold("!h:x", false).unwrap();
-        assert!(!m.held("!h:x"));
+        m.hold("!h:x", false, false).unwrap();
         assert_eq!(m.kind("!h:x"), RoomKind::PqChat);
+    }
+
+    #[test]
+    fn a_held_invite_cannot_take_a_joined_matrix_room() {
+        let mut m = Marks::default();
+        assert_eq!(
+            m.hold("!dm:x", true, true),
+            Err(MatrixError::MatrixRoomKind)
+        );
+        assert_eq!(m.kind("!dm:x"), RoomKind::Matrix);
+        // the controls: not joined, it is held; joined and marked already (a bound room), it stays
+        m.hold("!inv:x", true, false).unwrap();
+        assert_eq!(m.kind("!inv:x"), RoomKind::PqChat);
+        assert_eq!(m.hold("!inv:x", true, true), Ok(()));
+        // only a room id is marked
+        for bad in [
+            "",
+            "not a room",
+            "@user:x",
+            &format!("!{}:x", "a".repeat(260)),
+        ] {
+            assert_eq!(m.mark(bad), Err(MatrixError::MatrixArgument), "{bad}");
+            assert_eq!(m.kind(bad), RoomKind::Matrix);
+        }
     }
 
     #[test]
@@ -228,7 +263,14 @@ mod tests {
         for i in 0..MARKS_MAX {
             m.mark(&format!("!{i}:x")).unwrap();
         }
-        assert_eq!(m.mark("!one-more:x"), Err(MatrixError::Argument));
+        assert_eq!(m.mark("!one-more:x"), Err(MatrixError::MatrixArgument));
+        // the bound record holds the longest room ids
+        let mut l = Marks::default();
+        for i in 0..MARKS_MAX {
+            let id = format!("!{i}:{}", "h".repeat(250 - i.to_string().len()));
+            l.mark(&id).unwrap();
+        }
+        assert!(serde_json::to_vec(&l).unwrap().len() <= MARKS_RECORD_MAX);
         // marking a room already marked is not a new one
         assert_eq!(m.mark("!0:x"), Ok(()));
         let full = serde_json::to_vec(&m).unwrap();
@@ -270,6 +312,16 @@ mod tests {
             Err(MatrixError::MatrixStore)
         );
         assert_eq!(text(&"a".repeat(TEXT_MAX)), Ok(()));
-        assert_eq!(text(&"a".repeat(TEXT_MAX + 1)), Err(MatrixError::Argument));
+        assert_eq!(
+            text(&"a".repeat(TEXT_MAX + 1)),
+            Err(MatrixError::MatrixArgument)
+        );
+        assert_eq!(
+            pusher_url("https://push.example/_matrix/push/v1/notify"),
+            Ok(())
+        );
+        for bad in ["http://push.example/x", "push.example", "ftp://x"] {
+            assert_eq!(pusher_url(bad), Err(MatrixError::MatrixArgument), "{bad}");
+        }
     }
 }

@@ -20,6 +20,10 @@ matrix-sdk = { version = "=0.19.1", default-features = false, features = [
 ] }
 # the room-key recipient strategy type (CollectStrategy), not re-exported by matrix-sdk; the same release
 matrix-sdk-base = { version = "=0.19.1", default-features = false }
+# the record cipher that seals the crate's own records (session, settings, marks): matrix-sdk's own store cipher
+# (XChaCha20-Poly1305, its key wrapped under the store key by HKDF-SHA256), the same release; set_custom_value stores a value
+# as given
+matrix-sdk-store-encryption = "=0.19.1"
 # matrix-sdk's reqwest 0.13 is built `rustls-no-provider`: ring is installed as the process's provider (Apache-2.0 AND ISC)
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 pqchat-transport = { path = "../pqchat-transport" }
@@ -29,6 +33,15 @@ serde_json = { version = "1", features = ["raw_value"] }
 url = "2"
 zeroize = "1"
 async-trait = "0.1"
+
+[features]
+# tests only: `testing::seed_session` writes a sealed session record without a homeserver (tests/profile.rs); never in an
+# app's build
+testing = []
+
+[[test]]
+name = "profile"
+required-features = ["testing"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }

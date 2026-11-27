@@ -2,22 +2,28 @@
 //! The e2e against one Synapse in Docker (`--memory 1g --cpus 1`, the image pinned by digest; `pqchat-core`'s helper
 //! `tests/e2e/matrix.rs` reused): two users log in; one session restored from its store key on a fresh client; an E2EE
 //! direct message sent and read decrypted; the two devices verified by SAS; nothing ephemeral, no pusher and no key backup
-//! sent by default, beside positive controls that are counted; the room-kind rules; `pqchat-transport`'s conformance on
-//! `transport()`. Run: `cargo test --test e2e -- --ignored --nocapture` (Docker in PATH).
+//! sent by default, beside positive controls that are counted; recovery and backup refused over existing ones; a second
+//! device refused to send until it recovers; the room-kind rules (a held invite never answered across sync rounds, a joined
+//! Matrix room never taken by a held invite, a bound room marked on a fresh device, events routed by kind); `pqchat-transport`'s
+//! conformance on `transport()`; nothing secret on disk after the run. Run: `cargo test --test e2e -- --ignored --nocapture`
+//! (Docker in PATH).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 #[path = "../../pqchat-core/tests/e2e/matrix.rs"]
 #[allow(dead_code)]
 mod synapse;
 
+use pqchat_transport::MatrixTransport;
 use scaas_matrix::{
-    ItemKind, MatrixClient, MatrixError, Options, RoomFilter, RoomKind, Step, StoreKey, Trust,
-    Update,
+    ItemKind, Login, MatrixClient, MatrixError, Options, RoomFilter, RoomKind, Step, StoreKey,
+    Trust, Update,
 };
 use serde_json::{json, Value};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use synapse::{Synapse, SynapseWitness, PASSWORD};
+
+const SHOWN: Options = Options { hidden: false };
 
 fn dir(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("scaas-matrix-e2e-{}-{name}", std::process::id()))
@@ -30,21 +36,29 @@ fn fresh(name: &str) -> PathBuf {
     d
 }
 
-async fn login(s: &Synapse, name: &str, key: [u8; 32], opts: Options) -> MatrixClient {
-    MatrixClient::login_password(
-        &fresh(name),
-        Some(StoreKey::from_bytes(key)),
-        opts,
-        &s.base,
-        name,
-        PASSWORD,
-        name,
-    )
-    .await
-    .unwrap_or_else(|e| panic!("login {name}: {e}"))
+fn key(b: [u8; 32]) -> StoreKey {
+    StoreKey::from_bytes(&mut b.clone())
 }
 
-/// Polls `f` up to 60 s (both sides' sync loops run meanwhile).
+async fn login_as(
+    s: &Synapse,
+    dirname: &str,
+    user: &str,
+    k: [u8; 32],
+    opts: Options,
+) -> MatrixClient {
+    let l = Login {
+        homeserver: &s.base,
+        user,
+        password: PASSWORD,
+        device_name: dirname,
+    };
+    MatrixClient::login_password(&fresh(dirname), Some(key(k)), opts, l)
+        .await
+        .unwrap_or_else(|e| panic!("login {dirname}: {e}"))
+}
+
+/// Polls `f` up to 60 s (the sync loops run meanwhile).
 async fn until<F, Fut>(what: &str, mut f: F)
 where
     F: FnMut() -> Fut,
@@ -57,6 +71,22 @@ where
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     panic!("timed out: {what}");
+}
+
+/// The updates of `c` until `want` holds one (at most 60 s), all of them returned.
+async fn updates_until(c: &MatrixClient, want: impl Fn(&Update) -> bool) -> Vec<Update> {
+    let mut out = vec![];
+    loop {
+        let u = tokio::time::timeout(Duration::from_secs(60), c.next_update())
+            .await
+            .expect("an update")
+            .expect("open");
+        let done = want(&u);
+        out.push(u);
+        if done {
+            return out;
+        }
+    }
 }
 
 /// A raw client-server login of `user`: its access token (the positive controls' client, outside the crate).
@@ -77,6 +107,31 @@ fn uid(name: &str) -> String {
     format!("@{name}:localhost")
 }
 
+/// Every file under `d` that holds `needle` (an unreadable file fails the test, one removed meanwhile is skipped).
+fn holders(d: &Path, needle: &[u8]) -> Vec<PathBuf> {
+    let mut out = vec![];
+    let mut stack = vec![d.to_path_buf()];
+    while let Some(p) = stack.pop() {
+        for e in std::fs::read_dir(&p).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else {
+                // a journal file SQLite removed meanwhile holds nothing any more; any other read failure fails the test
+                let b = match std::fs::read(&p) {
+                    Ok(b) => b,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(e) => panic!("{}: {e}", p.display()),
+                };
+                if b.windows(needle.len()).any(|w| w == needle) {
+                    out.push(p);
+                }
+            }
+        }
+    }
+    out
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "Docker: one Synapse container"]
 async fn scaas_matrix_against_synapse() {
@@ -87,10 +142,14 @@ async fn scaas_matrix_against_synapse() {
     let (ka, kb) = ([0xa1; 32], [0xb2; 32]);
 
     // ---- two users log in
-    let alice = login(&s, "alice", ka, Options::default()).await;
-    let bob = login(&s, "bob", kb, Options::default()).await;
+    let alice = login_as(&s, "alice", "alice", ka, SHOWN).await;
+    let bob = login_as(&s, "bob", "bob", kb, SHOWN).await;
     assert_eq!(alice.user_id().unwrap(), uid("alice"));
     let bob_device = bob.device_id().unwrap();
+    assert!(
+        alice.device_verified().await.unwrap(),
+        "cross-signing bootstrapped at the first login"
+    );
     alice.sync_once(Duration::ZERO).await.unwrap();
     bob.sync_once(Duration::ZERO).await.unwrap();
     println!("[e2e] alice and bob logged in");
@@ -134,13 +193,14 @@ async fn scaas_matrix_against_synapse() {
     }
     let it = seen.expect("bob sees the message");
     assert_eq!(it.kind, ItemKind::Text("hello over megolm".into()));
+    assert!(it.encrypted);
     assert_eq!(it.sender, uid("alice"));
     assert_eq!(it.verification, Trust::Unverified, "before the SAS");
     println!("[e2e] E2EE message read decrypted");
 
     // ---- the session restored from the sealed key on a fresh client
     bob.close().await;
-    let bob = MatrixClient::restore(&dir("bob"), StoreKey::from_bytes(kb), Options::default())
+    let bob = MatrixClient::restore(&dir("bob"), key(kb), SHOWN)
         .await
         .unwrap();
     assert_eq!(bob.user_id().unwrap(), uid("bob"));
@@ -155,7 +215,7 @@ async fn scaas_matrix_against_synapse() {
     );
     // the profile's directory is held: a second client of it is refused
     assert_eq!(
-        MatrixClient::restore(&dir("bob"), StoreKey::from_bytes(kb), Options::default())
+        MatrixClient::restore(&dir("bob"), key(kb), SHOWN)
             .await
             .err(),
         Some(MatrixError::MatrixProfileBusy)
@@ -163,7 +223,7 @@ async fn scaas_matrix_against_synapse() {
     println!("[e2e] bob restored from the store key");
 
     // ---- the defaults: nothing ephemeral, no pusher, no backup, no PqChat push rule
-    for u in ["alice", "bob"] {
+    let none_of = |u: &str| {
         let w = s.seen_of(&room, &uid(u));
         assert_eq!(
             (w.receipts, w.read_markers, w.typing, w.presence),
@@ -193,11 +253,23 @@ async fn scaas_matrix_against_synapse() {
             ),
             0
         );
-    }
+        // the server's presence state: never made online
+        assert_eq!(
+            s.sql(
+                "select count(*) from presence_stream where user_id=? and state!='offline'",
+                &[uid(u).as_str()]
+            ),
+            0,
+            "{u}"
+        );
+    };
+    none_of("alice");
+    none_of("bob");
     assert!(!alice.key_backup().await.unwrap());
-    // typing is off: nothing sent
-    assert!(!bob.typing(&room, true).await.unwrap());
-    // a read position goes out private
+    assert!(
+        !bob.typing(&room, true).await.unwrap(),
+        "typing is off: nothing sent"
+    );
     bob.mark_read(&room, &ev).await.unwrap();
     let rt = |t: &str| {
         s.sql(
@@ -207,12 +279,12 @@ async fn scaas_matrix_against_synapse() {
     };
     assert_eq!((rt("m.read.private"), rt("m.read")), (1, 0));
     assert_eq!(s.seen_of(&room, &uid("bob")).typing, 0);
-    // positive controls: another account's typing, receipt and read marker, and its sync without set_presence, are seen
+    // positive controls: another account's typing, receipt, read marker and online sync, in its own room, are counted
     let ctl = s.login("control").await;
-    alice.transport().invite(&room, &uid("control")).await.ok();
-    ctl_join(&s, &room).await;
-    ctl.signals(&room).await;
-    let w = s.seen_of(&room, &uid("control"));
+    let croom = ctl.create_room().await.unwrap();
+    ctl.send_event(&croom, json!({"v": 1})).await.unwrap();
+    ctl.signals(&croom).await;
+    let w = s.seen_of(&croom, &uid("control"));
     assert!(
         w.receipts > 0 && w.read_markers > 0 && w.typing > 0,
         "{w:?}"
@@ -225,28 +297,33 @@ async fn scaas_matrix_against_synapse() {
         .await
         .unwrap();
     assert!(
-        s.seen_of(&room, &uid("control")).presence > 0,
+        s.seen_of(&croom, &uid("control")).presence > 0,
         "a sync without set_presence counts"
     );
-    // the opt-ins move what goes out
+    assert!(
+        s.sql(
+            "select count(*) from presence_stream where user_id=? and state!='offline'",
+            &[uid("control").as_str()]
+        ) > 0,
+        "and the server holds it online"
+    );
+    // the opt-in moves what goes out
     bob.set_public_receipts(true).await.unwrap();
     bob.mark_read(&room, &ev).await.unwrap();
     assert_eq!(rt("m.read"), 1);
     bob.set_public_receipts(false).await.unwrap();
     println!("[e2e] defaults hold; controls seen");
 
-    // ---- push: event_id_only on the caller's call; none for a hidden profile
-    alice
-        .register_pusher(scaas_matrix::HttpPusher {
-            app_id: "net.scaas.test".into(),
-            pushkey: "pk".into(),
-            url: "https://push.example/_matrix/push/v1/notify".into(),
-            app_display_name: "t".into(),
-            device_display_name: "t".into(),
-            lang: "en".into(),
-        })
-        .await
-        .unwrap();
+    // ---- push: https, event_id_only on the caller's call; none added for a hidden profile, removal allowed there
+    let pusher = scaas_matrix::HttpPusher {
+        app_id: "net.scaas.test".into(),
+        pushkey: "pk".into(),
+        url: "https://push.example/_matrix/push/v1/notify".into(),
+        app_display_name: "t".into(),
+        device_display_name: "t".into(),
+        lang: "en".into(),
+    };
+    alice.register_pusher(pusher.clone()).await.unwrap();
     assert_eq!(
         s.sql(
             "select count(*) from pushers where user_name=? and data like '%event_id_only%'",
@@ -271,17 +348,41 @@ async fn scaas_matrix_against_synapse() {
         1
     );
     alice.set_pqchat_push(false).await.unwrap();
-    let carol = login(&s, "carol", [0xc3; 32], Options { hidden: true }).await;
+    let carol = login_as(&s, "carol", "carol", [0xc3; 32], Options { hidden: true }).await;
     assert_eq!(
         carol.set_pqchat_push(true).await.err(),
         Some(MatrixError::MatrixPushHidden)
     );
+    assert_eq!(
+        carol.register_pusher(pusher.clone()).await.err(),
+        Some(MatrixError::MatrixPushHidden)
+    );
+    carol.set_pqchat_push(false).await.ok();
+    assert_eq!(
+        s.sql(
+            "select count(*) from pushers where user_name=?",
+            &[uid("carol").as_str()]
+        ),
+        0
+    );
     carol.close().await;
-    // key backup on the user's call only
+    println!("[e2e] push on the caller's call only");
+
+    // ---- recovery and key backup: on the caller's call, never over an existing one
+    let recovery_key = alice.setup_recovery().await.unwrap();
+    assert_eq!(
+        alice.setup_recovery().await.err(),
+        Some(MatrixError::MatrixVerification),
+        "never replaced"
+    );
     alice.set_key_backup(true).await.unwrap();
     assert!(alice.key_backup().await.unwrap());
-    alice.set_key_backup(false).await.unwrap();
-    println!("[e2e] push and backup on the caller's call only");
+    assert_eq!(
+        alice.set_key_backup(true).await.err(),
+        Some(MatrixError::MatrixVerification),
+        "never replaced"
+    );
+    println!("[e2e] recovery and backup on the caller's call, never replaced");
 
     // ---- SAS between alice's and bob's devices
     alice.start_sync();
@@ -291,19 +392,14 @@ async fn scaas_matrix_against_synapse() {
         .request_verification(&uid("bob"), &bob_device)
         .await
         .unwrap();
-    let fb = loop {
-        match tokio::time::timeout(Duration::from_secs(60), bob.next_update())
-            .await
-            .expect("a request")
-        {
-            Some(Update::VerificationRequest { flow, device }) => {
-                assert_eq!(device, alice_device);
-                break flow;
-            }
-            Some(_) => continue,
-            None => panic!("bob's updates closed"),
+    let mut fb = None;
+    for u in updates_until(&bob, |u| matches!(u, Update::VerificationRequest { .. })).await {
+        if let Update::VerificationRequest { flow, device } = u {
+            assert_eq!(device, alice_device);
+            fb = Some(flow);
         }
-    };
+    }
+    let fb = fb.unwrap();
     assert_eq!(fb.flow_id, fa.flow_id);
     bob.accept(&fb).await.unwrap();
     until("alice's request ready", || async {
@@ -328,14 +424,13 @@ async fn scaas_matrix_against_synapse() {
     assert_eq!(ea.len(), 7);
     assert_eq!(ea, eb, "the same seven emoji on both sides");
     alice.confirm(&fa).await.unwrap();
+    assert!(matches!(
+        alice.step(&fa).await.unwrap(),
+        Step::Confirmed | Step::Verified
+    ));
     bob.confirm(&fb).await.unwrap();
-    // a finished flow may already be dropped by matrix-sdk's verification cache (then `step` is MatrixVerification): the
-    // outcome that counts is each device's trust, asserted right after
-    let done = |r: Result<Step, MatrixError>| {
-        matches!(r, Ok(Step::Verified) | Err(MatrixError::MatrixVerification))
-    };
     until("both verified", || async {
-        done(alice.step(&fa).await) && done(bob.step(&fb).await)
+        alice.step(&fa).await == Ok(Step::Verified) && bob.step(&fb).await == Ok(Step::Verified)
     })
     .await;
     assert_eq!(
@@ -386,12 +481,52 @@ async fn scaas_matrix_against_synapse() {
     for r in [
         alice.send_text(&pq, "x").await.err(),
         alice.mark_read(&pq, &ev).await.err(),
+        alice.accept_invite(&pq).await.err(),
+        alice.messages(&pq, None, 10).await.err(),
     ] {
         assert_eq!(r, Some(MatrixError::MatrixRoomKind));
     }
     assert_eq!(
         alice.typing(&pq, true).await.err(),
         Some(MatrixError::MatrixRoomKind)
+    );
+    // a held invite can never take the Matrix room alice already uses
+    assert!(t.hold_invite(&room, true).await.is_err());
+    assert_eq!(alice.kind(&room), RoomKind::Matrix);
+    // events routed by kind: the witness's envelope in the PqChat room reaches alice as a PqChat event, never a timeline row
+    t.invite(&pq, &uid("witness")).await.unwrap();
+    w.other.join(&pq).await.unwrap();
+    w.other
+        .send_event(&pq, json!({"v": 1, "hint": "AQEBAQEBAQE=", "env": "Ag=="}))
+        .await
+        .unwrap();
+    let ups = updates_until(
+        &alice,
+        |u| matches!(u, Update::PqChatEvent { room: r, .. } if *r == pq),
+    )
+    .await;
+    assert!(
+        !ups.iter()
+            .any(|u| matches!(u, Update::Timeline { room: r, .. } if *r == pq)),
+        "{ups:?}"
+    );
+    // a held invite stays unanswered across sync rounds (the sync loop runs)
+    let held = w.other.create_room().await.unwrap();
+    w.other.invite(&held, &uid("alice")).await.unwrap();
+    t.hold_invite(&held, true).await.unwrap();
+    // the sync loop has seen the invite (an auto-join would act on it there), then a few more seconds of the loop
+    until("alice's sync sees the held invite", || async {
+        alice
+            .rooms(RoomFilter::PqChat)
+            .await
+            .iter()
+            .any(|r| r.room_id == held && r.invited)
+    })
+    .await;
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert!(
+        !s.seen_of(&held, &uid("alice")).joined,
+        "a held invite is never answered by the crate"
     );
     // after the whole run: nothing ephemeral of alice or bob in any room the server holds
     for u in ["alice", "bob"] {
@@ -410,32 +545,71 @@ async fn scaas_matrix_against_synapse() {
             "{u}"
         );
     }
-    println!("[e2e] the transport conforms; PqChat rooms kept apart");
+    println!("[e2e] the transport conforms; PqChat rooms kept apart; events routed by kind");
+
+    // ---- a second device of alice: refused to send encrypted until it recovers; a bound room marked on it
+    let alice2 = login_as(&s, "alice-2", "alice", [0xa2; 32], SHOWN).await;
+    alice2.sync_once(Duration::ZERO).await.unwrap();
+    assert!(!alice2.device_verified().await.unwrap());
+    assert_eq!(
+        alice2.send_text(&room, "from the new device").await.err(),
+        Some(MatrixError::MatrixDeviceUnverified)
+    );
+    alice2.recover(&recovery_key).await.unwrap();
+    assert!(
+        alice2.device_verified().await.unwrap(),
+        "verified by the recovery key"
+    );
+    alice2
+        .send_text(&room, "from the recovered device")
+        .await
+        .unwrap();
+    assert_eq!(
+        alice2.kind(&pq),
+        RoomKind::Matrix,
+        "a fresh device knows no mark"
+    );
+    alice2.transport().bound(&pq).await.unwrap();
+    assert_eq!(alice2.kind(&pq), RoomKind::PqChat);
+    assert!(!alice2
+        .rooms(RoomFilter::Matrix)
+        .await
+        .iter()
+        .any(|r| r.room_id == pq));
+    alice2.close().await;
+    println!("[e2e] a second device recovers; bound rooms marked on it");
+
+    // ---- nothing secret on disk: alice's Matrix id, the homeserver and her rooms' ids, while open and after close
+    let port = s.base.rsplit(':').next().unwrap().to_string();
+    let adir = dir("alice");
+    let needles = [
+        uid("alice"),
+        format!("127.0.0.1:{port}"),
+        room.clone(),
+        pq.clone(),
+    ];
+    let scan = || {
+        for n in &needles {
+            assert_eq!(holders(&adir, n.as_bytes()), Vec::<PathBuf>::new(), "{n}");
+        }
+    };
+    scan();
+    alice.close().await;
+    scan();
+    assert!(
+        t.create_room().await.is_err(),
+        "the transport is dead after close"
+    );
 
     // ---- logout deletes the store
     let bdir = dir("bob");
-    bob.logout().await.unwrap();
+    assert!(
+        bob.logout().await.unwrap(),
+        "the server invalidated the token"
+    );
     assert!(!bdir.join("store").exists());
-    alice.close().await;
-    for n in ["alice", "bob", "carol"] {
+    for n in ["alice", "alice-2", "bob", "carol"] {
         let _ = std::fs::remove_dir_all(dir(n));
     }
     println!("[e2e] ok");
-}
-
-/// The control account joins `room` (it was invited).
-async fn ctl_join(s: &Synapse, room: &str) {
-    let tok = raw_token(s, "control").await;
-    let r = reqwest::Client::new()
-        .post(format!(
-            "{}/_matrix/client/v3/join/{}",
-            s.base,
-            room.replace('!', "%21").replace(':', "%3A")
-        ))
-        .bearer_auth(&tok)
-        .json(&json!({}))
-        .send()
-        .await
-        .unwrap();
-    assert!(r.status().is_success(), "{}", r.status());
 }
