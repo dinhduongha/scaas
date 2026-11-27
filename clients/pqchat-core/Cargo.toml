@@ -61,6 +61,11 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 name = "vectors"
 required-features = ["vectors"]
 
+# plan 2026-11-23-pqchat-treekem T6: the tree scenarios replayed by the vector devices' KEM keys
+[[test]]
+name = "tree_scenarios"
+required-features = ["vectors"]
+
 # plan T11: the hostile harness seals what an honest client never does through the SDK's vectors build
 [[test]]
 name = "e2e"

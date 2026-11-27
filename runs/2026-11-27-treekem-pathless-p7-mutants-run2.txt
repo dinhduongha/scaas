@@ -1,0 +1,6 @@
+# p7 mutants at commit ca3e2f0c5 (name | outcome | test)
+no try counter (always a try left) | killed | CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios the_pathless_form_from_the_state
+the try counter not moved by a signed path-less Add | killed | PATH=$HOME/.foundry/bin:$PATH CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target ../../scripts/capped cargo test --locked --offline -j 2 --test chain_tree -- --ignored --exact chain_tree_session
+the quote without the refresh price | killed | PATH=$HOME/.foundry/bin:$PATH CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target ../../scripts/capped cargo test --locked --offline -j 2 --test chain_tree -- --ignored --exact chain_tree_session
+the deferred cost without this commit's Adds | killed | PATH=$HOME/.foundry/bin:$PATH CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target ../../scripts/capped cargo test --locked --offline -j 2 --test chain_tree -- --ignored --exact chain_tree_session
+4 mutants, 4 killed, 0 survived (0 killed elsewhere), 0 not loaded

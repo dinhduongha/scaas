@@ -146,7 +146,7 @@ chat comes to the web build later and not to the extension: [CLI-PQC-19](../deci
 Status: **BUILT** for CLI-PQC-06 to CLI-PQC-10 and CLI-PQC-13 to CLI-PQC-16 (`src/stores.rs`, `consent.rs`, `check.rs`,
 `drops.rs`, `session.rs`, `recovery.rs`, `reads.rs`, `message.rs`, `signed.rs`; tests `tests/stores.rs`, `check.rs`, `session.rs`,
 `recovery.rs`, `reads.rs`, `message.rs`, `signed.rs`, `chain_*.rs`; the reads check `runs/check_reads.py`),
-but the sealed local history of CLI-PQC-09, **PLANNED**; the tree mode, CLI-PQC-17, **SPECIFIED**.
+but the sealed local history of CLI-PQC-09, **PLANNED**; the tree mode, CLI-PQC-17, **BUILT** (`src/tree.rs`).
 
 <a id="CLI-PQC-06"></a>**CLI-PQC-06** — **Every message goes to every listed message store its type may use; a session with a store
 the crate does not implement cannot send; chain-store gas is spent only under the user's consent; a new store is used only after the
@@ -310,7 +310,7 @@ commits since its Welcome; every tree secret stays in `ua-rs`; a committer's pat
 that cannot follow an epoch shows it and sends nothing by itself** (owner 2026-11-23: our own TreeKEM in `ua-rs` after RFC
 9420's algorithms, no MLS library; seed-derived committer secrets, no self-wrap; spec
 [`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md), revision 3, §5, §8, §10, §11, §15; the contract
-side is [CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)). Status: **SPECIFIED** for the crate (plan T6a, T6b), UNAUDITED;
+side is [CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)). Status: **BUILT** for the crate's core (plan T6a, T6b, branch `treekem-t4-t10`, `src/tree.rs`: the views read by `ua-rs`'s names through the port, the creation in one transaction, a commit built by `ua-rs` and sent in C37's order, the exits, the replay with its pin kept by `treeId`, the epoch opened for messages from the replay's `K`; `tests/chain_tree.rs` on a local chain), with the strict-majority read before a changed info (the TreeKEM spec's ruling 13), an admin's info after a gap, the prepared creation across a restart, the size hint, one snapshot per state and the Add warning's lookup (versions to the highest when it is at most 64, else 0, the highest and the leaves' versions, with what it did not cover), and its suites `tests/tree_scenarios.rs` (every scenario's every device replayed through the crate to the vectors, the hostile reads, the trace test of ARCH-POS-13, the majority read, the snapshot) and `tests/chain_tree.rs` (a local chain), UNAUDITED; the tree calls are Rust-only in the bindings this round; **the T4-T9 review's fixes (2026-11-26, [CTR-CHAT-27](../decisions.md#ctr-chat-27--the-tree-modes-checks-and-bounds-controller-calls)'s Change of the day, UNAUDITED):** the TreeKEM spec's ruling 13 on the sending side (the agreed read over named endpoints only, `treeOf` compared whole, before anything is built), the first pin and the conflict at the pin by the majority (`unconfirmed`, `pin_replaced`), the receiving side never refused, a commit on a moved head refused (`TreeStale`), completion by `epochComplete` at the final block with the record-stored fallback for every plan, the message branch (`tree_open` carries the info in force and the parent; no receipt by default; `tests/chain_tree.rs` sends and receives under a tree epoch), the snapshot checked before each call (a resume never consumed and thrown away), a resume's reads from its pin; **the re-check's fixes (the second Change of the day, UNAUDITED):** `treeOf.owed` tied to the head's exits (ruling 13 covers a hidden exit), `K` handles for every followed epoch the walk opens, a resume below the store's pin (`TreeCheckpoint`) or from a consumed replay (`TreePeriod`) refused, the previous replay's node keys moved only after the pin is stored, `unconfirmed` until a strict majority read of the head agreed (sending on an unconfirmed head is the app's choice), a tree epoch with its author and admins, a record unknown behind a down first endpoint read as not stored; a batch of Adds over the cap split into several commits within the cap less the SDK's margin (`tree_commit_plan`, `adds_left`; owner 2026-11-27, the Change of that day); left: the epochs of a resumed state are the new ones only (the app keeps the earlier state for older epochs), and the info in force crosses the SDK as a string (Rust-only);
 its `ua-rs` side (the tree secrets, the forward walk, replay, the signing operations; plan T2, T11) is **BUILT**, UNAUDITED. The bullets below
 other than the owner's rulings are controller calls, the owner may override. **Owner rulings of 2026-11-23 on the second
 review:** the joiner without RFC 9420's `init` chain and its cost; the compromise warning; no automatic receipts in a tree
@@ -319,6 +319,16 @@ warning before an Add of a key registered to another UA. **Codex's third review 
 replay, the comparison at the pin, the warning's roster and empty path, the prepared creation, the lookup behind the Add
 warning, an admin's new info after a gap, the order of a commit's pieces, the closed session.
 
+- **Path-less Adds (Change 2026-11-25, the [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md) §6; the owner's ruling for the warning, controller calls
+  C45-C47; SPECIFIED, nothing built).** The admins are warned from `sincePath ≥ W(N)`, `W(0)` = 20, `W(N) = max(1, N − ⌈N/4⌉)`,
+  with the next refresh's cost; every path-less Add's review shows the count; the default form is path-less only when the device
+  followed the head, nothing is owed, no head admin is `gone`, no path commit of the device's own is staged on the head (F-5, owner
+  2026-11-27), a `try` is left and the bound leaves room;
+  the default bound is 20. A device anchored in a run keeps the chain's key when a tag fails ("the author did not hold the
+  epoch"); a path-less joiner whose later tag fails sees "this device's Welcome may not match the group"; a good tag with a
+  `sealedInfo` that fails is "followed, info not taken"; the leaves under review are listed in every path commit's review,
+  and a path commit over them is built only once the caller acknowledged them (`TreeLeavesUnderReview`); a
+  path-less record of the device's own `(ua, keyId)` whose nonce no `try` of its seed reproduces is the compromise warning.
 - **One branch.** Both modes end in an epoch key `K` per epoch id; sender chains, `sealedInfo`, messages, stores and consent sit
   above `K` and do not change. Until the mode is built the crate refuses `groupMode ≠ 0` by name. A tree session's state,
   consent and pins are keyed by `treeId = hashStruct(PqChatSession)`, which binds the home and the genesis record.

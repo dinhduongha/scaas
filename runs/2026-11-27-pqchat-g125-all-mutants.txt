@@ -1,0 +1,25 @@
+# all mutants at commit 5575ef9d6 (name | outcome | test)
+postedAt not set | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_postedAtAndEditedAt
+editedAt not set on edit | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_postedAtAndEditedAt
+entryOf: no editedAt | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_postedAtAndEditedAt
+versionAt: version 1 takes postedAt as editedAt | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_postedAtAndEditedAt
+versionAt: the latest version's slot for every edit | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_postedAtAndEditedAt
+entryOf: the original's nonce after an edit | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_versionNonceRebuildsTheDigest
+versionAt: version 1's nonce zero | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_versionNonceRebuildsTheDigest
+versionAt: an edit's nonce altered | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_versionNonceRebuildsTheDigest
+entryRows: the bound off by one (64 refused) | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_entryRowsBound
+entryRows: the bound off by one (65 taken) | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_entryRowsBound
+entryRows: an unknown id answered | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_entryRowsBound
+entryRows: the original's version after an edit | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_entryRows
+entryRows: no editedAt | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_entryRows
+entryRows: the original's nonce | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_entryRows
+entryRows: bodyLength from the media type's offset | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_entryRows
+entryRows: the media type one word off | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_entryRows
+entryRows: up and down swapped | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_entryRows
+entryRows: the author's vote, not the viewer's | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_entryRows
+entryRows: the replies of another list | killed | ../../scripts/capped forge test --match-path test/pqchat/PqTopicRows.t.sol --match-test test_topics_entryRows
+pqchat-core: entry's postedAt read as editedAt | killed | ../../scripts/capped cargo test --locked --offline -j2 --test topics entry_and_version_times_and_nonce
+pqchat-core: entry's nonce not read | killed | ../../scripts/capped cargo test --locked --offline -j2 --test topics entry_and_version_times_and_nonce
+pqchat-core: version_at's nonce not read | killed | ../../scripts/capped cargo test --locked --offline -j2 --test topics entry_and_version_times_and_nonce
+pqchat-core: version_at's editedAt read as postedAt | killed | ../../scripts/capped cargo test --locked --offline -j2 --test topics entry_and_version_times_and_nonce
+23 mutants, 23 killed, 0 survived (0 killed elsewhere), 0 not loaded

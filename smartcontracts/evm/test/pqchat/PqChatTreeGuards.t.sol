@@ -460,8 +460,7 @@ contract PqChatTreeGuardsTest is PqChatTreeModel {
         internal
         returns (IPqChat.PqChatSession memory s, IUARegistry.UASig memory sg)
     {
-        (s.creator, s.nonce, s.homeChain, s.homeChatContract) =
-        (u[0], ++nonceN, _j().readBytes32(".scenarios[0].genesis.record.homeChain"), address(vchat));
+        (s.creator, s.nonce, s.homeChain, s.homeChatContract) = (u[0], ++nonceN, homeChain_, address(vchat));
         s.admins = new bytes32[](admins);
         for (uint256 i; i < admins; ++i) {
             s.admins[i] = u[i];
@@ -491,7 +490,8 @@ contract PqChatTreeGuardsTest is PqChatTreeModel {
     /// D-4 (C10, C24 at creation): 513 member keys, 33 admins, a 4,125-B `sealedInfo` are `PqChatShape`; 512, 32 and
     /// 4,124 B are created.
     function test_d4_createSessionBounds() public {
-        _open(); // the vectors in this call's memory
+        // not `_open()`: the vectors' file (6.2 MB) in this call's memory beside 513 registrations ran out of memory gas;
+        // the session's home is the model's `homeChain_`
         bytes32[] memory u = _many(513);
         _createRefused(u, 513, 1, 4);
         _create(u, 512, 1, 4); // control

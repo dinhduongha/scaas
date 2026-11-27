@@ -1939,11 +1939,12 @@ impl AppCore {
         args: String,
         purpose: Purpose,
     ) -> Result<String, SdkError> {
-        self.read_app_by(chain, contract, entry, args, purpose, false)
+        self.read_app_by(chain, contract, entry, args, purpose, By::One)
             .await
     }
 
-    /// [`AppCore::read_app`] at `purpose`, under strict majority when `agreed` ([`AppCore::read_app_agreed`]).
+    /// [`AppCore::read_app`] at `purpose`: from one endpoint (failed over), under strict majority of the list
+    /// ([`AppCore::read_app_agreed`]) or of its named endpoints ([`AppCore::read_app_agreed_named`]).
     async fn read_app_by(
         self: &Arc<Self>,
         chain: String,
@@ -1951,7 +1952,7 @@ impl AppCore {
         entry: String,
         args: String,
         purpose: Purpose,
-        agreed: bool,
+        by: By,
     ) -> Result<String, SdkError> {
         use alloy::dyn_abi::FunctionExt;
         use alloy::json_abi::StateMutability;
@@ -1974,11 +1975,17 @@ impl AppCore {
             let d = data.clone();
             async move { pool.call_at(&at, to, d).await.map(|b| b.to_vec()) }
         };
-        let choice = final_block(&profile);
-        let out = if agreed {
-            pool.read_at_block_agreed(choice, purpose, call).await?
-        } else {
-            pool.read_at_block(choice, purpose, call).await?
+        let choice = match by {
+            By::Latest => scaas_rpc::pool::BlockChoice::Latest,
+            _ => final_block(&profile),
+        };
+        let out = match by {
+            By::One | By::Latest => pool.read_at_block(choice, purpose, call).await?,
+            By::Agreed => pool.read_at_block_agreed(choice, purpose, call).await?,
+            By::Named => {
+                pool.read_at_block_agreed_named(choice, purpose, call)
+                    .await?
+            }
         }
         .value;
         if out.len() > READ_MAX {
@@ -1999,6 +2006,15 @@ impl AppCore {
 }
 
 mod agreed;
+
+/// How [`AppCore::read_app_by`] reads.
+#[derive(Clone, Copy)]
+enum By {
+    One,
+    Latest,
+    Agreed,
+    Named,
+}
 
 /// Test-only entry points (feature `vectors`, never in a release build nor a binding): key bytes in and out and fixed
 /// randomness, for the vectors.

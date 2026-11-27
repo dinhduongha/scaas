@@ -1,0 +1,37 @@
+# t6 mutants, each row at its commit (name | outcome | commit | test); the first run's survivors fixed and run again
+T6a encrypting before the signature check (a commit's signature unchecked) | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
+T6a the tree hash not recomputed | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
+T6a a tree read from a replica | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6a the checkpoint not consulted | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6a the checkpoint by epoch id only | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6a the pin not compared when the head is higher (codex-r3-2) | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6a a cached info sealed in full after a gap without the review | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6a a lookup that reads only the latest version | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6a a pin replaced on one node's word | killed | 5ae420567 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6a the setting taken from one discovered node (sigStore a plain read) | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --lib tree_reads_are_trusted
+T6a a changed info sealed with one endpoint | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6a a discovered node counted among the 3 (the SDK's named read over the whole list) | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --test pqchat_keys read_app_agreed_is_the_agreed_read
+T6a a discovered node counted among the 3 (scaas-rpc's named agreement over every class) | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --test pool the_named_agreement_counts_named_endpoints_only
+T6a a receipt sent in a tree session | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6b an automatic write after a failed open | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6b a held send flushed (a tree epoch's child not asked for) | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6b a read skipped after a failed open | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6b a dropped UA accepted without its signed leave or removal | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
+T6b replay that reads an event | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6b replay that opens before the join | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6b the range stopped at endEpoch (a ciphertext opened at the commit that removed the key) | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6b the join's author judged without the parent's admins | killed | bdf6ef30c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
+T6b the warning cleared by a refresh while a foreign leaf stays | killed | 5ae420567 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
+T6b a commit author not checked against the roster | killed | 5ae420567 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
+C-1 a record stored alone taken as complete | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+D-14 what landed read at the final block only | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+D-2 a first pin written without the majority | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+D-3 the majority read compared by its head only | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+D-5 a changed info refused on the receiving side | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+D-6 the snapshot checked only after the call | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+C-8 the resume's reads from epoch 0 | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+D-10 a commit on a moved head | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+C-10 an exit past the lag signed | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+C-6 a session closed by exits shown open | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --lib a_session_closed_by_exits
+C-9 the forged continuation taken at another number | killed | 5ae420567 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
+35 mutants, 35 killed, 0 survived (0 killed elsewhere), 0 not loaded

@@ -1,0 +1,3 @@
+# p5 mutants at commit 5730d62c4 (name | outcome | test)
+a path-less path accepted (node keys and ctCount) | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked --offline -j 2 --lib typed::tests::pqchat_tree_bounds_are_the_contract
+1 mutants, 1 killed, 0 survived (0 killed elsewhere), 0 not loaded

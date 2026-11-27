@@ -386,20 +386,20 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
       are built, **with the contract's bounds** (`TREE_LEAVES_MAX`, `TREE_CHANGES_MAX`, `TREE_ADMINS_MAX`, `TREE_INFO_MAX`, the
       depth, `ctCount < leaves`; codex-20). `guard.rs`: `commit`, `treeLeave`, `treeRemove` as the signed writes, the three unsigned entries under
       `relay_unsigned_pqchat` as `addWraps`. `selector_audit.json`. Both directions equal to the contract's.
-- [ ] **The whole-set guard (fable-r3-6, spec §8, §15):** the node relays a tree commit's record or pieces only when it holds
+- [x] **The whole-set guard (fable-r3-6, spec §8, §15):** the node relays a tree commit's record or pieces only when it holds
       every piece the record signs that is not yet in state, each hashing to its signed hash and every node key passing
       the admission check; otherwise a named refusal and zero sends. Test: a commit with one bad `ctHashes` entry, one
       with a node key that fails the admission check and one with a piece missing are refused with nothing sent; the
       right set is relayed. Mutant: the guard checks the hashes but not the admission check.
-- [ ] Gas for a piece is estimated on the state at send time, so the piece that turns out last gets the completion's limit
+- [x] Gas for a piece is estimated on the state at send time, so the piece that turns out last gets the completion's limit
       (fable-r2-9). **The node sends a set in the order of C37:** the record, the list, the node keys, each final before
       the next, then ciphertexts and wraps, one ciphertext alone at the end (codex-r3-12). Test: the last transaction of
       a relayed commit holds one ciphertext; mutant: the node keys sent last.
-- [ ] `docs/node/job-api.md`: the six calls' named fields and the whole-set guard with its refusal; a note for operators (job shapes were added, none changed).
+- [x] `docs/node/job-api.md`: the six calls' named fields and the whole-set guard with its refusal; a note for operators (job shapes were added, none changed).
 - [ ] Gates: `scripts/capped cargo test`, clippy `-D warnings`; the node rebuilds the vector rows' calldata byte for byte.
 - [ ] Mutants: a missing bound on `ctTargets`; a bound one above the contract's; an unsigned entry relayed with the option off;
       one selector missing on either side.
-- [ ] **A reverted exit is not `dead` within the lag (D2-5 of the re-review of 2026-11-25; `docs/node/job-api.md`'s operator
+- [x] **A reverted exit is not `dead` within the lag (D2-5 of the re-review of 2026-11-25; `docs/node/job-api.md`'s operator
       note on exit jobs, SPECIFIED):** an exit job (`treeLeave`, `treeRemove`, mode 0's `leave` / `remove`, `leaveVault`,
       `removeVaultMembers`) whose simulation reverts with a refusal that may clear at a later head (`PqChatTreeBacklog`,
       `PqChatIncomplete`, `PqVaultIncomplete`) stays queued and is retried while the head is within `EXIT_LAG_MAX` = 16 of
@@ -409,6 +409,14 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
       `dead`; mutant: a backlog refusal reported `dead`. Then the note in `job-api.md` to BUILT.
 
 ### T5. SDK: thin calls (`clients/scaas-sdk`)
+
+**Progress (2026-11-26, branch `treekem-t4-t10`; controller calls in decisions.md CTR-CHAT-27's Change of the day).** BUILT,
+UNAUDITED: `src/pqchat_tree.rs` (the calls over `PqTreeReads` with `PqTreeStep::Need`, the registry's records with the kept
+signature, the creation, the commit prepared and signed once, the exits, the replay and its resumption, `plan_commit`,
+`next_send`, `create_cap` over the data rows `gas/pqchat-tree.json`); tests `pqchat_tree::tests` (the 20 M block, the order
+broken and its controls, the creation cap). Left: the binding surface check of the SDK is unchanged (the calls are `AppCore`'s,
+outside the module objects); the five mutants below; the per-chain rows measured on each chain (the reference rows are lines through
+the measured forge rows, `gas/pqchat_tree_rows.py`, checked against the points they do not come from).
 
 - [ ] **The creation in one transaction (owner 2026-11-25: a TreeKEM session is created with at most 16 members and 16 wraps,
       as many wraps as members):** the SDK's tree-session creation sends the session record **with all its wraps in the
@@ -444,6 +452,16 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
 
 ### T6a. `pqchat-core`: the public tree and building a commit (`clients/pqchat-core`)
 
+**Progress (2026-11-26, branch `treekem-t4-t10`).** BUILT, UNAUDITED: `src/tree.rs` (the views by `ua-rs`'s names through the
+port, all trusted; `create_tree` in one transaction, a `none` home refused; `tree_commit` and `tree_next` in C37's order;
+`tree_leave`, `tree_remove`; the Add warning's lookup `tree_add_check` over the candidates, `KEM_SCAN_MAX` 64; `tree_open` for
+messages); R13's majority read (made whenever a replay advances, ARCH-POS-13), an admin's info after a gap (`info_reviewed`),
+the prepared creation across a restart (`tree_resume_create`), the size hint (`tree_advised`); `tests/tree_scenarios.rs`
+(the hostile reads, R13, the review) and `tests/chain_tree.rs` (gate `pqc-chain`); mutants
+`clients/pqchat-core/runs/2026-11-26-pqchat-treekem-t6-mutants.py`. The T4-T9 review's fixes (2026-11-26, the CTR-CHAT-27 Change
+of the day): R13 on the sending side, the pin rules, the message branch, completion, with their tests and mutants. Left: the
+warning's index hints stay the caller's candidates.
+
 - [ ] **The creation default of T5 (owner 2026-11-25):** a tree session is created with the creator and a few members and
       grown by commits of at most 32 Adds with their Welcome wraps; a test creates a large group that way and replays it.
 
@@ -476,6 +494,13 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
       one endpoint; a discovered node counted among the 3; a receipt sent in a tree session.
 
 ### T6b. `pqchat-core`: replay, the store, not followed
+
+**Progress (2026-11-26, branch `treekem-t4-t10`).** BUILT, UNAUDITED: `tree_state` (the replay from state, from the store's
+pin or resumed from the device's previous replay; the pin stored by `treeId` after a replay that succeeded; the epochs'
+states, `K`, rosters and warnings from `ua-rs`; the closed session); one snapshot per state (the `treeOf` compared at the
+end, fable-r3-9); `tests/tree_scenarios.rs`: every scenario's every device replayed through the crate over a model of the
+home to the vectors' rows (the recovery gate, the late joiner, removed and retired keys), the trace test (`gap` against
+`gap-control`), the snapshot test.
 
 - [ ] Replay from state (spec §10) on a fresh store: the fixed read list, the checks at the read boundary, the forward
       walk from the cold tree, or from the pin with its tree and exits (C25, C26 as amended 2026-11-24), the rights check with the signed leave or removal of
@@ -558,10 +583,23 @@ read the rows below. Every test has its positive control; every new check its mu
 
 ### T7. Bindings
 
+**Progress (2026-11-26, branch `treekem-t4-t10`).** The bindings check (`runs/2026-11-17-pqchat-core-bind.sh`) green again:
+it was red before this round (five helpers of the signed-records and review-fix rounds in the surface); they and the tree mode
+are Rust-only this round, the tree error codes bound. No other language binds `pqchat-core`.
+
 - [ ] Regenerate `pqchat-core`'s bindings with the new calls and errors; the per-language smoke tests. After `capped dotnet`:
       `dotnet build-server shutdown`.
 
 ### T8. e2e
+
+**Progress (2026-11-26, branch `treekem-t4-t10`).** `clients/pqchat-core/tests/chain_tree.rs` passes on anvil (the deploy
+script's release, `--enable-tx-gas-limit`): creation in one transaction, an Adds commit with its Welcome wraps, a non-admin's
+commit, a leave and the removal commit, a fresh device replaying to the same head, the creation resumed after a restart. The
+SDK's gas rows are measured (`gas/pqchat_tree_rows.py` over `PqChatTreeGas.t.sol`) and every point replicated and included
+on the local Nethermind copy with 2^24 enforced (`smartcontracts/evm/runs/2026-11-26-pqchat-treekem-t8-nethermind.py`).
+The node's C37 at the submit level runs on a fake chain (`submit.rs`
+`a_tree_commit_job_lands_in_c37_order_on_a_fake_chain`, with its mutants). Left: the node's relay of a set by a third
+party on a real chain, and the real session record at 192 keys on Nethermind (its replica rows at 64 and 128).
 
 - [ ] Local only. On anvil, deployed through the deploy script (the release with `TREE`): a tree session of 8 keys, a commit by
       a non-admin, an Add, a commit by a third member, a `treeRemove` and the commit after it, a `treeLeave`, a Remove of one device key, the removed UA refused

@@ -934,8 +934,13 @@ async fn run() {
     );
     println!("[e2e] fixtures: counter, unlisted, wrap-hash, pending gate");
 
-    // --- mutant 11's fixture: the named endpoint serves S2's sealedInfo changed for one sealed under S2's K that is not in
-    // K5's canonical form (hostile, the vectors build); B's new device opens nothing and joins nothing from it
+    // --- mutant 11's fixture: a session record A signed with a `sealedInfo` sealed under its own K that is not in K5's
+    // canonical form (the hostile harness, the vectors build); B's new device opens nothing and joins nothing from it. Until
+    // CLI-PQC-15 the fixture changed S2's `sealedInfo` in the endpoint's `sessionOf` answer; S2's record is now judged by its
+    // author's kept signature first (DropReason::Signature, `SessionUnknown`), so the info check is reached only by a record
+    // its author signed with that info
+    // the old fixture's read, kept as the evidence of why it went stale: a `sessionOf` answer whose `sealedInfo` differs
+    // from what A signed fails A's kept signature, dropped as `Signature`, before any info check
     let canon = pa.info(&ea2).unwrap().with(|b| b.to_vec());
     let bad = pqchat_core::model::hex(&hostile::info_spaced(&w, &s2b.k, (&sid2, &sid2), &canon));
     let real = pqchat_core::model::hex(&ea2.epoch.sealed_info);
@@ -945,13 +950,35 @@ async fn run() {
         }
         v
     }));
+    let pb3 = w.device();
+    pb3.start_device(Some("b-3x".into())).unwrap();
+    pb3.accept(&s2, false).unwrap();
+    let r = pb3.open_session(&s2, &b).await;
+    *w.net.tamper.lock().unwrap() = None;
+    assert_eq!(
+        r.err().map(|e| e.code()),
+        Some("SessionUnknown"),
+        "a changed sealedInfo: the record's signature"
+    );
+    assert!(
+        pb3.dropped(&sid2)
+            .contains_key(&pqchat_core::DropReason::Signature),
+        "dropped by its signature: {:?}",
+        pb3.dropped(&sid2)
+    );
+    let spaced = hostile::session_info_spaced(&w, &pa, &a, 21, &w.l.home, &[&b]).await;
+    let s21 = w.sref(
+        &w.app
+            .pqchat_session_id(a.ua.to_ascii_lowercase(), 21)
+            .unwrap(),
+    );
+    w.land(spaced).await;
     let pb4 = w.device();
     pb4.start_device(Some("b-4".into())).unwrap();
     pb4.attach_matrix(tb.clone());
-    pb4.accept(&s2, false).unwrap();
+    pb4.accept(&s21, false).unwrap();
     let (joins, hist) = (tb.calls_of("join"), tb.calls_of("history"));
-    let r = pb4.open_session(&s2, &b).await;
-    *w.net.tamper.lock().unwrap() = None;
+    let r = pb4.open_session(&s21, &b).await;
     assert_eq!(
         r.err().map(|e| e.code()),
         Some("PqChatContent"),

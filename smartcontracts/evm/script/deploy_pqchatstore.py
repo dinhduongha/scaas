@@ -58,6 +58,12 @@ DEPLOYER_CODE = (  # its runtime: salt (32 B) ‖ init code in, the new address 
     "39578182fd5b8082525050506014600cf3"
 )
 SALT = "00" * 32
+# type(IPqChat).interfaceId (its selectors XORed, forge's artifact; CTR-CHAT-23 2026-11-23: a46bb0a4 -> 250cdb4a; CTR-CHAT-25,
+# `groupMode` in `PqChatSession`: -> 869305e0; the tree entries and views of CTR-CHAT-26 / -27, 67 selectors, checked
+# 2026-11-25 against out/IPqChat.sol's methodIdentifiers on the re-review's G note: -> 7b7acc12; the TreeKEM path-less delta,
+# `createSession` and `commit` with the new records: -> 8412b2f1; CTR-CHAT-30's `entryRows` and `ENTRY_ROWS_MAX`:
+# -> e9e2068a). Equal to the forge pin of PqChatTreeViews.t.sol (test_deploy_pqchatstore.py `the_ipqchat_id_is_the_forge_pin`, the path-less review's A-2)
+IPQCHAT_ID = "e9e2068a"
 NAME = "PqChatStore"
 ARTIFACT = "PqChatStore.sol/PqChatStore.json"
 RELEASE = "release-data/PqChatStore.json"
@@ -472,10 +478,7 @@ def cases():
     store_id = 0
     for s in sigs:
         store_id ^= int(keccak("0x" + s.encode().hex())[2:10], 16)
-    # type(IPqChat).interfaceId (its selectors XORed, forge's artifact; CTR-CHAT-23 2026-11-23: a46bb0a4 -> 250cdb4a;
-    # CTR-CHAT-25, `groupMode` in `PqChatSession`: -> 869305e0; the tree entries and views of CTR-CHAT-26 / -27, 67
-    # selectors, checked 2026-11-25 against out/IPqChat.sol's methodIdentifiers on the re-review's G note: -> 7b7acc12)
-    ipqchat_id = "7b7acc12"
+    ipqchat_id = IPQCHAT_ID
 
     def h32(b):
         return b.ljust(32, b"\0")

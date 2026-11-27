@@ -986,18 +986,51 @@ entries with one hash each (`addPathList`: at least one); node keys neither abse
 ciphertexts above `ctCount` (on `addPath`, `firstCt` plus the count above 511), without the list, or not 1,568 B and 48 B; more
 Welcome wraps than adds; an empty `members`. What needs the chain's state is the contract's. A record or a list as hex is
 `HEX_ARGS_REFUSED`; the decode follows the type, so a hostile depth stops at the type's. **For operators:** job shapes were added,
-none changed. **Not built yet (plan T4, after the merge):** the whole-set guard (fable-r3-6) and the order of C37 when the node
-relays a commit's set. **BUILT (Change 2026-11-24, the code review's D-4 and D-7; `typed.rs` `tree_shape`):**
+none changed. **For operators (path-less Adds, the [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md) §8; SPECIFIED, nothing built):** `createSession`'s `s` gains the
+named fields `pathRefreshBound` and `confirmTag`, `commit`'s `c` gains `pathless` and `confirmTag`; a job on the old shape of
+either is refused by name. A path-less commit (`pathless` true) with no Add, a Remove, a node key, `ctCount` above 0 or a
+list is `BAD_PAYLOAD`; at creation mode 0 with a bound or a tag that is not 0, and mode 1 with a bound above 510, are too. <a id="tree-set-guard"></a>**The whole-set guard and the order of C37** (BUILT, plan T4 after the merge,
+`scaas-node/src/tree_set.rs` with `submit.rs` `tree`; spec §8, §15, fable-r3-6, codex-r3-12; UNAUDITED): a tree commit is relayed as
+**one `commit` job holding its whole set**, every piece its record signs (the list, the node keys, every path ciphertext, every
+Welcome wrap). Before any send the node checks each piece against its signed hash (`ctListHash`, `nodeKeyHashes`, `ctHashes`,
+`wrapHashes`) and every node key against the admission check (C19, C32: `PqGroupTree._admissible`'s, pinned on `tree.json`'s
+`admission` rows); a piece missing or failing is `dead` with `TREE_SET_REFUSED: <the piece>`, zero sends. It then sends the set:
+the whole `commit` as the job's own transaction when its estimate fits (the lane's `max_gas_per_tx`, the block, 2^24 regular);
+else in C37's order, as the lane's own parts while the job waits `queued` under `TREE_SET_SENDING`: the record alone, then
+`addPathList`, then `addPathKeys`, each sent only once the one before is in state at the final block (`finality.mode`), then the
+other ciphertexts (`addPath` runs) and the Welcome wraps (`addWraps` runs), a part over the cap split in halves, and last, once
+every other piece is final, the held piece alone (the last ciphertext, else the last Welcome wrap) as the job's own transaction,
+estimated on the state at send time so it carries the completion's gas (fable-r2-9). A part in flight is never sent twice; a
+set another sender completed is `consumed` (`TREE_SET_COMPLETE`) once the final block shows it complete. **The T4-T9 review's
+fixes (2026-11-26, UNAUDITED):** a revert that another sender's landing explains (`PqChatNonceUsed` on the whole commit,
+`PqChatPathList`, `PqChatPathStored`, `PqChatWrapStored`), by simulation or by a reverted receipt, is no verdict: the job waits
+under `TREE_SET_SENDING` and the next pass reads the state (A-1); a tree `commit` job tracked across a restart is followed by
+its transaction's hash and never re-signed from its payload (its transaction may be a part), and goes back to the queue when
+that settles (A-2); a single piece over the lane's own `max_gas_per_tx` waits, over the RPC's gas cap waits
+`PART_CAP_WAITS` passes, as NODE-JOB-29's parts, and only the chain's limit refuses (A-3); an epoch id that holds another
+record (an author's two commits with one nonce) is `dead` `TREE_SET_SUPERSEDED` (A-7); before the record goes alone the record
+with its list is simulated, so a list whose targets the contract refuses is refused with zero sends (when the two do not fit
+one simulation, the contract checks the list when it lands), and a Welcome wrap must name its Add's member and `keyId` (D-12). A piece job on its own (`addPathList`, `addPathKeys`,
+`addPath`, or `addWraps` on a tree commit's epoch, read by `commitOf`) is relayed only when, with it, nothing the stored record
+signs is missing from state, each of its pieces checked the same way (its own hashes before any state read); otherwise it waits
+under `TREE_SET_WAITING` (another sender may land the rest; also a ciphertext before its list and a piece before its record,
+A-4) or is refused `TREE_SET_REFUSED` (also node keys short of the signed count, A-5). The parts of a relayed set are paid with its signed `commit`
+whatever `relay_unsigned_pqchat` says (controller call, plan T4: they are bound to the signed record by its hashes); a piece
+job on its own stays under that option. **BUILT (Change 2026-11-24, the code review's D-4 and D-7; `typed.rs` `tree_shape`):**
 `createSession` with `groupMode = 1` is bounded by the tree's bounds at creation (`members` 512, `admins` 32,
 `sealedInfo` 4,124 B; mode 0 has none of these), and an `addPath` with no ciphertext is refused (`cts: 1 or more`), as the
 contract refuses both (C40); an `addWraps` or PqVault's `addVaultWraps` with no wrap the same (`wraps: 1 or more`, both modes;
 Change 2026-11-26, A-5 of the Fable fix check). **For operators
 (the contract's side BUILT on branch `review-fix-contract`, the spec check's change of 2026-11-24 to C9, CTR-CHAT-20,
-CTR-CHAT-10, CTR-PQV-06; the node's reporting rule below SPECIFIED, plan T4, D2-5 of the re-review of 2026-11-25):** an exit (`treeLeave`,
+CTR-CHAT-10, CTR-PQV-06; the node's reporting rule below BUILT, plan T4, D2-5 of the re-review of 2026-11-25, `guard.rs`
+`revert_verdict`; UNAUDITED):** an exit (`treeLeave`,
 `treeRemove`, mode 0's `leave` and `remove`, PqVault's `leaveVault` and `removeVaultMembers`) applies at the head when it
 lands, up to `EXIT_LAG_MAX` = 16 epochs after the epoch it names, and anyone may land its public calldata after a revert;
-so a job of an exit that reverted is not `dead` while the head is within the lag and its nonce is unspent, and the node
-reports `dead` only past `PqChatExitLag` / `PqVaultExitLag` or `PqChatNonceUsed`.
+so a job of an exit whose simulation is refused by a state a later head clears (`PqChatTreeBacklog`, `PqChatIncomplete`,
+`PqVaultIncomplete`) stays `queued` under `EXIT_WAITING` and is retried; it is `dead` on a refusal that cannot clear
+(`PqChatExitLag` / `PqVaultExitLag` once the lag has passed, which the contract checks before the leaves owed, a bad
+signature, `PqChatNotMember`, `PqChatNonceUsed`) or at the job's own `validUntil` (a named epoch that never completes, a lost
+commit, keeps the job queued until then).
 
 <a id="pqvault-calls"></a>**PqVault calls** (PqVault plan V8, [CTR-PQV-11](../contracts/pqvault.md#CTR-PQV-11),
 [CTR-PQV-13](../contracts/pqvault.md#CTR-PQV-13); BUILT, branch `pqvault-v`, UNAUDITED). `PqVault` is a factory kind (class 4, kind 0 on
@@ -1266,7 +1299,9 @@ chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQ
 ([NODE-JOB-29](#NODE-JOB-29)), `UA_VERIFY_GAS` (a starved registry check, [CTR-UA-65](../contracts/accounts.md#CTR-UA-65)), `FAILOVER_ANSWER: <refusal>` (the
 refusal was read while a failover `rpc_urls` endpoint answered: no verdict until the first endpoint answers; the gateway and DEX
 intake answer it 503, [submit-lanes.md](submit-lanes.md#rpc-failover)); a lane stopped by
-`SERVICE_ENTRIES_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)); job `dead` before sending with `UA_VERIFY_ONLY` or
+`SERVICE_ENTRIES_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)); a tree commit's set: job `queued` with `TREE_SET_SENDING`,
+`TREE_SET_WAITING` or `EXIT_WAITING`, `consumed` with `TREE_SET_COMPLETE`, `dead` with `TREE_SET_REFUSED` or
+`TREE_SET_SUPERSEDED` ([the whole-set guard](#tree-set-guard)); job `dead` before sending with `UA_VERIFY_ONLY` or
 `UA_WRONG_GENERATION` (a registry write sent to the wrong generation of the line, its target named), and after a part's
 revert with `UA_KEY_NOT_CACHEABLE` ([CTR-UA-65](../contracts/accounts.md#CTR-UA-65)); chain `halted` with reason `PROGRAM_UPGRADEABLE` ([NODE-STO-07](store.md#NODE-STO-07)).
 

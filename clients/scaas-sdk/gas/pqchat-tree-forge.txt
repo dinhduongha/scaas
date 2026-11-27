@@ -1,0 +1,133 @@
+GAS the session record, 512 member keys regular: 22629397
+GAS the session record, 512 member keys state: 108115920
+GAS treeLeaves page 0, 64 leaves regular: 1618764
+GAS treeLeaves page 0, 64 leaves state: 0
+GAS treeLeaves page 1, 64 leaves regular: 1618764
+GAS treeLeaves page 1, 64 leaves state: 0
+GAS treeLeaves page 2, 64 leaves regular: 1618764
+GAS treeLeaves page 2, 64 leaves state: 0
+GAS treeLeaves page 3, 64 leaves regular: 1618764
+GAS treeLeaves page 3, 64 leaves state: 0
+GAS treeLeaves page 4, 64 leaves regular: 1618764
+GAS treeLeaves page 4, 64 leaves state: 0
+GAS treeLeaves page 5, 64 leaves regular: 1618764
+GAS treeLeaves page 5, 64 leaves state: 0
+GAS treeLeaves page 6, 64 leaves regular: 1618764
+GAS treeLeaves page 6, 64 leaves state: 0
+GAS treeLeaves page 7, 64 leaves regular: 1618846
+GAS treeLeaves page 7, 64 leaves state: 0
+GAS commit record, plain, the tree check on a cold tree of 512 regular: 4598053
+GAS commit record, plain, the tree check on a cold tree of 512 state: 8069220
+GAS commit record, plain, the tree check on a cold tree of 512 count: 511
+GAS the list of a cold commit, 511 targets regular: 2118552
+GAS the list of a cold commit, 511 targets state: 28526850
+GAS the node keys, depth 9 regular: 1346538
+GAS the node keys, depth 9 state: 22328820
+GAS one ciphertext in addPath regular: 140184
+GAS one ciphertext in addPath state: 2804490
+GAS completion of a plain commit, cold tree of 512 regular: 4716949
+GAS completion of a plain commit, cold tree of 512 state: 3979530
+GAS completion of a plain commit, cold tree of 512 count: 9
+GAS treeRemove of five UAs (20 leaves owed) regular: 379165
+GAS treeRemove of five UAs (20 leaves owed) state: 7628580
+GAS reachability: the record, 20 forced Removes regular: 5290433
+GAS reachability: the record, 20 forced Removes state: 10810980
+GAS reachability: the record, 20 forced Removes count: 491
+GAS reachability: the list regular: 2036632
+GAS reachability: the list state: 27425250
+GAS reachability: the node keys regular: 1069146
+GAS reachability: the node keys state: 17429760
+GAS reachability: a chunk of ciphertexts regular: 1891224
+GAS reachability: a chunk of ciphertexts state: 42094890
+GAS reachability: a chunk of ciphertexts count: 16
+GAS reachability: the held ciphertext with the completion regular: 6600896
+GAS reachability: the held ciphertext with the completion state: 5742090
+GAS reachability: the held ciphertext with the completion count: 7
+GAS commit record, 20 Adds on the reached tree of 491, ML-DSA-87 regular: 7719628
+GAS commit record, 20 Adds on the reached tree of 491, ML-DSA-87 state: 15853860
+GAS commit record, 20 Adds on the reached tree of 491, ML-DSA-87 count: 511
+GAS the commit of the last live leaf at its bounds, ML-DSA-87, one transaction regular: 4270097
+GAS the commit of the last live leaf at its bounds, ML-DSA-87, one transaction state: 21386340
+GAS the commit of the last live leaf at its bounds, ML-DSA-65, one transaction regular: 4227801
+GAS the commit of the last live leaf at its bounds, ML-DSA-65, one transaction state: 19378980
+GAS commit record at its bounds, ML-DSA-65 count: 20
+GAS commit record at its bounds, ML-DSA-65 regular: 4742168
+GAS commit record at its bounds, ML-DSA-65 state: 21484260
+GAS commit record at its bounds, one admin regular: 4470748
+GAS commit record at its bounds, one admin state: 19966500
+GAS commit record at its bounds, 2 B of info regular: 4668916
+GAS commit record at its bounds, 2 B of info state: 15217380
+GAS commit record at its bounds, ML-DSA-87 regular: 4779012
+GAS commit record at its bounds, ML-DSA-87 state: 23491620
+GAS the list at the bound, 20 targets regular: 140888
+GAS the list at the bound, 20 targets state: 1482570
+GAS the node keys as the last piece at the bound (C37's counter-case) regular: 8816821
+GAS the node keys as the last piece at the bound (C37's counter-case) state: 40831110
+GAS the node keys at the bound, six regular: 942884
+GAS the node keys at the bound, six state: 14980230
+GAS completion at its bounds with the held ciphertext regular: 7962214
+GAS completion at its bounds with the held ciphertext state: 28655370
+GAS acceptance and completion in one transaction, ML-DSA-65, regular: 18654382
+GAS acceptance and completion in one transaction, ML-DSA-87, regular: 21601226
+GAS the session record, 32 member keys regular: 1000641
+GAS the session record, 32 member keys state: 13895460
+GAS commit record, plain, on a cold tree of 32 regular: 588000
+GAS commit record, plain, on a cold tree of 32 state: 7873380
+GAS commit record, plain, on a cold tree of 32 count: 31
+GAS completion of a plain commit, cold tree of 32 regular: 608216
+GAS completion of a plain commit, cold tree of 32 state: 3587850
+GAS completion of a plain commit, cold tree of 32 count: 5
+GAS commit record, plain, on a warm tree of 32 regular: 590000
+GAS commit record, plain, on a warm tree of 32 state: 7775460
+GAS commit record, plain, on a warm tree of 32 count: 31
+GAS commit record, 20 Adds on a tree of 32 regular: 3722091
+GAS commit record, 20 Adds on a tree of 32 state: 13699620
+GAS completion with the held ciphertext, 32 -> 52 keys (codex-r3-6) regular: 5286444
+GAS completion with the held ciphertext, 32 -> 52 keys (codex-r3-6) state: 17002890
+GAS treeLeave with its gone slot regular: 252824
+GAS treeLeave with its gone slot state: 6404580
+GAS treeRemove of one UA with its gone slot regular: 263064
+GAS treeRemove of one UA with its gone slot state: 6551460
+GAS the session record, 261 member keys regular: 8522896
+GAS the session record, 261 member keys state: 58889700
+GAS the last live leaf at the spec's bound, ML-DSA-65, one transaction regular: 6872542
+GAS the last live leaf at the spec's bound, ML-DSA-65, one transaction state: 25401060
+GAS the last live leaf at the spec's bound, ML-DSA-87, one transaction regular: 6915319
+GAS the last live leaf at the spec's bound, ML-DSA-87, one transaction state: 27408420
+GAS the last live leaf on the worst head, one Remove, ML-DSA-65, one transaction regular: 2307174
+GAS the last live leaf on the worst head, one Remove, ML-DSA-65, one transaction state: 15853860
+GAS the last live leaf on the worst head, ML-DSA-65, one transaction regular: 7248258
+GAS the last live leaf on the worst head, ML-DSA-65, one transaction state: 22365540
+GAS the last live leaf on the worst head, ML-DSA-87, one transaction regular: 7291068
+GAS the last live leaf on the worst head, ML-DSA-87, one transaction state: 24372900
+GAS the closing treeRemove, 512 positions scanned, ML-DSA-87 regular: 1658450
+GAS the closing treeRemove, 512 positions scanned, ML-DSA-87 state: 8656740
+GAS the session record, 64 member keys regular: 1777052
+GAS the session record, 64 member keys state: 20162340
+GAS pathless record, 1 Adds, a cold tree of 64 regular: 503838
+GAS pathless record, 1 Adds, a cold tree of 64 state: 7824420
+GAS pathless completion with the last wrap, 1 Adds regular: 636598
+GAS pathless completion with the last wrap, 1 Adds state: 4530330
+GAS pathless record, 10 Adds, a cold tree of 64 regular: 1870920
+GAS pathless record, 10 Adds, a cold tree of 64 state: 10468260
+GAS pathless completion with the last wrap, 10 Adds regular: 2678758
+GAS pathless completion with the last wrap, 10 Adds state: 10405530
+GAS pathless record, 20 Adds, a cold tree of 64 regular: 3440271
+GAS pathless record, 20 Adds, a cold tree of 64 state: 13405860
+GAS pathless completion with the last wrap, 20 Adds regular: 5011329
+GAS pathless completion with the last wrap, 20 Adds state: 17162010
+GAS creation in one transaction, 4 member keys regular: 1433872
+GAS creation in one transaction, 4 member keys state: 21865230
+GAS creation in one transaction, 4 member keys count: 4
+GAS creation in one transaction, 11 member keys regular: 3545158
+GAS creation in one transaction, 11 member keys state: 46993950
+GAS creation in one transaction, 11 member keys count: 11
+GAS creation in one transaction, 4 member keys, 32 admins regular: 1939027
+GAS creation in one transaction, 4 member keys, 32 admins state: 26418510
+GAS creation in one transaction, 4 member keys, 32 admins count: 4
+GAS 15 genesis wraps in one transaction regular: 3964628
+GAS 15 genesis wraps in one transaction state: 46758330
+GAS the session record, 128 member keys regular: 3596004
+GAS the session record, 128 member keys state: 32500260
+GAS the session record, 192 member keys regular: 5768464
+GAS the session record, 192 member keys state: 45034020

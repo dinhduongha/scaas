@@ -32,7 +32,8 @@ interface IPqChatTreeViews {
     /// @notice 64 (C36): the most leaves one `treeLeaves` call returns.
     function TREE_LEAF_PAGE_MAX() external view returns (uint256);
 
-    /// @notice The live tree; `owed`: the leaves owed to removals at the head (C21).
+    /// @notice The live tree; `owed`: the leaves owed to removals at the head (C21); `sincePath`: the leaves path-less commits
+    ///         added since the last path commit (the path-less delta §5.3; the bound is `sessionOf`'s `pathRefreshBound`).
     function treeOf(bytes32 sessionId)
         external
         view
@@ -43,7 +44,8 @@ interface IPqChatTreeViews {
             bytes32 treeHash,
             bytes32 genesisTreeHash,
             bytes32 headEpochId,
-            uint32 owed
+            uint32 owed,
+            uint32 sincePath
         );
     /// @notice Leaves `first..` below `used`, at most `TREE_LEAF_PAGE_MAX`.
     function treeLeaves(bytes32 sessionId, uint256 first, uint256 count) external view returns (TreeLeafView[] memory);

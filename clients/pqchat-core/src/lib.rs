@@ -45,6 +45,10 @@ pub mod signed;
 pub mod store;
 pub mod stores;
 pub mod topics;
+// plan T7 (controller call 2026-11-26): the tree mode is Rust-only in this round; its calls take and return the SDK's tree
+// values (named JSON, handles), mirrored for the bindings with the app's tree screens
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
+pub mod tree;
 
 pub use drops::{DropCounts, DropReason};
 pub use error::PqChatError;
@@ -86,6 +90,10 @@ pub struct ChainConf {
     pub chain_uid: String,
     pub registry: String,
     pub factory: String,
+    /// The chain's TreeKEM gas rows (release data, the SDK's `PqTreeGas` as JSON; spec §13): the plan of a tree commit and the
+    /// cap of a creation in one transaction. Absent: one transaction each, held to the quote.
+    #[serde(default)]
+    pub tree_gas: Option<String>,
 }
 
 /// The crate's configuration: the chains it serves.
@@ -119,6 +127,9 @@ pub struct PqChat {
     pub(crate) matrix: Mutex<Option<Arc<dyn matrix::MatrixTransport>>>,
     /// the seed is locked: Matrix events are kept, never read (CLI-PQC-10)
     pub(crate) seed_locked: std::sync::atomic::AtomicBool,
+    /// the epochs opened by [`PqChat::tree_open`], by id: the info in force there, when the device holds it (CLI-PQC-17)
+    pub(crate) tree_epochs:
+        Mutex<std::collections::HashMap<String, Option<Arc<scaas_sdk::SecretBytes>>>>,
 }
 
 /// What the crate tells the app (spec §8); ids and UAs only, never a secret, handle, ciphertext, room id or Matrix id.
@@ -197,6 +208,7 @@ impl PqChat {
             unwraps: AtomicU64::new(0),
             events: Mutex::new(Events::default()),
             unfinal: Mutex::new(Default::default()),
+            tree_epochs: Mutex::new(Default::default()),
             in_use: Mutex::new(Default::default()),
             timelines: Mutex::new(Default::default()),
             matrix: Mutex::new(None),

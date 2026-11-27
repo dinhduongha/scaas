@@ -202,7 +202,14 @@ async fn chain_topics() {
     println!("[topics] another UA's edit refused: {e}");
     let b = pq.entry(&on, &b1_id).await.unwrap();
     assert_eq!((b.version_count, b.body.as_slice()), (3, &b"v3"[..]));
-    assert_eq!(pq.version_at(&on, &b1_id, 1).await.unwrap().1, b"bob's");
+    let v1 = pq.version_at(&on, &b1_id, 1).await.unwrap();
+    assert_eq!((v1.body.as_slice(), v1.edited_at), (&b"bob's"[..], 0));
+    assert_eq!(v1.posted_at, b.posted_at, "versionAt: the original's time");
+    assert!(
+        b.posted_at > 0 && b.edited_at >= b.posted_at,
+        "CTR-CHAT-29 times"
+    );
+    assert_eq!(b.nonce, 11, "CTR-CHAT-31: the latest version's nonce");
     // replies stay on the original id
     assert_eq!(
         pq.page(&on, &List::Replies(b1_id.clone()), 0, 10)

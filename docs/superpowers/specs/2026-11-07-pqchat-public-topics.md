@@ -183,6 +183,13 @@ reads a log, and no reader needs one. Errors named per check: `PqTopicSeq`, `PqT
 `PqTopicNotAuthor`, `PqTopicParent`, `PqTopicVersion`, `PqTopicRef`, `PqTopicVoteValue`, `PqTopicShape`,
 `PqTopicUnknown`, plus the parent's `PqChatNonceUsed`.
 
+Change (owner 2026-11-27, G1, G2, G5 of the public-topics UI research §8; normative in
+[CTR-CHAT-29](../../contracts/pqchat.md#CTR-CHAT-29) to [CTR-CHAT-31](../../contracts/pqchat.md#CTR-CHAT-31)): each entry
+keeps `postedAt` and each edit `editedAt` (block time, in the slots they already had); `entryOf` adds `postedAt`,
+`editedAt` and the latest version's `nonce`, `versionAt` that version's `nonce`, the original's `postedAt` and its
+`editedAt`; `entryRows(ids, viewer)` returns up to 64 rows of `entryOf` without `body`, with `bodyLength`, `up`, `down`,
+the viewer's vote and the direct reply count (`PqTopicRows` above 64).
+
 **P43 — Several instances and chains.** One rule in every instance on every chain: the same records, ids and checks.
 Copying a topic elsewhere is copying its records, parents before replies, originals before edits, grants before the
 writer's posts; out of order, a record is refused there until what it needs has landed. Readers display the topic's home

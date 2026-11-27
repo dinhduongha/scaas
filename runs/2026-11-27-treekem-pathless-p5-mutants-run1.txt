@@ -1,0 +1,10 @@
+# p5 mutants at commit 6f4d2e3bc (name | outcome | test)
+mode 0 with bound 1 accepted | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked --offline -j 2 --lib typed::tests::pqchat_tree_bounds_are_the_contract
+mode 0 with a tag accepted | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked --offline -j 2 --lib typed::tests::pqchat_tree_bounds_are_the_contract
+mode 1 with 511 accepted | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked --offline -j 2 --lib typed::tests::pqchat_tree_bounds_are_the_contract
+mode 1 with 510 refused | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked --offline -j 2 --lib typed::tests::pqchat_tree_bounds_are_the_contract
+a path-less Remove accepted | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked --offline -j 2 --lib typed::tests::pqchat_tree_bounds_are_the_contract
+a path-less node key accepted | survived | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked --offline -j 2 --lib typed::tests::pqchat_tree_bounds_are_the_contract
+a path-less ctCount accepted | survived | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked --offline -j 2 --lib typed::tests::pqchat_tree_bounds_are_the_contract
+a path-less commit of no Add accepted | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked --offline -j 2 --lib typed::tests::pqchat_tree_bounds_are_the_contract
+8 mutants, 6 killed, 2 survived (0 killed elsewhere), 0 not loaded

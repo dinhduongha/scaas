@@ -1,0 +1,12 @@
+# p6 mutants at commit e27544b1b (name | outcome | test)
+offered when the device does not hold the head | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --lib pathless_form_and_its_plan
+offered while an exit is owed | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --lib pathless_form_and_its_plan
+offered with a gone head admin | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --lib pathless_form_and_its_plan
+offered with an admin change | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --lib pathless_form_and_its_plan
+offered with a Remove | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --lib pathless_form_and_its_plan
+offered with no Add | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --lib pathless_form_and_its_plan
+the bound > as >= | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --lib pathless_form_and_its_plan
+bound 0 forcing | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --lib pathless_form_and_its_plan
+offered while its own path commit is staged | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --lib pathless_form_and_its_plan
+offered with no try left | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --lib pathless_form_and_its_plan
+10 mutants, 10 killed, 0 survived (0 killed elsewhere), 0 not loaded

@@ -16,7 +16,7 @@ import * as fx from "./treekem-fixture.mjs";
 import { ed25519, ED25519_TORSION_SUBGROUP } from "@noble/curves/ed25519.js";
 import { x25519 } from "@noble/curves/ed25519.js";
 import { pqKeygen, signUA } from "../src/pq.js";
-import { hex, keccak_256, utf8ToBytes, concatBytes } from "../src/bytes.js";
+import { hex, keccak_256, utf8ToBytes, concatBytes, jsonStringify } from "../src/bytes.js";
 
 const REPO = fileURLToPath(new URL("../../../smartcontracts/vectors/pqchat/", import.meta.url));
 const CHECK = process.argv.includes("--check");
@@ -160,6 +160,9 @@ const session = {
   homeChain,
   homeChatContract,
   groupMode: 0, // owner 2026-11-23 (CTR-CHAT-25): flat wraps, the only mode this release accepts
+  // the path-less delta §3.1 (R18, C41, C43): mode 1's option and epoch 0's tag, both 0 in mode 0
+  pathRefreshBound: 0,
+  confirmTag: Z32,
   admins: sorted([alice.ua, bob.ua]),
   members: members0,
   wrapHashes: wraps("session", K0, sid, sid, members0),
@@ -179,7 +182,25 @@ const session = {
 
 // CTR-CHAT-25, CTR-CHAT-26: the same session record with groupMode 1 (TreeKEM), the same struct and typehash; the release
 // with the tree module accepts the mode (2-255 are PqChatModeUnsupported)
-const sessionTreeKem = { ...session, nonce: 12, groupMode: 1 };
+const treeTag = (n) => hex(rnd(`session/tree-confirm-tag/${n}`));
+const sessionTreeKem = { ...session, nonce: 12, groupMode: 1, pathRefreshBound: 20, confirmTag: treeTag(12) };
+// the path-less delta §3.1, §13 row 8: mode 1 with the bounds 0, 24 and 510 accepted; 511 and, in mode 0, a bound or a tag
+// refused (PqChatShape)
+const sessionBound = (nonce, groupMode, pathRefreshBound, confirmTag) => ({
+  ...session,
+  nonce,
+  groupMode,
+  pathRefreshBound,
+  confirmTag,
+});
+const boundRows = [
+  ["sessionBound0", sessionBound(14, 1, 0, treeTag(14)), null],
+  ["sessionBound24", sessionBound(15, 1, 24, treeTag(15)), null],
+  ["sessionBound510", sessionBound(16, 1, 510, treeTag(16)), null],
+  ["sessionBound511", sessionBound(17, 1, 511, treeTag(17)), "PqChatShape"],
+  ["sessionMode0Bound1", sessionBound(18, 0, 1, Z32), "PqChatShape"],
+  ["sessionMode0Tag", sessionBound(19, 0, 0, treeTag(19)), "PqChatShape"],
+];
 // review C-5: a mode of the reserved range, signed, refused by name before anything else (2 and 3 are reserved values for
 // a possible off-chain deployment, nothing decided, CTR-CHAT-25)
 const sessionMode2 = { ...session, nonce: 13, groupMode: 2 };
@@ -267,7 +288,7 @@ const mk = pc.chainKeys(K1, sid, eid, alice.ua, DEVICE, 3).steps[2];
 const WRITTEN = [];
 const write = (file, doc) => {
   WRITTEN.push(file);
-  writeFileSync(join(OUT, file), `${JSON.stringify(doc, (_, v) => (v instanceof Uint8Array ? hex(v) : v), 2)}\n`);
+  writeFileSync(join(OUT, file), `${jsonStringify(doc, (_, v) => (v instanceof Uint8Array ? hex(v) : v), 2)}\n`);
 };
 const typehashes = (names) =>
   Object.fromEntries(names.map((n) => [n, { type: pc.TYPE_STRINGS[n], hash: pc.TYPEHASH[n] }]));
@@ -308,7 +329,10 @@ write("records.json", {
     " The group mode (owner 2026-11-23, CTR-CHAT-25): PqChatSession carries uint8 groupMode as its last field, 0 flat " +
     "wraps; sessionTreeKem is the session with groupMode 1 (TreeKEM), signed; the mode is accepted from the tree module on " +
     "(CTR-CHAT-26), 2-255 refused (PqChatModeUnsupported); sessionMode2 is the session with groupMode 2, signed, and its " +
-    "error (PqChatModeUnsupported(2), checked before the lists, the signature and the nonce).",
+    "error (PqChatModeUnsupported(2), checked before the lists, the signature and the nonce). The path-less delta " +
+    "(docs/superpowers/specs/2026-11-25-treekem-pathless-add.md §3.1): PqChatSession ends with uint32 pathRefreshBound and " +
+    "bytes32 confirmTag, both 0 in mode 0; sessionBound0, sessionBound24, sessionBound510 are mode-1 sessions accepted with " +
+    "those bounds; sessionBound511, sessionMode0Bound1 and sessionMode0Tag are refused with their error (PqChatShape).",
   version: 1,
   domain,
   purpose,
@@ -350,6 +374,19 @@ write("records.json", {
     }),
     error: "PqChatModeUnsupported",
   },
+  ...Object.fromEntries(
+    boundRows.map(([name, rec, error]) => [
+      name,
+      {
+        ...recordRow("PqChatSession", rec, alice, {
+          id: hex(pc.sessionId(alice.ua, rec.nonce)),
+          scope: pc.scopeSession(alice.ua),
+          sig: sign(alice, "PqChatSession", rec),
+        }),
+        ...(error ? { error } : {}),
+      },
+    ]),
+  ),
   epochDevices: recordRow("PqChatEpoch", epochDevices, bob, {
     id: eid2,
     scope: pc.scopeEpoch(sid, bob.ua),
@@ -912,6 +949,13 @@ const commitRow = (name, before, who, leaf, removes = [], adds = [], note = unde
     after: treeRow(r.tree),
   };
 };
+// a path-less Add (the delta §3.2, §5.1): no node key, no target; each Add blanks its own direct path up to the root (C6)
+const pathlessRow = (name, before, who, leaf, adds, note) => {
+  const commit = { ...by(who, leaf), pathless: true, removes: [], adds, nodeKeyHashes: [] };
+  const r = tr.applyCommit(trees[before], commit);
+  trees[name] = r.tree;
+  return { name, note, before, commit, ctTargets: [], ctTargetsHash: tr.ctTargetsHash([]), after: treeRow(r.tree) };
+};
 const commitRows = [
   commitRow("C commits", "cold 5", "C", 2),
   commitRow("A removes E", "C commits", "A", 0, [asRemove("E", 4)]),
@@ -956,6 +1000,23 @@ const commitRows = [
     [],
     "C held one leaf: C is gone, its key session-wide",
   ),
+  pathlessRow(
+    "A adds F path-less",
+    "C commits",
+    "A",
+    0,
+    [asAdd("F", 5)],
+    "the delta §13 row 1: F's direct path (9, 11, 7) blanked; A's path nodes off it keep their keys, the root is blank; " +
+      "sincePath 1",
+  ),
+  pathlessRow(
+    "B adds its own key path-less at the author's sibling",
+    "cold 3",
+    "B",
+    1,
+    [asAdd("D", 3)],
+    "row 1's control on the cold tree: D at leaf 3, every node of B's path on D's direct path",
+  ),
 ];
 const treeRefusals = [
   ["the author's leaf names another key", "cold 3", { ...by("B", 0), nodeKeyHashes: nk("r", 2) }, "PqChatTreeLeaf"],
@@ -995,6 +1056,20 @@ const treeRefusals = [
   ],
   ["a key change undone", "a key change", { ...by("C2", 3), adds: [asAdd("C", 2)] }, "PqChatTreeOwnKeyReturn"],
   ["a path one node short", "cold 3", { ...by("A", 0), nodeKeyHashes: nk("r", 1) }, "PqChatTreeTargets"],
+  // the delta §3.2: an Add with an empty path is a path commit missing its path; the path-less shape exactly when pathless
+  [
+    "an Add with an empty path, pathless false",
+    "cold 3",
+    { ...by("A", 0), adds: [asAdd("D", 3)] },
+    "PqChatTreeTargets",
+  ],
+  ["path-less with no Add", "cold 3", { ...by("A", 0), pathless: true }, "PqChatShape"],
+  [
+    "path-less with a node key",
+    "cold 3",
+    { ...by("A", 0), pathless: true, adds: [asAdd("D", 3)], nodeKeyHashes: nk("r", 1) },
+    "PqChatShape",
+  ],
 ].map(([name, before, c, error]) => {
   const commit = { removes: [], adds: [], nodeKeyHashes: [], ...c };
   try {
@@ -1164,6 +1239,8 @@ const tSession = {
   wrapHashes: ["A", "B", "C"].map((n) => hex(rnd(`tree/session/wrap-hash/${n}`))),
   sealedInfo: hex(rnd("tree/session/sealed-info", 284)),
   groupMode: 1,
+  pathRefreshBound: 24,
+  confirmTag: hex(rnd("tree/session/confirm-tag")),
 };
 fx.assertSorted(tSession.members, "the digest session");
 const tSid = hex(pc.sessionId(tSession.creator, tSession.nonce));
@@ -1192,6 +1269,8 @@ const tCommit = {
   ctListHash: hex(tr.pathListHash(addD.ctTargets, ctHashes)),
   treeHash: addD.after.treeHash,
   sealedInfo: hex(rnd("tree/commit/sealed-info", 284)),
+  pathless: false,
+  confirmTag: hex(rnd("tree/commit/confirm-tag")),
 };
 const tEpochId = hex(pc.epochId(tSid, tCommit.author, tCommit.nonce));
 const tLeave = { sessionId: tSid, treeId: tTreeId, epochId: tEpochId, member: treeKeys.C.ua, nonce: 6 };
@@ -1443,7 +1522,11 @@ write("tree.json", {
     "tree and its sets after it, and probes: an Add commit on that tree with its verdict (accepted or the named error). " +
     "people: the mldsa65 UAs (pqKeygen of rnd(tree/mldsa65-bip39-seed, 64), account 0, index) and public keys, named A … J " +
     "in the order of their UAs, so every session here, listed by name, is strictly sorted by (ua, keyId) as the contract " +
-    "requires; the members' KEM keys are real.",
+    "requires; the members' KEM keys are real. Path-less Adds (docs/superpowers/specs/2026-11-25-treekem-pathless-add.md " +
+    "§3.2, §5.1): a commit with pathless true sets no node and walks no path, each Add blanks its own direct path up to the " +
+    "root (C6), sincePath grows by its Adds (a path commit sets it to 0); a tree's sincePath and pathBound (the session's " +
+    "pathRefreshBound) are in its JSON; PqChatCommit ends with bool pathless, bytes32 confirmTag and TreeGenesis with " +
+    "uint32 pathRefreshBound.",
   typehashes: Object.fromEntries(
     Object.entries(tr.TREE_TYPE_STRINGS).map(([n, s]) => [n, { type: s, hash: hex(tr.TREE_TYPEHASH[n]) }]),
   ),
@@ -1529,6 +1612,15 @@ write("tree.json", {
     ["flag-clear", fx.flagClearScenario()],
     ["msig-history", fx.msigHistoryScenario()],
     ["msig-nested", fx.msigNestedScenario()],
+    ["pathless", fx.pathlessScenario()],
+    ["pathless-first", fx.pathlessFirstScenario()],
+    ["pathless-faults", fx.pathlessFaultsScenario()],
+    ["pathless-faults-control", fx.pathlessFaultsScenario(true)],
+    ["pathless-own", fx.pathlessOwnScenario(false)],
+    ["pathless-own-behind", fx.pathlessOwnScenario(true)],
+    ["pathless-bound", fx.pathlessBoundScenario()],
+    ["pathless-warn", fx.pathlessWarnScenario()],
+    ["pathless-exit", fx.pathlessExitScenario()],
   ];
   const DEVICE_NAMES = ["A", "A2", "B", "B2", "C", "C2", "C3", "D", "E", "E2", "F", "G", "H"];
   // the registry's keys: every device a world holds (the backlog world's extra versions are replayed by none), each with its
@@ -1592,7 +1684,7 @@ write("tree.json", {
         typeof v === "number" || typeof v === "string" || Array.isArray(v) ? v : hex(v),
       ]),
     );
-    return { ...r, fields, ctx: hex(x.ctx), S: hex(x.S), K: hex(x.K) };
+    return { ...r, fields, ctx: hex(x.ctx), S: hex(x.S), K: hex(x.K), next: hex(x.next), confirmTag: hex(x.tag) };
   });
   const devicesOf = (w) =>
     DEVICE_NAMES.filter((n) => w.home.kems.has(`${fx.deviceOf(n).ua}/${fx.deviceOf(n).keyId}`)).filter(
@@ -1642,6 +1734,11 @@ write("tree.json", {
             K: r.epochs.map((e) => e.K ?? null),
             info: r.epochs.map((e) => [e.info, e.inForce, e.flagged]),
             warnings: r.warnings,
+            suspects: r.suspects,
+            review: r.review,
+            sincePath: r.sincePath,
+            pathWarning: r.pathWarning,
+            head: r.head,
             reads: r.reads,
             pin: r.pin,
           },
@@ -1670,6 +1767,76 @@ write("tree.json", {
     if (JSON.stringify(got) !== JSON.stringify(r.expect)) throw new Error(`lie ${r.name}: ${JSON.stringify(got)}`);
     return r;
   });
+  // the path-less delta (§4.1, §13): K, next and the tag of one S, all three apart; addNonce for try 0 and 1; each path-less
+  // joiner from its parent's next; two children of one parent and a twin under one id; a holder of next at an exit; W(N)
+  const pw = byName.get("pathless");
+  const kemSeedOf = (s) => hex(fx.deviceOf(s.author).kemSeed);
+  for (const r of schedule)
+    if (new Set([r.K, r.next, r.confirmTag]).size !== 3) throw new Error(`branches equal: ${r.name}`);
+  const pSteps = pw.steps.filter((s) => s.built);
+  const parentNext = (w, i) => {
+    // the next of the epoch below step i (a built step), from the schedule of its record or of the genesis
+    const prev = w.steps.filter((s) => s.built)[i - 1];
+    return hex(prev ? prev.built.next : w.genesis.next);
+  };
+  const pathless = {
+    addNonce: pSteps
+      .filter((s) => s.built.record.pathless)
+      .map((s) => {
+        const c = s.built.record;
+        const x = {
+          treeId: c.treeId,
+          parentEpochId: c.parentEpochId,
+          parentTreeHash: c.parentTreeHash,
+          addsHash: hex(tr.arrayHash("TreeAdd", c.adds)),
+        };
+        return {
+          name: s.name,
+          kemSeed: kemSeedOf(s),
+          input: x,
+          nonces: [0, 1].map((t) => tk.addNonce(sc, fx.deviceOf(s.author).kemSeed, x, t)),
+          nonce: c.nonce,
+        };
+      }),
+    addJoiner: pSteps
+      .map((s, i) => [s, i])
+      .filter(([s]) => s.built.record.pathless)
+      .map(([s, i]) => ({
+        name: s.name,
+        next: parentNext(pw, i),
+        treeId: s.built.record.treeId,
+        epochId: s.built.epochId,
+        addsHash: hex(tr.arrayHash("TreeAdd", s.built.record.adds)),
+        joiner: hex(s.built.joiner),
+      })),
+    twins: {
+      note:
+        "two path-less children of epoch 2 of world pathless (A adds D, B adds B2) and a twin of A's under its id (the same " +
+        "nonce) adding H: three keys",
+      a: { epochId: pw.twins.a.epochId, joiner: hex(pw.twins.a.joiner), K: hex(pw.twins.a.K) },
+      b: { epochId: pw.twins.b.epochId, joiner: hex(pw.twins.b.joiner), K: hex(pw.twins.b.K) },
+      twin: { epochId: pw.twins.twin.epochId, joiner: hex(pw.twins.twin.joiner), K: hex(pw.twins.twin.K) },
+    },
+    exitNext: (() => {
+      // world pathless-exit: C left at the path-less head 1 and holds next_1; the honouring path commit 2's joiner is not
+      // the add-joiner of next_1 over its own fields
+      const we = byName.get("pathless-exit");
+      const c2 = we.steps.filter((s) => s.built)[1].built;
+      const held = fx.replayOf(we, "C").chain;
+      const tried = tk.addJoinerSecret(
+        sc,
+        held.next,
+        c2.record.treeId,
+        c2.epochId,
+        tr.arrayHash("TreeAdd", c2.record.adds),
+      );
+      if (hex(tried) === hex(c2.joiner)) throw new Error("exitNext derives the path commit");
+      return { next: hex(held.next), epochId: c2.epochId, tried: hex(tried), joiner: hex(c2.joiner) };
+    })(),
+    warn: [0, 1, 2, 4, 24, 100, 510].map((N) => ({ N, W: tk.warnAt(N) })),
+  };
+  if (new Set([pathless.twins.a.K, pathless.twins.b.K, pathless.twins.twin.K]).size !== 3) throw new Error("twins");
+  if (pathless.twins.a.epochId !== pathless.twins.twin.epochId) throw new Error("twin id");
   write("tree-secrets.json", {
     description:
       COMMON.replace(/Sources: .*$/, "") +
@@ -1697,9 +1864,23 @@ write("tree.json", {
       "msig's records named before its exits, a signing msig member's tag included (versions never decrease); devices: kemSig, the person's setKemKey signature of the key (kemKeyAt " +
       "serves {kemPk, sig}; a cold tree's keys are authenticated by it, C-1); a " +
       "signature is hex (a single key) or {signature, members} (an msig's abi.encode(MemberSig[])). lies: an endpoint's views " +
-      "replaced by read name, the device and its pin, and what replay and prepare give (null: accepted; plan T11). UNAUDITED.",
+      "replaced by read name, the device and its pin, and what replay and prepare give (null: accepted; plan T11). " +
+      "Path-less Adds (docs/superpowers/specs/2026-11-25-treekem-pathless-add.md §4, §6): every epoch's S has four " +
+      "branches, K = H(S, …/key), next = H(S, …/next), confirmTag = H(S, …/confirm ‖ ctx) (epoch 0: ‖ genesisCtx), each " +
+      "schedule row with next and confirmTag; a path commit's joiner as before, a path-less Add's H(next of its parent, " +
+      "…/add-joiner ‖ treeId ‖ epochId ‖ hash(adds)); its nonce the first 8 B, big-endian, of H(kemSeed, …/add-nonce ‖ " +
+      "treeId ‖ parentEpochId ‖ parentTreeHash ‖ hash(adds) ‖ be32 try) (a uint64, written as a bare integer). The tag " +
+      "decides the key state, sealedInfo only the info ('not taken' when it fails). States: followed; not followed with a " +
+      "reason (tag, parent not followed, welcome may not match, opening failed, ...); author did not hold (C45: the " +
+      "chain's key kept, no info in force); compromise (an own path-less record whose nonce no try reproduces, C47). " +
+      "Replays also give suspects (the C45 epochs), review (the still-live leaves those and the warnings name), sincePath, " +
+      "pathWarning (an admin's device at sincePath >= W(N)) and head (the head's handle with its next, when held). pathless: " +
+      "addNonce rows (try 0 and 1), addJoiner rows, twins (two children of one parent, a twin under one id), exitNext (a " +
+      "holder of next at an exit does not derive the honouring path commit), warn (W(N)). UNAUDITED.",
     labels: Object.fromEntries(
-      ["path", "node", "commit", "ct", "joiner", "epoch", "key"].map((k) => [k, new TextDecoder().decode(sc[k])]),
+      ["path", "node", "commit", "ct", "joiner", "epoch", "key", "next", "addJoiner", "confirm", "addNonce"].map(
+        (k) => [k, new TextDecoder().decode(sc[k])],
+      ),
     ),
     tags: { tagPath: hex(sc.tagPath), tagContext: hex(sc.tagContext), wrap: sc.wrap },
     infoMax: tk.TREE_INFO_MAX,
@@ -1711,6 +1892,7 @@ write("tree.json", {
     schedule,
     scenarios,
     lies,
+    pathless,
   });
 }
 console.log(
