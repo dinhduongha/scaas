@@ -1,0 +1,776 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+//! The sealed store of one open profile (spec §5, §7.1 "Refusals by state", §7.2, §7.3 step 1; plan pinned formats 6 to 8):
+//! one synchronous [`Core`] (file I/O and AEAD are blocking work) holding the store write lock, the manifests of every part
+//! and the anchor; the SDK's `SecureStore` face over it ([`PartStore`], on `spawn_blocking`).
+//!
+//! - A protected profile's generation `g<N>/` holds `<64 hex>` (an item or a manifest: `{"rev":N,"sealed":"<base64>"}`,
+//!   sealed in `scaas-ua` under `K_item`, AD over (part, name, rev); the name `hex(HMAC(K_name, lp(part) ‖ lp(name)))`),
+//!   `<64 hex>.lock` and `<64 hex>.tmp.<pid>.<n>` (removed at open); any other file is `VaultFormat`.
+//! - Each part's manifest is the item `manifest:<part>` of the reserved part `profile`: every `(name, rev)` and a tombstone
+//!   per deleted name. The stored rev is the tombstone's plus the caller's revision (the plaintext's JSON `rev`, which the
+//!   face shows), so a re-created item is never a false rollback.
+//! - A write takes the store write lock (at most 120 s, then `ProfileBusy`, nothing written), writes the item (`put_if`), the
+//!   manifest (`put_if` at its read rev, three tries, then `StoreConflict`), then the anchor; a delete writes the tombstone
+//!   first, then removes the file.
+//! - A read below its manifest, or at or below its tombstone, is `ProfileRollback` (writes to it too; the event is the
+//!   caller's); above it, a crash between the two writes, and the manifest is brought forward; listed but missing is
+//!   `ProfileDamaged`. At open the anchor (`profile.head`, and the keychain's `scaas.profile.<id>.head`) is compared with
+//!   what is stored: `follow` rewrites it, `rollback` refuses the open (`ProfileRollback`).
+//! - The unprotected `g0/` has no key: plain names, part `sdk`, `settings` only (`keystore`, `keystore.prev`, `sdk.state` as
+//!   well under `migration: pending`), no manifest; a sealed item in it is `ProfileFormat`, a write of anything else
+//!   `ProfilePassphraseRequired`.
+//!
+//! The core's codes are `SdkError`s; the face gives the store's (CLI-UPR-22's list, see [`store_code`]).
+use super::anchor::{Anchor, Head, Verdict};
+use super::{keychain_name, ProfileKeychain};
+use crate::error::SdkError;
+use crate::vault::keystore::MAX_BYTES;
+use crate::vault::store::{blocking, lock_file, rev_of, sealed_form, SEALED_MAX};
+use crate::vault::{
+    io, FileStore, SecureStore, StoreError, StoreLock, StorePolicy, StoredItem, HEAD,
+};
+use async_trait::async_trait;
+use base64::Engine;
+use scaas_ua::wallet::ProfileKeys;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
+use std::time::Duration;
+use zeroize::Zeroizing;
+
+/// An item's plaintext, wiped at drop.
+pub type Plain = Zeroizing<Vec<u8>>;
+/// An item's plaintext and the caller's revision of it (its JSON `rev`).
+pub type Item = (Plain, u64);
+
+/// The reserved part of the manifests; no store may use it.
+const PROFILE: &str = "profile";
+/// Entries of one part's manifest, tombstones included (`ProfilePartFull` above).
+pub const PART_MAX: usize = 65_536;
+const TRIES: usize = 3;
+/// A writer's wait for the store write lock (spec §7.3 step 1).
+const WAIT: Duration = Duration::from_secs(120);
+const ANCHOR_FILE: &str = "profile.head";
+const MANIFEST_FORMAT: &str = "scaas.profile-manifest";
+/// The items of an unprotected `g0` outside `settings`: a migrated "default" only (spec §5, §12).
+const LEGACY: [&str; 3] = ["keystore", "keystore.prev", "sdk.state"];
+const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
+
+/// A store part (spec §7.2): `profile`, the manifests' part, is none of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfilePart {
+    Sdk,
+    PqChat,
+    PqVault,
+}
+
+impl ProfilePart {
+    pub const ALL: [ProfilePart; 3] = [ProfilePart::Sdk, ProfilePart::PqChat, ProfilePart::PqVault];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            ProfilePart::Sdk => "sdk",
+            ProfilePart::PqChat => "pqchat",
+            ProfilePart::PqVault => "pqvault",
+        }
+    }
+}
+
+/// A part's manifest (pinned format 7): every item's stored rev and every deleted name's last rev; a name in one list at most.
+/// No `Debug`: the names are private.
+#[derive(Default, Clone, PartialEq, Eq)]
+pub struct Manifest {
+    pub rev: u64,
+    pub items: BTreeMap<String, u64>,
+    pub tombstones: BTreeMap<String, u64>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManifestJson {
+    format: String,
+    v: u64,
+    part: String,
+    rev: u64,
+    items: Vec<(String, u64)>,
+    tombstones: Vec<(String, u64)>,
+}
+
+impl Manifest {
+    /// From its lists: a name twice is `ProfileFormat`, more than 65,536 entries `ProfilePartFull`.
+    pub fn from_lists(
+        rev: u64,
+        items: Vec<(String, u64)>,
+        tombstones: Vec<(String, u64)>,
+    ) -> Result<Manifest, SdkError> {
+        if items.len() + tombstones.len() > PART_MAX {
+            return Err(SdkError::ProfilePartFull);
+        }
+        let mut m = Manifest {
+            rev,
+            ..Manifest::default()
+        };
+        for (n, r) in items {
+            if m.items.insert(n, r).is_some() {
+                return Err(SdkError::ProfileFormat);
+            }
+        }
+        for (n, r) in tombstones {
+            if m.items.contains_key(&n) || m.tombstones.insert(n, r).is_some() {
+                return Err(SdkError::ProfileFormat);
+            }
+        }
+        Ok(m)
+    }
+
+    fn len(&self) -> usize {
+        self.items.len() + self.tombstones.len()
+    }
+
+    /// The canonical plaintext of part `part`'s manifest; each list sorted by the name's UTF-8 bytes.
+    pub fn json(&self, part: &str) -> Result<Vec<u8>, SdkError> {
+        if self.len() > PART_MAX {
+            return Err(SdkError::ProfilePartFull);
+        }
+        let list = |m: &BTreeMap<String, u64>| m.iter().map(|(n, r)| (n.clone(), *r)).collect();
+        serde_json::to_vec(&ManifestJson {
+            format: MANIFEST_FORMAT.into(),
+            v: 1,
+            part: part.into(),
+            rev: self.rev,
+            items: list(&self.items),
+            tombstones: list(&self.tombstones),
+        })
+        .map_err(|_| SdkError::Argument)
+    }
+
+    /// The opened plaintext of part `part`'s manifest item at stored rev `rev`: anything else is `VaultFormat`.
+    pub fn parse(part: &str, rev: u64, pt: &[u8]) -> Result<Manifest, SdkError> {
+        if scaas_ua::json::depth_within(pt, 3).is_err() {
+            return Err(SdkError::VaultFormat);
+        }
+        let j: ManifestJson = serde_json::from_slice(pt).map_err(|_| SdkError::VaultFormat)?;
+        if j.format != MANIFEST_FORMAT || j.v != 1 || j.part != part || j.rev != rev {
+            return Err(SdkError::VaultFormat);
+        }
+        Manifest::from_lists(rev, j.items, j.tombstones).map_err(|_| SdkError::VaultFormat)
+    }
+}
+
+/// An item file (pinned format 6).
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ItemJson {
+    rev: u64,
+    sealed: String,
+}
+
+fn item_json(rev: u64, sealed: &[u8]) -> Result<Vec<u8>, SdkError> {
+    serde_json::to_vec(&ItemJson {
+        rev,
+        sealed: B64.encode(sealed),
+    })
+    .map_err(|_| SdkError::Argument)
+}
+
+/// A sealed item file's rev and `sealed` bytes; `None` when absent; a file of any other form `VaultFormat`.
+fn read_sealed(p: &Path) -> Result<Option<(u64, Vec<u8>)>, SdkError> {
+    let Some(i) = FileStore::read(p).map_err(io)? else {
+        return Ok(None);
+    };
+    if i.bytes.len() > SEALED_MAX || scaas_ua::json::depth_within(&i.bytes, 1).is_err() {
+        return Err(SdkError::VaultFormat);
+    }
+    let j: ItemJson = serde_json::from_slice(&i.bytes).map_err(|_| SdkError::VaultFormat)?;
+    let sealed = B64.decode(j.sealed).map_err(|_| SdkError::VaultFormat)?;
+    Ok(Some((j.rev, sealed)))
+}
+
+/// FileStore's `put_if` on one file: replaced only at the expected rev (`None`: absent), else `StoreConflict`.
+fn put_file_if(dir: &Path, p: &Path, prev: Option<u64>, bytes: &[u8]) -> Result<(), SdkError> {
+    if FileStore::read(p).map_err(io)?.map(|i| i.rev) != prev {
+        return Err(SdkError::StoreConflict);
+    }
+    FileStore::write(dir, p, bytes, false).map_err(io)
+}
+
+/// The profile arena's refusal: locked is `ProfileLocked`, a seal that does not open `VaultFormat`.
+fn ua(e: scaas_ua::wallet::Error) -> SdkError {
+    match e {
+        scaas_ua::wallet::Error::WalletLocked => SdkError::ProfileLocked,
+        scaas_ua::wallet::Error::Argument => SdkError::Argument,
+        _ => SdkError::VaultFormat,
+    }
+}
+
+fn manifest_name(part: ProfilePart) -> String {
+    format!("manifest:{}", part.name())
+}
+
+/// What a protected generation may hold (spec §5).
+enum Kind {
+    Item,
+    Lock,
+    Temp,
+}
+
+fn kind(name: &str) -> Option<Kind> {
+    let (hex, rest) = (name.get(..64)?, name.get(64..)?);
+    if !hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        return None;
+    }
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    match rest {
+        "" => Some(Kind::Item),
+        ".lock" => Some(Kind::Lock),
+        _ => {
+            let (pid, n) = rest.strip_prefix(".tmp.")?.split_once('.')?;
+            (digits(pid) && digits(n)).then_some(Kind::Temp)
+        }
+    }
+}
+
+/// Open-time check of a protected generation (under the instance lock): temporaries removed, any other name `VaultFormat`.
+fn scan(gdir: &Path) -> Result<(), SdkError> {
+    for e in std::fs::read_dir(gdir).map_err(|_| SdkError::VaultIo)? {
+        let e = e.map_err(|_| SdkError::VaultIo)?;
+        let file = e.file_type().map_err(|_| SdkError::VaultIo)?.is_file();
+        match e.file_name().to_str().and_then(kind) {
+            Some(Kind::Temp) if file => {
+                std::fs::remove_file(e.path()).map_err(|_| SdkError::VaultIo)?
+            }
+            Some(Kind::Item | Kind::Lock) if file => {}
+            _ => return Err(SdkError::VaultFormat),
+        }
+    }
+    Ok(())
+}
+
+/// A keychain call from the core's blocking thread, on the runtime that thread belongs to.
+fn on_runtime<T>(
+    f: impl std::future::Future<Output = Result<T, StoreError>>,
+) -> Result<T, SdkError> {
+    tokio::runtime::Handle::try_current()
+        .map_err(|_| SdkError::VaultIo)?
+        .block_on(f)
+        .map_err(io)
+}
+
+struct WriteLock {
+    held: Mutex<bool>,
+    free: Condvar,
+    wait_ms: AtomicU64,
+}
+
+/// The store write lock, held until drop (spec §7.3 step 1: a re-seal holds it for its whole run).
+pub struct WriteGuard(Arc<WriteLock>);
+
+impl Drop for WriteGuard {
+    fn drop(&mut self) {
+        *self.0.held.lock().unwrap_or_else(PoisonError::into_inner) = false;
+        self.0.free.notify_one();
+    }
+}
+
+/// What [`Core::open`] takes: the profile's directory (`p/<id>/`, under its instance lock), its id (the keychain's names
+/// only), the envelope's `gen`, rev and hash, the profile arena (`None`: unprotected, `g0`), the keychain, and whether the
+/// envelope says `migration: pending`.
+pub struct CoreOpen {
+    pub dir: PathBuf,
+    pub id: String,
+    pub gen: u64,
+    pub keys: Option<Arc<ProfileKeys>>,
+    pub keychain: Option<Arc<dyn ProfileKeychain>>,
+    pub envelope: Head,
+    pub migration_pending: bool,
+}
+
+/// The sealed store core of one open profile. Every call is blocking work: run it on a blocking thread (a keychain is
+/// reached on that thread's runtime). No `Debug`.
+pub struct Core {
+    dir: PathBuf,
+    gdir: PathBuf,
+    gen: u64,
+    keys: Option<Arc<ProfileKeys>>,
+    keychain: Option<(Arc<dyn ProfileKeychain>, String)>,
+    envelope: Mutex<Head>,
+    migration_pending: bool,
+    lock: Arc<WriteLock>,
+    #[cfg(feature = "test-hooks")]
+    hook: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+}
+
+impl Core {
+    /// Opens the generation (created, `0700`, if missing), checks a protected one's files, and compares the anchor: `follow`
+    /// rewrites it, `rollback` is `ProfileRollback`. An unprotected profile with a generation other than `g0`, or a protected
+    /// one with `g0`, is `ProfileFormat`.
+    pub fn open(o: CoreOpen) -> Result<Core, SdkError> {
+        if o.keys.is_some() == (o.gen == 0) {
+            return Err(SdkError::ProfileFormat);
+        }
+        let gdir = o.dir.join(format!("g{}", o.gen));
+        let mut b = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
+        match b.create(&gdir) {
+            Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => {
+                return Err(SdkError::VaultIo)
+            }
+            _ => {}
+        }
+        if o.keys.is_some() {
+            scan(&gdir)?;
+        }
+        let core = Core {
+            gdir,
+            gen: o.gen,
+            keychain: o.keychain.map(|k| (k, keychain_name(&o.id, "head"))),
+            envelope: Mutex::new(o.envelope),
+            migration_pending: o.migration_pending,
+            keys: o.keys,
+            dir: o.dir,
+            lock: Arc::new(WriteLock {
+                held: Mutex::new(false),
+                free: Condvar::new(),
+                wait_ms: AtomicU64::new(WAIT.as_secs() * 1000),
+            }),
+            #[cfg(feature = "test-hooks")]
+            hook: Mutex::new(None),
+        };
+        core.check_anchor()?;
+        Ok(core)
+    }
+
+    /// The store write lock, which every writer of every part takes: waits at most 120 s, then `ProfileBusy`.
+    pub fn write_lock(&self) -> Result<WriteGuard, SdkError> {
+        let l = &self.lock;
+        let wait = Duration::from_millis(l.wait_ms.load(SeqCst));
+        let held = l.held.lock().unwrap_or_else(PoisonError::into_inner);
+        let (mut held, _) = l
+            .free
+            .wait_timeout_while(held, wait, |h| *h)
+            .unwrap_or_else(PoisonError::into_inner);
+        if *held {
+            return Err(SdkError::ProfileBusy);
+        }
+        *held = true;
+        Ok(WriteGuard(l.clone()))
+    }
+
+    /// The item `name` of `part` and the caller's revision (its JSON `rev`), `None` when absent.
+    pub fn get(&self, part: ProfilePart, name: &str) -> Result<Option<Item>, SdkError> {
+        let Some(keys) = &self.keys else {
+            return self.plain_get(part, name);
+        };
+        let m = self.read_manifest(keys, part)?.0;
+        let Some((rev, pt)) = self.item(keys, part, name, &m)? else {
+            return Ok(None);
+        };
+        if m.items.get(name) != Some(&rev) {
+            // above its manifest: a crash between the item's write and the manifest's; the manifest brought forward
+            let _g = self.write_lock()?;
+            self.update_manifest(keys, part, |m| {
+                m.tombstones.remove(name);
+                let r = m.items.entry(name.to_string()).or_insert(rev);
+                *r = (*r).max(rev);
+            })?;
+            self.write_anchor()?;
+        }
+        let caller = rev_of(&pt);
+        Ok(Some((pt, caller)))
+    }
+
+    /// Replaces (or creates) the item only when the caller's revision of it is `prev` (`None`: absent), else
+    /// `StoreConflict`. `bytes` carry their own JSON `rev` (else, or above 16 MiB, `Argument`).
+    pub fn put_if(
+        &self,
+        part: ProfilePart,
+        name: &str,
+        prev: Option<u64>,
+        bytes: &[u8],
+    ) -> Result<(), SdkError> {
+        let caller = rev_of(bytes);
+        if bytes.len() > MAX_BYTES || caller == u64::MAX {
+            return Err(SdkError::Argument);
+        }
+        let _g = self.write_lock()?;
+        let Some(keys) = &self.keys else {
+            return self.plain_put(part, name, prev, bytes);
+        };
+        let (m, _) = self.read_manifest(keys, part)?;
+        let cur = self.item(keys, part, name, &m)?;
+        if cur.as_ref().map(|(_, pt)| rev_of(pt)) != prev {
+            return Err(SdkError::StoreConflict);
+        }
+        let base = match &cur {
+            Some((rev, pt)) => rev.checked_sub(rev_of(pt)).ok_or(SdkError::VaultFormat)?,
+            None => m.tombstones.get(name).copied().unwrap_or(0),
+        };
+        let rev = base.checked_add(caller).ok_or(SdkError::Argument)?;
+        if !m.items.contains_key(name) && !m.tombstones.contains_key(name) && m.len() >= PART_MAX {
+            return Err(SdkError::ProfilePartFull);
+        }
+        let p = self.file(keys, part.name(), name)?;
+        let sealed = keys.seal_item(part.name(), name, rev, bytes).map_err(ua)?;
+        put_file_if(
+            &self.gdir,
+            &p,
+            cur.map(|(r, _)| r),
+            &item_json(rev, &sealed)?,
+        )?;
+        self.update_manifest(keys, part, |m| {
+            m.tombstones.remove(name);
+            m.items.insert(name.to_string(), rev);
+        })?;
+        self.write_anchor()
+    }
+
+    /// Deletes the item: its tombstone in the manifest first, then the file.
+    pub fn delete(&self, part: ProfilePart, name: &str) -> Result<(), SdkError> {
+        let _g = self.write_lock()?;
+        let Some(keys) = &self.keys else {
+            let p = self.plain_writable(part, name)?;
+            return remove(&p);
+        };
+        let p = self.file(keys, part.name(), name)?;
+        let on_disk = FileStore::read(&p)
+            .map_err(io)?
+            .map(|i| i.rev)
+            .filter(|r| *r != u64::MAX);
+        let (m, _) = self.read_manifest(keys, part)?;
+        if on_disk.is_some() || m.items.contains_key(name) {
+            self.update_manifest(keys, part, |m| {
+                let last = [
+                    m.items.remove(name),
+                    m.tombstones.get(name).copied(),
+                    on_disk,
+                ]
+                .into_iter()
+                .flatten()
+                .max();
+                if let Some(last) = last {
+                    m.tombstones.insert(name.to_string(), last);
+                }
+            })?;
+            self.write_anchor()?;
+        }
+        remove(&p)
+    }
+
+    /// Part `part`'s manifest as stored (an unprotected profile has none: empty).
+    pub fn manifest(&self, part: ProfilePart) -> Result<Manifest, SdkError> {
+        match &self.keys {
+            Some(keys) => Ok(self.read_manifest(keys, part)?.0),
+            None => Ok(Manifest::default()),
+        }
+    }
+
+    /// After an envelope write (UP6: rename, `hide`, `show`, platform unlock): its new rev and hash; the anchor follows.
+    pub fn set_envelope(&self, envelope: Head) -> Result<(), SdkError> {
+        let _g = self.write_lock()?;
+        *self.envelope.lock().unwrap_or_else(PoisonError::into_inner) = envelope;
+        self.write_anchor()
+    }
+
+    /// The item's FileStore lock (`<its file>.lock`), held while the returned file lives (defence in depth beside the store
+    /// write lock).
+    pub fn lock_item(&self, part: ProfilePart, name: &str) -> Result<std::fs::File, SdkError> {
+        let p = match &self.keys {
+            Some(keys) => self.file(keys, part.name(), name)?,
+            None => self.plain_writable(part, name)?,
+        };
+        let mut l = p.into_os_string();
+        l.push(".lock");
+        lock_file(Path::new(&l)).map_err(io)
+    }
+
+    fn file(&self, keys: &ProfileKeys, part: &str, name: &str) -> Result<PathBuf, SdkError> {
+        Ok(self.gdir.join(keys.item_file(part, name).map_err(ua)?))
+    }
+
+    /// The item as stored (its rev and plaintext) after spec §7.2's read rules against its manifest `m`.
+    fn item(
+        &self,
+        keys: &ProfileKeys,
+        part: ProfilePart,
+        name: &str,
+        m: &Manifest,
+    ) -> Result<Option<(u64, Plain)>, SdkError> {
+        let Some((rev, sealed)) = read_sealed(&self.file(keys, part.name(), name)?)? else {
+            return match m.items.contains_key(name) {
+                true => Err(SdkError::ProfileDamaged),
+                false => Ok(None),
+            };
+        };
+        let below = m.items.get(name).is_some_and(|l| rev < *l);
+        if below || m.tombstones.get(name).is_some_and(|t| rev <= *t) {
+            return Err(SdkError::ProfileRollback);
+        }
+        let pt = keys
+            .open_item(part.name(), name, rev, &sealed)
+            .map_err(ua)?;
+        Ok(Some((rev, pt)))
+    }
+
+    /// Part `part`'s manifest and its stored rev (`None`: no manifest yet, an empty one).
+    fn read_manifest(
+        &self,
+        keys: &ProfileKeys,
+        part: ProfilePart,
+    ) -> Result<(Manifest, Option<u64>), SdkError> {
+        let name = manifest_name(part);
+        let Some((rev, sealed)) = read_sealed(&self.file(keys, PROFILE, &name)?)? else {
+            return Ok((Manifest::default(), None));
+        };
+        let pt = keys.open_item(PROFILE, &name, rev, &sealed).map_err(ua)?;
+        Ok((Manifest::parse(part.name(), rev, &pt)?, Some(rev)))
+    }
+
+    /// `change` applied to the manifest as read and written at its read rev + 1 (`put_if`); a conflict reads it again, three
+    /// tries, then `StoreConflict`.
+    fn update_manifest(
+        &self,
+        keys: &ProfileKeys,
+        part: ProfilePart,
+        mut change: impl FnMut(&mut Manifest),
+    ) -> Result<(), SdkError> {
+        let name = manifest_name(part);
+        let p = self.file(keys, PROFILE, &name)?;
+        for _ in 0..TRIES {
+            let (mut m, at) = self.read_manifest(keys, part)?;
+            change(&mut m);
+            m.rev = at.unwrap_or(0).checked_add(1).ok_or(SdkError::Argument)?;
+            let pt = Zeroizing::new(m.json(part.name())?);
+            let sealed = keys.seal_item(PROFILE, &name, m.rev, &pt).map_err(ua)?;
+            let bytes = item_json(m.rev, &sealed)?;
+            #[cfg(feature = "test-hooks")]
+            {
+                let hook = self
+                    .hook
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .take();
+                if let Some(f) = hook {
+                    f();
+                }
+            }
+            match put_file_if(&self.gdir, &p, at, &bytes) {
+                Err(SdkError::StoreConflict) => continue,
+                r => return r,
+            }
+        }
+        Err(SdkError::StoreConflict)
+    }
+
+    /// What is stored, in the anchor's form: `gen`, the envelope, each part's manifest file.
+    fn stored(&self) -> Result<Anchor, SdkError> {
+        let mut parts = BTreeMap::new();
+        if let Some(keys) = &self.keys {
+            for part in ProfilePart::ALL {
+                let p = self.file(keys, PROFILE, &manifest_name(part))?;
+                if let Some(i) = FileStore::read(&p).map_err(io)? {
+                    parts.insert(part.name().to_string(), Head::of(i.rev, &i.bytes));
+                }
+            }
+        }
+        let envelope = self
+            .envelope
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        Ok(Anchor {
+            gen: self.gen,
+            envelope,
+            parts,
+        })
+    }
+
+    /// The anchor of what is stored, to `profile.head` and the keychain.
+    fn write_anchor(&self) -> Result<(), SdkError> {
+        let a = self.stored()?.json()?;
+        FileStore::write(&self.dir, &self.dir.join(ANCHOR_FILE), &a, false).map_err(io)?;
+        if let Some((kc, name)) = &self.keychain {
+            on_runtime(kc.put(name.clone(), a))?;
+        }
+        Ok(())
+    }
+
+    /// Open-time: each anchor present against what is stored (one rule); one that does not parse is `ProfileRollback`; a
+    /// missing or followed one rewritten.
+    fn check_anchor(&self) -> Result<(), SdkError> {
+        let stored = self.stored()?;
+        let file = FileStore::read(&self.dir.join(ANCHOR_FILE))
+            .map_err(io)?
+            .map(|i| i.bytes);
+        let kept = match &self.keychain {
+            Some((kc, name)) => Some(on_runtime(kc.get(name.clone()))?),
+            None => None,
+        };
+        let mut write = file.is_none() || matches!(kept, Some(None));
+        for a in [file, kept.flatten()].into_iter().flatten() {
+            match Anchor::parse(&a).map(|a| stored.compare(&a)) {
+                Some(Verdict::Same) => {}
+                Some(Verdict::Follow) => write = true,
+                None | Some(Verdict::Rollback) => return Err(SdkError::ProfileRollback),
+            }
+        }
+        if write {
+            self.write_anchor()?;
+        }
+        Ok(())
+    }
+
+    /// An unprotected profile's item path: part `sdk`, `settings` or a legacy item; else `ProfilePassphraseRequired`.
+    fn plain_path(&self, part: ProfilePart, name: &str) -> Result<PathBuf, SdkError> {
+        match part == ProfilePart::Sdk && (name == "settings" || LEGACY.contains(&name)) {
+            true => Ok(self.gdir.join(name)),
+            false => Err(SdkError::ProfilePassphraseRequired),
+        }
+    }
+
+    /// The same, for a write: a legacy item only under `migration: pending`.
+    fn plain_writable(&self, part: ProfilePart, name: &str) -> Result<PathBuf, SdkError> {
+        match name == "settings" || self.migration_pending {
+            true => self.plain_path(part, name),
+            false => Err(SdkError::ProfilePassphraseRequired),
+        }
+    }
+
+    fn plain_get(&self, part: ProfilePart, name: &str) -> Result<Option<Item>, SdkError> {
+        let Some(i) = FileStore::read(&self.plain_path(part, name)?).map_err(io)? else {
+            return Ok(None);
+        };
+        // a sealed item, or a legacy item without `migration: pending` (spec §7.1)
+        if sealed_form(&i.bytes) || (name != "settings" && !self.migration_pending) {
+            return Err(SdkError::ProfileFormat);
+        }
+        Ok(Some((Zeroizing::new(i.bytes), i.rev)))
+    }
+
+    fn plain_put(
+        &self,
+        part: ProfilePart,
+        name: &str,
+        prev: Option<u64>,
+        bytes: &[u8],
+    ) -> Result<(), SdkError> {
+        let p = self.plain_writable(part, name)?;
+        if sealed_form(bytes) {
+            return Err(SdkError::ProfileFormat);
+        }
+        put_file_if(&self.gdir, &p, prev, bytes)
+    }
+}
+
+fn remove(p: &Path) -> Result<(), SdkError> {
+    match std::fs::remove_file(p) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err(SdkError::VaultIo),
+    }
+}
+
+/// Test-only hooks (feature `test-hooks`, never in a release build).
+#[cfg(feature = "test-hooks")]
+impl Core {
+    /// A writer's wait for the store write lock (120 s), shortened.
+    pub fn set_write_wait(&self, wait: Duration) {
+        let ms = u64::try_from(wait.as_millis()).unwrap_or(u64::MAX);
+        self.lock.wait_ms.store(ms, SeqCst);
+    }
+
+    /// `f` runs once, between the next manifest write's read and its `put_if` (another writer landing in between).
+    pub fn before_manifest_write(&self, f: Box<dyn FnOnce() + Send>) {
+        *self.hook.lock().unwrap_or_else(PoisonError::into_inner) = Some(f);
+    }
+}
+
+/// A core code as the store's (CLI-UPR-22 names `StoreError`'s codes): `ProfileFormat` is `VaultFormat` at the store;
+/// `ProfileBusy` and `ProfilePartFull`, which `StoreError` does not name, are `Unavailable` (the write is not taken now).
+fn store_code(e: SdkError) -> StoreError {
+    match e {
+        SdkError::StoreConflict => StoreError::Conflict,
+        SdkError::VaultFormat | SdkError::ProfileFormat => StoreError::VaultFormat,
+        SdkError::ProfileLocked => StoreError::ProfileLocked,
+        SdkError::ProfilePassphraseRequired => StoreError::ProfilePassphraseRequired,
+        SdkError::ProfileRollback => StoreError::ProfileRollback,
+        SdkError::ProfileDamaged => StoreError::ProfileDamaged,
+        SdkError::ProfileBusy | SdkError::ProfilePartFull => StoreError::Unavailable,
+        _ => StoreError::Io,
+    }
+}
+
+/// The SDK's `SecureStore` over one part of the core (spec §7.2 "One store core, two faces"), each call on `spawn_blocking`.
+/// In part `sdk`, `keystore.head` passes through unsealed to the profile directory (public by contract).
+pub struct PartStore {
+    core: Arc<Core>,
+    part: ProfilePart,
+    head: Option<Arc<FileStore>>,
+}
+
+impl PartStore {
+    pub fn new(core: Arc<Core>, part: ProfilePart) -> Result<Arc<PartStore>, SdkError> {
+        let head = match part {
+            ProfilePart::Sdk => Some(FileStore::new(core.dir.clone()).map_err(io)?),
+            _ => None,
+        };
+        Ok(Arc::new(PartStore { core, part, head }))
+    }
+
+    fn head(&self, name: &str) -> Option<&Arc<FileStore>> {
+        self.head.as_ref().filter(|_| name == HEAD)
+    }
+
+    async fn run<T: Send + 'static>(
+        &self,
+        f: impl FnOnce(&Core, ProfilePart) -> Result<T, SdkError> + Send + 'static,
+    ) -> Result<T, StoreError> {
+        let (core, part) = (self.core.clone(), self.part);
+        blocking(move || f(&core, part).map_err(store_code)).await
+    }
+}
+
+#[async_trait]
+impl SecureStore for PartStore {
+    async fn get(&self, name: String, reason: String) -> Result<Option<StoredItem>, StoreError> {
+        if let Some(h) = self.head(&name) {
+            return h.get(name, reason).await;
+        }
+        let got = self.run(move |c, p| c.get(p, &name)).await?;
+        Ok(got.map(|(pt, rev)| StoredItem {
+            bytes: pt.to_vec(),
+            rev,
+        }))
+    }
+
+    async fn put_if(
+        &self,
+        name: String,
+        prev_rev: Option<u64>,
+        bytes: Vec<u8>,
+        policy: StorePolicy,
+    ) -> Result<(), StoreError> {
+        if let Some(h) = self.head(&name) {
+            return h.put_if(name, prev_rev, bytes, policy).await;
+        }
+        let bytes = Zeroizing::new(bytes);
+        self.run(move |c, p| c.put_if(p, &name, prev_rev, &bytes))
+            .await
+    }
+
+    async fn delete(&self, name: String) -> Result<(), StoreError> {
+        if let Some(h) = self.head(&name) {
+            return h.delete(name).await;
+        }
+        self.run(move |c, p| c.delete(p, &name)).await
+    }
+
+    async fn lock(&self, name: String) -> Result<Arc<StoreLock>, StoreError> {
+        if let Some(h) = self.head(&name) {
+            return h.lock(name).await;
+        }
+        let f = self.run(move |c, p| c.lock_item(p, &name)).await?;
+        Ok(StoreLock::new(Box::new(f)))
+    }
+}

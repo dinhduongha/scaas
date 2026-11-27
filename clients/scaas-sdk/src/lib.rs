@@ -93,6 +93,8 @@ pub mod surface;
 #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub mod sync_cpp;
 pub(crate) mod text;
+#[cfg(feature = "user-profile")]
+pub mod user_profile;
 pub mod vault;
 #[cfg(feature = "wallet")]
 pub mod wallet;

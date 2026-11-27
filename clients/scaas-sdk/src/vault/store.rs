@@ -124,6 +124,14 @@ pub trait SecureStore: Send + Sync {
 /// A sealed item's bound (user-profiles spec §7.2 "Size"): the base64 of the 16 MiB plain bound plus 1 KiB.
 pub(crate) const SEALED_MAX: usize = 4 * super::keystore::MAX_BYTES.div_ceil(3) + 1024;
 
+/// Whether `bytes` begin as a sealed item does, `{"rev":<digits>,"sealed":"` (user-profiles plan pinned format 6).
+pub(crate) fn sealed_form(bytes: &[u8]) -> bool {
+    let rest = bytes.strip_prefix(br#"{"rev":"#).unwrap_or_default();
+    let digits = rest.iter().take_while(|b| b.is_ascii_digit()).count();
+    rest.get(digits..)
+        .is_some_and(|r| r.starts_with(br#","sealed":""#))
+}
+
 /// The revision of an item's bytes: its top-level JSON `rev`, else `u64::MAX`. Read up to 16 MiB, or for a sealed item (bytes
 /// that begin `{"rev":<digits>,"sealed":"`) up to the base64 of 16 MiB plus 1 KiB.
 pub fn rev_of(bytes: &[u8]) -> u64 {
@@ -131,12 +139,7 @@ pub fn rev_of(bytes: &[u8]) -> u64 {
     struct Rev {
         rev: u64,
     }
-    let rest = bytes.strip_prefix(br#"{"rev":"#).unwrap_or_default();
-    let digits = rest.iter().take_while(|b| b.is_ascii_digit()).count();
-    let sealed = rest
-        .get(digits..)
-        .is_some_and(|r| r.starts_with(br#","sealed":""#));
-    let max = if sealed {
+    let max = if sealed_form(bytes) {
         SEALED_MAX
     } else {
         super::keystore::MAX_BYTES
@@ -203,6 +206,8 @@ impl SecureStore for MemoryStore {
 
 #[cfg(feature = "file-store")]
 pub use file::FileStore;
+#[cfg(feature = "user-profile")]
+pub(crate) use file::{blocking, lock_file};
 
 #[cfg(feature = "file-store")]
 mod file {
@@ -234,12 +239,23 @@ mod file {
         r.map_err(|_| StoreError::Io)
     }
 
-    async fn blocking<T: Send + 'static>(
+    pub(crate) async fn blocking<T: Send + 'static>(
         f: impl FnOnce() -> Result<T, StoreError> + Send + 'static,
     ) -> Result<T, StoreError> {
         tokio::task::spawn_blocking(f)
             .await
             .map_err(|_| StoreError::Unexpected)?
+    }
+
+    /// An exclusive advisory lock on the file `p` (created, mode `0600`), held while the returned file lives.
+    pub(crate) fn lock_file(p: &Path) -> Result<File, StoreError> {
+        let mut o = OpenOptions::new();
+        o.write(true).create(true).truncate(false);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
+        let f = io(o.open(p))?;
+        io(f.lock())?;
+        Ok(f)
     }
 
     fn open_new(p: &Path) -> std::io::Result<File> {
@@ -271,7 +287,7 @@ mod file {
             Ok(self.dir.join(item(name)?))
         }
 
-        fn read(p: &Path) -> Result<Option<StoredItem>, StoreError> {
+        pub(crate) fn read(p: &Path) -> Result<Option<StoredItem>, StoreError> {
             match std::fs::read(p) {
                 Ok(bytes) => Ok(Some(StoredItem {
                     rev: rev_of(&bytes),
@@ -282,7 +298,13 @@ mod file {
             }
         }
 
-        fn write(dir: &Path, p: &Path, bytes: &[u8], crash: bool) -> Result<(), StoreError> {
+        /// `bytes` to a temporary beside `p` (mode `0600`), `fsync`ed, renamed over `p`, the directory `dir` `fsync`ed.
+        pub(crate) fn write(
+            dir: &Path,
+            p: &Path,
+            bytes: &[u8],
+            crash: bool,
+        ) -> Result<(), StoreError> {
             static N: AtomicU64 = AtomicU64::new(0);
             let tmp = p.with_extension(format!(
                 "tmp.{}.{}",
@@ -349,16 +371,7 @@ mod file {
 
         async fn lock(&self, name: String) -> Result<Arc<StoreLock>, StoreError> {
             let p = self.path(&format!("{name}.lock"))?;
-            let f = blocking(move || {
-                let mut o = OpenOptions::new();
-                o.write(true).create(true).truncate(false);
-                #[cfg(unix)]
-                std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
-                let f = io(o.open(&p))?;
-                io(f.lock())?;
-                Ok(f)
-            })
-            .await?;
+            let f = blocking(move || lock_file(&p)).await?;
             Ok(StoreLock::new(Box::new(f)))
         }
     }

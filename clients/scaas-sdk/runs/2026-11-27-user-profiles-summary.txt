@@ -32,3 +32,8 @@ UP4 | bind-gen --check | 3b55304f8 | 0 | ok
 UP4 | fmt rust toml py | 40d09358e | 0 | ok
 UP4 | docs | 40d09358e | 0 | 0 errors, 8 warnings, 16 notes; test_docs_check ok
 UP4 | mutants up4 | 3b55304f8 | 0 | 3 mutants, 3 killed, 0 survived, 0 not loaded, 0 other failure
+UP5 | sdk-up | ea96202b7 + UP5 files | 0 | user_profile 17 / 17 pass; --lib user_profile 0 (144 filtered out)
+UP5 | sdk-reg | ea96202b7 + UP5 files | 0 | vault 28, keystore_vectors 2, --lib vault 18: all pass
+UP5 | sdk-clippy (UPF and default, --all-targets -D warnings) | ea96202b7 + UP5 files | 0 | 0 warnings
+UP5 | fmt rust js toml | ea96202b7 + UP5 files (staged) | 0 | every part ok
+UP5 | docs | ea96202b7 + UP5 files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
