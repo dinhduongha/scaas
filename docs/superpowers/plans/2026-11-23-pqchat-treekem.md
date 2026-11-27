@@ -418,8 +418,8 @@ broken and its controls, the creation cap). Left: the binding surface check of t
 outside the module objects); the five mutants below; the per-chain rows measured on each chain (the reference rows are lines through
 the measured forge rows, `gas/pqchat_tree_rows.py`, checked against the points they do not come from).
 
-- [ ] **The creation in one transaction (owner 2026-11-25: "khi init session TreeKEM: tối đa 16 thành viên + 16 wraps …
-      số thành viên bằng số wraps"):** the SDK's tree-session creation sends the session record **with all its wraps in the
+- [ ] **The creation in one transaction (owner 2026-11-25: a TreeKEM session is created with at most 16 members and 16 wraps,
+      as many wraps as members):** the SDK's tree-session creation sends the session record **with all its wraps in the
       same transaction**, one wrap per member key (`wraps.length == members.length`, the contract's rule), so the session is
       complete at once and no `addWraps` follows. The number of member keys is capped by the planner, per chain: the largest
       `k` with `record(k) + k × wrap` within the chain's block limit read by RPC (EIP-8037: regular + state) and regular under

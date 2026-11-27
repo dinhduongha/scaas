@@ -2,7 +2,7 @@
 
 **Status:** BUILT on branch `ua-rs-native` (T0 `55f5377af` to T11c `17df72db0`, T12 the docs and closing gates; summary
 `smartcontracts/evm/runs/2026-11-17-ua-rs-native-summary.txt`); the closing review (T13) waits for the coordinator. Was: SPECIFIED. Branch `ua-rs-native` (from `ua-rs-sign` `d823d61f0`), worktree
-`.claude/worktrees/ua-rs-native`. Work order: TODO item 8c. **Owner 2026-11-17 ("Code luôn, không chờ sau p6h"): the round runs
+`.claude/worktrees/ua-rs-native`. Work order: TODO item 8c. **Owner 2026-11-17 (coded now, not after P6h): the round runs
 now**: spec → Fable review → fixes → code task by task ([plan](../plans/2026-11-17-ua-rs-native.md)). It does not depend on
 `scaas-sdk`. No contract, node or SCaaS signed-record byte format changes; `smartcontracts/vectors/ua/*.json` stay byte for byte.
 **Revised after Fable's review** (2026-11-17, `20261117-11-fable-fable-high-spec.md`, F1–F24, kept outside the repository; every
@@ -15,15 +15,15 @@ Rows marked **follows** apply a stated rule; rows marked **proposal** are the co
 
 ## 1. Owner rulings this spec follows
 
-All settled; quoted as given, with the place each one is recorded.
+All settled, with the place each one is recorded.
 
 | # | Date | Ruling | Where |
 |---|---|---|---|
-| R1 | 2026-11-17 | "ua-rs is the only signer is the rule, so it counts from scaas-sdk down": an end-user app above `scaas-sdk` may sign other chains' native transactions with its own library | CLI-UAL-01 Scope, `decisions.md` CLI-UAL-01 Change (`d823d61f0`) |
-| R2 | 2026-11-17 | "ua-rs chưa có Bitcoin, NEAR, Polkadot => cần bổ sung" (ua-rs has no Bitcoin, NEAR, Polkadot: add them): the gaps (1)–(6) of TODO 8c | TODO 8c, [CLI-UAL-62](../../decisions.md#CLI-UAL-62) |
-| R3 | 2026-11-17 | "Polkadot theo đề xuất (b)": sr25519 with `substrate-bip39` derivation like polkadot.js, in every backend of the app | TODO 8c (3), CLI-UAL-62 |
-| R4 | 2026-11-17 | "Junction ... theo đề xuất": the account is the bare mnemonic (no junction, polkadot.js default); junctions an optional per-account setting | TODO 8c (3), CLI-UAL-62 |
-| R5 | 2026-11-17 | "Code luôn, không chờ sau p6h" (code now, do not wait for P6h) | CLI-UAL-62; plan header |
+| R1 | 2026-11-17 | The rule that `ua-rs` is the only signer counts from `scaas-sdk` down: an end-user app above `scaas-sdk` may sign other chains' native transactions with its own library | CLI-UAL-01 Scope, `decisions.md` CLI-UAL-01 Change (`d823d61f0`) |
+| R2 | 2026-11-17 | `ua-rs` lacks Bitcoin, NEAR and Polkadot, so they are added: the gaps (1)–(6) of TODO 8c | TODO 8c, [CLI-UAL-62](../../decisions.md#CLI-UAL-62) |
+| R3 | 2026-11-17 | Polkadot option (b): sr25519 with `substrate-bip39` derivation like polkadot.js, in every backend of the app | TODO 8c (3), CLI-UAL-62 |
+| R4 | 2026-11-17 | Junctions as proposed: the account is the bare mnemonic (no junction, polkadot.js default); junctions an optional per-account setting | TODO 8c (3), CLI-UAL-62 |
+| R5 | 2026-11-17 | Coded now, without waiting for P6h | CLI-UAL-62; plan header |
 | R6 | 2026-11-12 | `ua-rs` is an audit unit of the pre-freeze audit | TODO item 7 |
 
 Standing rules this spec applies: [CLI-UAL-01](../../clients/ua-libraries.md#CLI-UAL-01) (clientkeys writes every vector row first),

@@ -54,6 +54,9 @@ Pay-meta ([CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)) and the relay fee ([C
 What each chain supports today, one row per chain (contract, node relay and index, `ua-rs` signing, `scaas-rpc` read and write,
 SDK, Zether, PQ, PQZ), against the owner's done rule of 2026-11-21: [chain-support.md](chain-support.md).
 
+The signature and key schemes of the UA kinds, by scheme, beside Sui's signature flags, Cellframe's DAP SDK and the native
+schemes of the other families: [key-schemes.md](key-schemes.md).
+
 Lane keys come from one 24-word BIP-39 mnemonic or a raw private key per lane (Pi Network overrides the SLIP-44
 `coin_type`)
 ([NODE-LANE-08](../node/submit-lanes.md#NODE-LANE-08)); `scaas-node addresses` prints every lane address to fund.

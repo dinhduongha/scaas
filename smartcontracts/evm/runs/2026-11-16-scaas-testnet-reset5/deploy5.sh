@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# SCaaS testnet reset 5, step deploy (owner 2026-11-16 "Ok, reset 5 before PR #18"; two deploy sets, owner 2026-11-16 "ok,
-# option 2, one chain, two deploy sets"): reset 4's deploy4.sh once per set, mldsa-on (MLDSA_PRECOMPILE=on, the shipped
+# SCaaS testnet reset 5, step deploy (owner 2026-11-16: reset 5 before PR #18; two deploy sets, owner 2026-11-16:
+# option 2, one chain, two deploy sets): reset 4's deploy4.sh once per set, mldsa-on (MLDSA_PRECOMPILE=on, the shipped
 # default: MldsaVerifier 0x0130 / 0x0131 / 0x0134 on the chain's precompiles) and mldsa-off (MLDSA_PRECOMPILE=off: the
 # ML-DSA kinds on the registry's expanded-key cache, the forge matrix's set), each its own DEPLOY_SALT and releases book;
 # deploy.sh evm (NET-EVM-11: Deploy.s.sol simulated, DeploySend.s.sol sends in batches of 16), every kind deploy.sh carries,

@@ -6,18 +6,17 @@
 after 3r merges. Recorded in `decisions.md` as [CTR-GOV-24](../../decisions.md#ctr-gov-24--kyc-bit-28-allowlist-and-denylist-lists-held-in-the-token-enabled-at-once)
 (owner: yes) with Change lines on the rules it moves (§11). The component docs move with the build (T11). **Fable review
 2026-11-11: approve with changes, no P0, 2 P1, 5 P2, 8 P3.** The owner let the controller decide the review's calls (2026-11-10:
-"tự động làm, không cần hỏi nữa", do it automatically, no need to ask again); every call is applied below, tagged (Fable P1-1 …,
+proceed automatically, without asking again); every call is applied below, tagged (Fable P1-1 …,
 controller call), and listed in §17. **Fable re-check 2026-11-11 at `9ed9c880`: approve with changes, one P2 (R-1), six P3**;
 the controller's calls under the same leave are applied and listed in §17 (R-1 … R-7).
 
-## 1. The rulings (owner, 2026-11-10, in chat)
+## 1. The rulings (owner, 2026-11-10)
 
-- **R1. The registry check becomes a new bit `KYC`; bits 8 and 9 become lists held in the token.** Verbatim: "OK, coi như thêm
-  bit KYC, sử dụng ComplianceRegistry. Còn ALLOWLIST / DENYLIST tương đương WHITELIST/BLACKLIST." (OK: add a KYC bit that uses
-  the `ComplianceRegistry`; `ALLOWLIST` / `DENYLIST` mean a whitelist / blacklist.) The owner's reason: a compliance registry
+- **R1. The registry check becomes a new bit `KYC`; bits 8 and 9 become lists held in the token.** A KYC bit is added that uses
+  the `ComplianceRegistry`; `ALLOWLIST` / `DENYLIST` mean a whitelist / blacklist. The owner's reason: a compliance registry
   per token is an extra deploy step, while a list held in the token is fast and easy to check.
 R2–R4 and R6 below are the controller's brief of 2026-11-10, which the owner approved as a design, with no words of his own;
-they are recorded as **controller calls** (Fable P2-5). R2's two-sidedness is that brief's reading of R1's "WHITELIST/BLACKLIST".
+they are recorded as **controller calls** (Fable P2-5). R2's two-sidedness is that brief's reading of R1's whitelist / blacklist.
 
 - **R2 (controller call). The lists.** `ALLOWLIST`: both parties of a transfer must be `ALLOWED`. `DENYLIST`: neither party may be `DENIED`. One
   `uint8` of flags per account in the regulated namespace. Contracts are listed like anyone else. The three bits are
@@ -175,18 +174,14 @@ debit is for; `SHIELD_POOL` moves only on the unhooked `_poolMove` (`ERC20MetaTx
 
 ## 5. Governance of the three bits (owner ruling 2026-11-10, final)
 
-### 5.1 The sequence (owner, in chat, the same day)
+### 5.1 The sequence (owner, the same day)
 
 The brief's first rule was "as every other bit: set at creation, lockable, one-way `disableFeature`". Then, in order:
-"3 bit bật tắt được." (the three bits can be switched on and off) and "Và có tác dụng ngay lập tức" (and at once); withdrawn:
-"Thôi, như những bit khác đi. còn có lockFeatures mà nhỉ?" (no, like the other bits; there is `lockedFeatures` after all); then
-"Như vậy không đúng với bit DENYLIST lắm, vì khởi đầu có thể tắt, rồi sau đó bật. Thôi, thêm enableFeature cho bit nayf." (that
-does not fit `DENYLIST`, which may start off and be switched on later; add `enableFeature` for it); then, final:
-"Thường, 3 bit này là tắt, trong quá trình vận hành thì bật. Nhưng ở đây lại cấm bật về sau?" (usually these three bits start off
-and are switched on during operation; yet here switching on later is forbidden?), "Có lẽ theo chiều ngược lại, không cho gọi
-disableFeature trên các bit này. Tức khi bật lên rồi thì không tắt. Ngược với các bit khác, tắt rồi thì không bật." (rather the
-reverse: no `disableFeature` on these bits; once on, never off; the opposite of the other bits, which once off are never on), and
-on keeping `KYC`'s escape from a dead or compromised registry: "OK, KYC sẽ như thế." (OK, `KYC` stays like that).
+the three bits can be switched on and off, at once; withdrawn: like the other bits, since `lockedFeatures` exists; then: that
+does not fit `DENYLIST`, which may start off and be switched on later, so `enableFeature` is added for it; then, final: these
+three bits usually start off and are switched on during operation, so switching on later is not forbidden; the reverse holds:
+no `disableFeature` on these bits; once on, never off; the opposite of the other bits, which once off are never on; and
+`KYC` keeps its escape from a dead or compromised registry.
 
 ### 5.2 The rule
 
@@ -311,7 +306,7 @@ never on the generic allow-list), so no token row moves.
 - **While the bit is off** (before its `enableFeature`): a role on 8 or 9 may be granted when the bit is not locked off
   (`_check`'s `RoleWithoutFeature` exempts `ENABLEABLE & ~lockedFeatures`), and a holder edits the list (the list ops check the
   role as `GovernanceUse.use` does, without its feature test: `WHOLE` passes, `LIMITED` runs `useLimited(bit, subject, 0)`, none is
-  `MissingRole`). So the usual flow, in the owner's words "usually off, switched on during operation", is: grant a lister, write
+  `MissingRole`). So the usual flow, usually off and switched on during operation (owner), is: grant a lister, write
   the list, then `enableFeature`, with no window where every transfer stops.
 - **A token created with `ALLOWLIST` on and an initial supply** (kind 8, fixed supply included, the bit locked on included):
   init lists `initialHolder` (`ALLOWED`, `AllowedSet(pad(initialHolder), 0, true)`) before the mint to it (`NormalTokenCore.sol:45`

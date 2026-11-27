@@ -1,4 +1,4 @@
-# SCaaS testnet (scaas-testnet) reset 5, 2026-11-16 (owner 2026-11-16 "Ok, reset 5 before PR #18"). Closed 2026-11-17 (wraplimits p6 the last, 15:41-15:47 local). Branch reset5 from ua-mtx-merge
+# SCaaS testnet (scaas-testnet) reset 5, 2026-11-16 (owner 2026-11-16: reset 5 before PR #18). Closed 2026-11-17 (wraplimits p6 the last, 15:41-15:47 local). Branch reset5 from ua-mtx-merge
 # f13d322e2 (tree == 3zh-core fefedb3af). UNAUDITED. Full output in git-ignored .log files (runs/2026-11-16-scaas-testnet-reset5/).
 # Mainnet 22776 not touched.
 step | commit | rc | counts

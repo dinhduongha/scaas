@@ -224,8 +224,8 @@ sequenceDiagram
 ## 5. Owner answers (2026-10-26) and what is still open
 
 1. **Name and place: controller's choice** — `MtxRelayFee` in `smartcontracts/evm/src/metatx/` (it sits next to the
-   token's mtx path it calls; no application owns it). **Deployment** (owner question 2026-10-26, "in OpenFactory,
-   like UARegistry and the verifiers?"): `OpenFactory` deploys neither of those. `script/DeployBase.sol` deploys
+   token's mtx path it calls; no application owns it). **Deployment** (owner question 2026-10-26: in OpenFactory,
+   like UARegistry and the verifiers?): `OpenFactory` deploys neither of those. `script/DeployBase.sol` deploys
    `UARegistry` and the UA / Zether / PQZ verifiers through the deterministic CREATE2 deployer (`0x4e59…`,
    `DEPLOY_SALT`), and the factory only names the registry in the env it publishes (`IFactoryToken.Env.registry`,
    `deps`). The router goes the same way: `DeployBase`, CREATE2, no constructor argument, no owner, so it has **the same

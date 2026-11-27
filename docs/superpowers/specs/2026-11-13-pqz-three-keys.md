@@ -11,7 +11,7 @@ ids and `decisions.md` entries. Background: `q1-design.md`, `triage.md` §3 (fin
 rules in its own round.
 
 **Build-round ids** (step 1, 2026-11-13; normative text in the component docs, entries in `decisions.md` with the rulings of
-§0 verbatim): K3-1 and K3-1b → [CTR-PQZ-37](../../contracts/pq-zero-knowledge.md#CTR-PQZ-37); K3-2 and K3-6b →
+§0 in full): K3-1 and K3-1b → [CTR-PQZ-37](../../contracts/pq-zero-knowledge.md#CTR-PQZ-37); K3-2 and K3-6b →
 [CLI-SGN-50](../../clients/signers-clientkeys.md#CLI-SGN-50); K3-3 → [CTR-UA-43](../../contracts/accounts.md#CTR-UA-43);
 K3-4 and K3-4b → [CTR-PQZ-38](../../contracts/pq-zero-knowledge.md#CTR-PQZ-38); K3-5 →
 [CTR-PQZ-39](../../contracts/pq-zero-knowledge.md#CTR-PQZ-39); K3-6 → [CTR-PQZ-40](../../contracts/pq-zero-knowledge.md#CTR-PQZ-40);
@@ -20,31 +20,30 @@ K3-7 → [CLI-SGN-51](../../clients/signers-clientkeys.md#CLI-SGN-51); K3-8 →
 [NODE-JOB-28](../../node/job-api.md#NODE-JOB-28); §8 and §9 as Changes of the rules they name. The reviews cited above
 and `q1-design.md` / `triage.md` are review files kept outside the repository.
 
-## 0. Owner rulings this spec implements (2026-11-13, verbatim)
+## 0. Owner rulings this spec implements (2026-11-13)
 
-1. "Đồng ý mô hình 3 khóa." (the three-key model, §1).
-2. Own-key tokens: "OFFCHAIN khoá riêng: ... Chấp nhận việc này, vì token này thường có verifier của họ. Rủi ro chỉ
-   nằm ở TOKEN này mà thôi."
-3. "KEM và ARCH-POS-13: Coi là nằm ngoài" (§9.1).
-4. "Biện pháp tạm thời: Chưa cần sửa factory, vì kiểu gì cũng phải đổi." (§11).
+1. The three-key model is agreed (§1).
+2. Own-key tokens: an `OFFCHAIN` token with its own key is accepted, since such a token usually has its own verifier; the risk
+   stays with that token alone.
+3. The KEM is outside ARCH-POS-13 (§9.1).
+4. Interim measure: the factory needs no change now, since it has to change anyway (§11).
 5. Rejected by the owner: removing a bad credit after the fact by homomorphic subtraction (too costly with many bad
    credits). Bad credits are skipped by mark (§7).
-6. Stored `R_REG` proofs for class-2 and class-3 keys: "Lưu". They stay in state; CTR-PQZ-30 is unchanged; the
+6. Stored `R_REG` proofs for class-2 and class-3 keys: stored. They stay in state; CTR-PQZ-30 is unchanged; the
    cost of about 71–92 M per key record stands (§12).
-7. The `PRECOMPILE` `proofSystemId` moves in the same round and carries T-35 / T-36: "Có" (§4, K3-4b).
-8. Switching a `proofSystemId`: "reset chain cho tới mainnet" (by chain reset only, until mainnet 22776; §4, §11).
-9. "1-4 theo đề xuất." on the four questions then open: an `msig` is refused on shared-key tokens at first (K3-3);
+7. The `PRECOMPILE` `proofSystemId` moves in the same round and carries T-35 / T-36: yes (§4, K3-4b).
+8. Switching a `proofSystemId`: by chain reset only, until mainnet 22776 (§4, §11).
+9. The four questions then open, 1–4 as proposed: an `msig` is refused on shared-key tokens at first (K3-3);
    op 7 is unsupported on shared-key tokens at first, the later form being one group per leg (K3-5); the shared
    key is bound to `chainUid`, one per holder per chain (K3-2, K3-3); `ROLL_MAX` for the signed rollover is measured
    in the build first and then brought to the owner (K3-8).
-10. "Q8, Q9 đồng ý theo đề xuất." Q8: the shared-key record carries its own opening KEM key (same hybrid scheme, own
+10. Q8 and Q9 as proposed. Q8: the shared-key record carries its own opening KEM key (same hybrid scheme, own
     derivation label, bound to `chainUid`, rotating with the shared key's version); openings are sealed to it, not to
     the chat KEM key (K3-3, K3-6, K3-6b). Q9: the stated guarantee of `auditorMode = FULL` on shared-key tokens is
     that an honest recipient cannot spend a credit the auditor cannot read; two colluding modified wallets can leave
     a leg `unreadable` with both UAs named, which is a compliance event for the issuer, with no contract action in
     this round (K3-7).
-11. "cho token OFFCHAIN khoá riêng tuỳ chọn dùng sealed opening. thêm phần matrix cho cả ba loại và cho tổ hợp khoá
-    riêng có opening." An own-key `OFFCHAIN` token may be created with the sealed opening (K3-1, K3-1b); the on-chain
+11. An own-key `OFFCHAIN` token may be created with the sealed opening (K3-1, K3-1b); the on-chain
     matrix covers the three classes and own key with opening (§15.2).
 
 ## 1. The model
@@ -142,7 +141,7 @@ nothing deployed is upgraded), beside the unchanged class-1 records: `(ua, scope
   (the registry's id, PQZL only), never the token's id: `0x0142` verifies them where the precompile exists, and a
   class-2 or class-3 verifier checks them under `PQZL_ID` (review S-6). Eligibility and `current` per `(ua, scope)` exactly as CTR-UA-42;
   on an `OFFCHAIN` token CTR-PQZ-30 applies unchanged (length only on chain; the verifier checks the stored
-  `pqzPop` bytes off chain). The proof bytes are stored for both classes (owner: "Lưu"); cost in §12.
+  `pqzPop` bytes off chain). The proof bytes are stored for both classes (owner ruling 6); cost in §12.
 - **Opening KEM key** (owner 2026-11-13, rulings 10 and 11). A scoped record may carry one more named field,
   `KemKey openKem {uint8 scheme; bytes mlkemEk; bytes32 x25519}` (CTR-UA-32's scheme 1 and length checks, 1,601 B
   stored), signed as `openKemHash`. **It is present if and only if the scope's tokens have the opening on**: always
@@ -211,7 +210,7 @@ class 2. Op 1 with the opening on:
   accepts `R_TXS`, `R_BURN` / refresh and the one disclosure relation `R_DS` (§8); it refuses `R_TX`, `R_TXM`, `R_REG`
   (K3-3) and `R_DR`. `PQZL_ID` refuses `R_TXS`. The new proof must fit `MAX_PROOF`
   98,304 B and statement + proof `MAX_INPUT` (524,288 B): to be measured at four sets.
-- <a id="K3-4b"></a>**K3-4b — The existing ids move in the same round** (owner 2026-11-13: "Có"). T-36 (the
+- <a id="K3-4b"></a>**K3-4b — The existing ids move in the same round** (owner 2026-11-13). T-36 (the
   disclosure `kind` low byte tied to the form: decoder, `pqz_kat.py`, vectors) is in the shared statement codec, so
   `PQZL_ID` gets its next label (`…/v6`, controller naming) and `PQZL_SPLIT_ID` is born with it. T-35 (one-byte role
   tags between Merkle nodes and transcript absorbs) is in PQZH's Ligero code (`pqzh/ligero` `merkle.rs`,
@@ -219,7 +218,7 @@ class 2. Op 1 with the opening on:
   retired labels join `gen_set.py` `RETIRED`.
   Opening-off tokens (class 1, class 3 without the opening) therefore run on the new `PQZL_ID`, and the precompile (Nethermind plugin, self-test and probe
   constants in `PqzSet.sol`) is rebuilt for it. One full gate at four sets covers both ids.
-- **Roll-out of ids** (owner 2026-11-13: "reset chain cho tới mainnet"): until mainnet 22776 a `proofSystemId` is
+- **Roll-out of ids** (owner 2026-11-13): until mainnet 22776 a `proofSystemId` is
   switched by chain reset only. No token, registry or precompile serves an old and a new id side by side, and no
   migration path is built; the testnet stack is reset and redeployed by its controller on the new ids.
 - Burn, refresh, unshield, unwrap: unchanged statements under the new id; fresh randomness, no opening (the output
@@ -425,7 +424,7 @@ already means something else in `signers-clientkeys.md`. The numbers are this sp
 Rule sentence "No exception, no opt-in." becomes "No exception and no opt-in other than the Change of 2026-11-13 for
 key class `offchain-token`." Three Changes are appended:
 
-> **Change (owner 2026-11-13, "KEM và ARCH-POS-13: Coi là nằm ngoài").** The rule is about decryption with a PQZ or a
+> **Change (owner 2026-11-13: the KEM is outside ARCH-POS-13).** The rule is about decryption with a PQZ or a
 > Zether key. A decapsulation of the hybrid KEM scheme of CTR-UA-32 (ML-KEM-1024 + X25519, IND-CCA by its combiner), under a
 > chat key or an opening key, and the
 > one-shot AEAD keyed by it are outside the rule. For the sealed opening of a shared-key token the reason is visible:
@@ -437,8 +436,8 @@ key class `offchain-token`." Three Changes are appended:
 > formed": the token's verifier, not a proof, admitted the ciphertext. On a shared-key `OFFCHAIN` token the check of
 > the sealed opening (K3-7) replaces it; the reading layer supplies the chain location, the wallet checks the opening.
 
-> **Change (owner 2026-11-13: "OFFCHAIN khoá riêng: ... Chấp nhận việc này, vì token này thường có verifier của họ.
-> Rủi ro chỉ nằm ở TOKEN này mà thôi.").** Excepted is exactly one case: a PQZ key of class `offchain-token`
+> **Change (owner 2026-11-13: an own-key `OFFCHAIN` token is accepted, since it usually has its own verifier;
+> the risk stays with that token alone).** Excepted is exactly one case: a PQZ key of class `offchain-token`
 > derived for one `OFFCHAIN` token created with `pqzOwnKey = true` **and `pqzOpening = false`**, used on that token
 > alone. An own-key token created with the sealed opening is not excepted: its key stays under the rule, and its
 > wallet checks openings as on a shared-key token. On that token a
@@ -504,7 +503,7 @@ key class `offchain-token`." Three Changes are appended:
 
 ## 11. Interim and migration
 
-Owner 2026-11-13: "Biện pháp tạm thời: Chưa cần sửa factory, vì kiểu gì cũng phải đổi." No interim factory refusal.
+Owner 2026-11-13: the factory needs no interim change, since it has to change anyway. No interim factory refusal.
 The factory change (K3-1), the CTR-PQZ-27 / T27 correction and the ARCH-POS-13 Changes all land in this spec's build
 round. No migration: every chain is test-only; existing `OFFCHAIN` test tokens (registry key) are abandoned at the
 next reset, which is also how the new ids arrive (K3-4b: by chain reset only, until mainnet 22776). Until then T-01
@@ -529,7 +528,7 @@ within the chain's limit (EIP-8037).
 | key record + stored `R_REG` proof | once per UA: 84.7 / 91.4 / 98.1 / 106.4 M measured (`accounts.md` gas-ua8) | class 2 once per UA per chain, class 3 with the opening **per (holder, token)**: ≈ 73 / 80 / 87 / 95 M (key 25.2 / 28.4 / 31.5 / 34.7 M + the opening KEM key 1,601 B ≈ 2.5 M + `storePqzPop` 45.6 / 49.1 / 52.6 / 57.5 M measured) | ≈ 71 / 78 / 84 / 92 M (no opening KEM key) **per (holder, token)** |
 
 The registration row is larger than the ≈ 20 M first quoted for it: the proof bytes are stored too (CTR-PQZ-30),
-and the owner ruled that they stay ("Lưu"), so the figure stands.
+and the owner ruled that they stay, so the figure stands.
 Holder work per credit on an opening token: one decapsulation, one encryption, one or two encapsulations.
 
 Not in the table, to be measured: the larger `R_TXS` proof in calldata (two more witness vectors); the auditor-off

@@ -1,6 +1,6 @@
 # Rust PQZL roll-out on chain 7622: report (2026-10-19)
 
-**Outcome: stopped before going live** (owner ruling "Dừng và rollback": PQZL Fiat–Shamir P0 finding; the fix changes
+**Outcome: stopped before going live** (owner ruling to stop and roll back: PQZL Fiat–Shamir P0 finding; the fix changes
 the `proofSystemId`). **Live 7622 was never touched**: there was no stop, backup or edit, and `runs/2026-10-19-rust-live.sh`
 was never run. Checked afterwards: `mba_chain_node_nethermind` runs `scaas/nethermind-pqz:1.39.0-pqz2` (up 44 h), the
 compose file names pqz2, the live `engine.Pqz` equals the committed `chain/engine-pqz.json` (two schedules), and the

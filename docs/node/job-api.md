@@ -38,7 +38,7 @@ plus code-specific fields (the gateway's contract is
 <a id="namespaces"></a><a id="NODE-JOB-03"></a>**NODE-JOB-03** — **Namespaces are the node's tenant unit**
 (`[a-z0-9-]{3,40}`; names starting `~` are reserved: `~gateway`, `~mesh`, `~dex`, `~node` — the lane's own jobs, the
 [NODE-JOB-29](#NODE-JOB-29) cache parts —, and `~lane` — a booking label only, for gap-fillers of adopted nonces, never a job namespace). A namespace has granted chains and a token subset pushed by
-the client ([NODE-JOB-12](#NODE-JOB-12)). The node has no notion of company or legal entity (owner: "the node doesn't know companies"): a client maps its own
+the client ([NODE-JOB-12](#NODE-JOB-12)). The node has no notion of company or legal entity (owner: the node doesn't know companies): a client maps its own
 tenants to a node endpoint + namespace credential. A namespace shared by several of a client's entities sees their
 combined feed; the client routes by `origin`.
 
@@ -242,8 +242,8 @@ Payload by kind:
 ### 5.2 Meta-transaction data
 
 <a id="selector-table"></a><a id="NODE-JOB-20"></a>**NODE-JOB-20** — **The node never reads client hex: it builds the call.**
-Status: **BUILT** (typed-signing N1, owner Option B, 2026-10-31: "explicit named JSON fields per operation instead of opaque
-hex blobs; the node builds the XDR / calldata"). On EVM and Hedera a job names an entry of the node's table and its fields
+Status: **BUILT** (typed-signing N1, owner Option B, 2026-10-31: explicit named JSON fields per operation instead of opaque
+hex blobs; the node builds the XDR / calldata). On EVM and Hedera a job names an entry of the node's table and its fields
 ([named entries](#named-entries)); the guard allows a selector per contract kind, and nothing else
 ([call table](#call-table)). `data` / `calldata` as a field of a job, an op, a `metatx` or `m` body, a `call: {calldata}` object, a hex string as `op` or `op.call`, or
 `struct = call` is refused by name on every job kind and at the gateway: `HEX_DATA_REFUSED`. A `bytes` field an entry declares

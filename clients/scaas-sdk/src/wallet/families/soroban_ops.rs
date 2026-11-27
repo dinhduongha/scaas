@@ -788,7 +788,7 @@ fn priced(
         Simulation::Restore => return Err(refused("archived entries need a restore first".into())),
         Simulation::Ok { data, auth, .. } => (data, auth),
     };
-    // the subject's one entry: its Address credentials, or (owner 2026-11-22, "accept SourceAccount when self-paying") the
+    // the subject's one entry: its Address credentials, or (owner 2026-11-22, SourceAccount accepted when self-paying) the
     // source account's own when the transaction's source is the subject itself
     use scaas_rpc::soroban::{auth_credential, AuthCredential};
     let subject = account_holder(&c.from());

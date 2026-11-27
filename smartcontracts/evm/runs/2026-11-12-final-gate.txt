@@ -1,5 +1,5 @@
 The short final gate of ua-mtx-merge at 7c85c2a3 (merge of the whole-branch review fix rounds: clients 52359c51, verifier
-508e4488, node 69139209, contracts 6b4e03ab, research note 87a9b8bd), owner 2026-11-11 "chạy bản rút gọn". Steps by
+508e4488, node 69139209, contracts 6b4e03ab, research note 87a9b8bd), owner 2026-11-11: run the short version. Steps by
 runs/2026-11-12-ua-mtx-merge-final-gate/gates.sh (a copy of runs/2026-11-11-stacked-gate/gates.sh: forge at -j 1, this run dir,
 GATE_LOCK for a second lane); full output in the git-ignored <step>.log there, progress lines in progress.log. Foundry 1.8.5,
 solc 0.8.37, Amsterdam, default PQZ set n2304-kmax4096; every heavy run through scripts/capped (CAPPED_SLOTS=3, 4 GB; the node

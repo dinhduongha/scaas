@@ -1,4 +1,4 @@
-# SCaaS testnet (7622) reset 1, owner 2026-11-04 ("Làm reset: mục 2, reset lần 1"); script runs/2026-11-04-testnet-reset1.sh; throwaway first: runs/2026-11-04-testnet-reset1-throwaway.txt
+# SCaaS testnet (7622) reset 1, owner 2026-11-04 (reset now: item 2, reset 1); script runs/2026-11-04-testnet-reset1.sh; throwaway first: runs/2026-11-04-testnet-reset1-throwaway.txt
 # pre-state 2026-11-04T12:46:04Z: live files unchanged since the throwaway run read genesis.json (sha256 -c ok)
 $ watch.sh mba_chain_sealer / mba_chain_rpc (old chain, pqz6)
 head 69804 age 3s gasLimit 200,000,000 gasUsed 0 hash 0x80d57f274cd74163c0506023eebc0d72da175dd6d396078c99925bc49c9aa2f1

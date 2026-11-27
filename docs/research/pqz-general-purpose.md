@@ -2,8 +2,8 @@
 
 # PQZ for arbitrary circuits: what general-purpose post-quantum zero knowledge would take (estimate, no code)
 
-Written 2026-10-15 at the owner's question: "if PQZ were made general-purpose, like a zkEVM, what would it take and
-cost?" PQZ (Post-Quantum Zero-knowledge, decisions.md CTR-PQZ-01) today proves a **fixed set of relations**: each
+Written 2026-10-15 at the owner's question: if PQZ were made general-purpose, like a zkEVM, what would it take and
+cost? PQZ (Post-Quantum Zero-knowledge, decisions.md CTR-PQZ-01) today proves a **fixed set of relations**: each
 operation (`R_REG`, `R_TX`, `R_TX0`, `R_BURN`, `R_DS`, `R_DR`, and the multi-recipient `R_TXM` in progress) has its own
 hand-written constraint system. "General-purpose" means proving **any program or circuit** a user supplies. Nothing
 here is built or measured; every figure is an estimate. Tags: **[measured]** from our runs, **[estimate]** /
@@ -45,7 +45,7 @@ module lattices, but has no natural front-end for arbitrary circuits [inference]
 5. **Tooling and assurance.** Developer SDK (compile, prove in wasm32 / native), test vectors per circuit, fuzzing of
    the front-end and of the generic verifier, a bigger audit scope (the compiler is now part of the trusted base).
 
-**One precompile for every circuit (owner question 2026-10-15: "does each circuit need its own precompile?" — no).**
+**One precompile for every circuit (owner question 2026-10-15: does each circuit need its own precompile? No).**
 Circuits are **data, not node code**:
 
 1. *Register* a circuit once, by a transaction: the compiled constraint system goes into an on-chain registry; its id

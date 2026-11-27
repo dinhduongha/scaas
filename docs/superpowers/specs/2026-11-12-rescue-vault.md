@@ -4,28 +4,22 @@
 `decisions.md` as a Change of [CTR-GOV-25](../../decisions.md#CTR-GOV-25) (owner: yes). Code `smartcontracts/evm/src/governance/RescueVault.sol`,
 tests `smartcontracts/evm/test/governance/RescueVault.t.sol`, deploy `smartcontracts/evm/script/DeployRescueVault.s.sol`.
 
-## 1. Owner rulings (2026-11-12, in chat, relayed by the controller)
+## 1. Owner rulings (2026-11-12)
 
-1. On how to make the dev rescue destination's key replaceable: "Cách 2. Tại sao không dùng Deployer công cộng như hiện dùng, mà
-   phải dùng EOA deployer?" (option 2; why not use the public deployer we use today instead of an EOA deployer?), then "Dùng địa
-   chỉ public dev vừa rồi." (use the dev's public address just given) and "OK, làm vậy đi." (OK, do that).
-2. On withdraw: "RescueVault hàm withdraw ai gọi cũng được. Nếu chủ gọi thì về địa chỉ to, nếu người khác gọi thì về địa chỉ của
-   chủ." (anyone may call withdraw; if the owner calls, the funds go to `to`; if someone else calls, they go to the owner's address),
-   then "chủ gọi, nhưng to = 0 thì cũng về địa chỉ chủ." (the owner calls with `to` 0: also to the owner's address), and "tham số
-   to để cuối cùng" (`to` is the last parameter). Ruling 5 renames the receiving "owner" the `rescuer`.
+1. On how to make the dev rescue destination's key replaceable: option 2, deployed through the public deployer in use today
+   rather than an EOA deployer, with the dev's public address given that day.
+2. On withdraw: anyone may call withdraw; if the owner calls, the funds go to `to`; if someone else calls, they go to the owner's
+   address; the owner calling with `to` 0 also pays the owner's address; `to` is the last parameter. Ruling 5 renames the receiving "owner" the `rescuer`.
 3. After review of the residuals:
-   - "đổi chủ chỉ bằng chữ ký => OK." (the owner changes only by signature: OK): every admin operation is signed, none direct (§2.2).
-   - "Khi đổi chủ, vault không kiểm chủ mới => OK." (at an owner change the vault does not check the new owner: OK): no code or
+   - The owner changes only by signature: every admin operation is signed, none direct (§2.2).
+   - At an owner change the vault does not check the new owner: no code or
      designator check of the new value (§2.2).
-   - "mỗi lần đổi chủ phải áp ngay lên mọi chain => Không cần." (each owner change must be applied at once on every chain: not
-     needed): an admin operation is caught up on a chain when needed, not everywhere at once (§5); the residual this leaves (R1,
+   - An owner change need not be applied at once on every chain: an admin operation is caught up on a chain when needed, not everywhere at once (§5); the residual this leaves (R1,
      R2) is accepted by the owner.
-4. Two roles: "RescueVault: Có nên tách address nhận tài sản riêng, UA làm admin riêng không (không rút về UA)? UA có thể set
-   rescueTo sang địa chỉ mới .v.v." (should the address that receives the assets be separate, with a UA as a separate admin — not
-   withdrawing to the UA? The UA can set rescueTo to a new address, etc.), then "withdraw(token, amount, to) => vẫn cho phép
-   rescuer gọi, admin chỉ quản trị ai là rescuer thôi." (withdraw(token, amount, to): still lets the rescuer call; the admin only
-   administers who the rescuer is).
-5. The first admin: "admin: 0xAb92b0E9bD2E18F7003c30dAFE93Ef9bc3e1248C" (EIP-55 checksum verified; it replaces an address given
+4. Two roles: the address that receives the assets is separate from a UA that is a separate admin (nothing is withdrawn to the
+   UA; the UA can set the rescue address to a new one); `withdraw(token, amount, to)` is still called by the rescuer; the admin
+   only administers who the rescuer is.
+5. The first admin: `0xAb92b0E9bD2E18F7003c30dAFE93Ef9bc3e1248C` (EIP-55 checksum verified; it replaces an address given
    earlier the same day), as a native UA. The first
    rescuer stays the dev EOA `0x0389f77E846ff687d44db57bcC9DCB55dd6f4131`.
 6. Controller calls on these rulings: one admin, not k-of-n; the admin is a native UA only (§2.2, a known limit); one shared `seq`
@@ -97,7 +91,7 @@ admin operation of both kinds in one log.
 
 The domain has no `chainId` and no `salt` on purpose: the same signed operation is valid on the vault on every chain (they share
 one address), which is how a chain catches up (§5). `seq` makes each one usable exactly once per vault. There is no direct admin
-call (owner: "đổi chủ chỉ bằng chữ ký => OK."): an unsigned change could not be replayed on the other chains, and they would drift
+call (owner: the owner changes only by signature): an unsigned change could not be replayed on the other chains, and they would drift
 apart. No deadline: an operation must still apply on a chain that gets its vault years later.
 
 **The admin is a native UA only.** `admin` is a `bytes32` UA, restricted to the native space (`UAKinds.inNativeSpace`: the high 96
@@ -106,7 +100,7 @@ chain's `UARegistry` to verify, and the registry's address differs per chain (it
 chain-neutral vault cannot trust. **Known limit:** a PQ admin later needs a trusted per-chain registry lookup, so a new vault.
 Neither the native-space check nor any other check reads chain state, so it cannot split the log.
 
-**No check of the new value** (owner: "Khi đổi chủ, vault không kiểm chủ mới => OK."). Neither the constructor nor an admin
+**No check of the new value** (owner: at an owner change the vault does not check the new owner). Neither the constructor nor an admin
 operation reads the code of the new rescuer or admin: a check of code is chain-local, so an operation could pass on one chain and
 fail on another, and the log would fork. The vault never runs or asks anyone's code (ECDSA by the admin's own key; no ERC-1271),
 so a delegate gains nothing; only the rescuer's direct `withdraw` to a `to` refuses a designator caller (§2.1). A native UA whose
@@ -157,7 +151,7 @@ moves its code and metadata hash, so CREATE2 addresses and code-hash pins move, 
 - **A compromised rescuer key** loses what the vault holds on chains where it acts before the admin replaces it; the admin key,
   kept apart, replaces the rescuer and the constant does not move.
 - **R1 — an old admin key still rules a chain not yet caught up (accepted by the owner).** Admin operations are not applied on
-  every chain at once (owner: "mỗi lần đổi chủ phải áp ngay lên mọi chain => Không cần."): on a chain where the vault is not yet
+  every chain at once (owner: not needed): on a chain where the vault is not yet
   deployed, or not yet caught up, the admin there is an older key. Whoever holds that key can sign a different operation for the
   next `seq` there and take that chain's vault (equivocation). The init code fixes the first admin, so the contract cannot close
   this. The owner accepts it: a chain is caught up when needed (§5), and the compromise of a retired admin key is the loss of the
@@ -186,8 +180,8 @@ unless they equal the log's last `seq` (0 for `[]`), last `newRescuer` and last 
 row): a chain whose vault took an operation outside the log (R1, R3) fails instead of reading as caught up. Anyone may
 run it; it needs no key of the vault, only gas. A new chain catches up the same way: deploy, then replay the log.
 
-**When.** An admin operation is not applied on every chain at once (owner 2026-11-12: "mỗi lần đổi chủ phải áp ngay lên mọi chain
-=> Không cần."). A chain is caught up when needed, for example before a withdrawal there, by running the script against it; the
+**When.** An admin operation is not applied on every chain at once (owner 2026-11-12: not
+needed). A chain is caught up when needed, for example before a withdrawal there, by running the script against it; the
 log keeps every operation, so a chain left behind for years catches up in one run. Until then R1 and R2 (§4) hold on that chain,
 accepted by the owner.
 

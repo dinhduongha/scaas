@@ -198,8 +198,8 @@ pub fn membership_digest(ua: &[u8; 32], member: &[u8; 32]) -> [u8; 32] {
     typed(&keccak(&[&portable_typehash("UAMembership"), ua, member]))
 }
 
-// --- `updateMsig` (CTR-UA-44, TODO 3ze, owner 2026-11-14: "Không, tắt member cũ, thành viên mới cho phép thêm vào. ua chỉ tính
-// fix 1 lần khi đăng ký."; "Và vì đi theo chain, thế nên version tiếp theo sẽ là version+1 => không cần nhảy.") ---
+// --- `updateMsig` (CTR-UA-44, TODO 3ze, owner 2026-11-14: old members disabled, new members may be added, the UA id
+// fixed once at registration; the version follows the chain, so the next one is version + 1, no jump) ---
 
 /// One `msig` structure update on one registry (`chain_uid`, `registry`): `structure` every slot of the target (stored slots keep
 /// `kind` and `id`, new members appended), `enabled` bit i = slot i (a big-endian uint256), `version` the stored one + 1.

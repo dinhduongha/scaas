@@ -5,8 +5,8 @@ import {IPqGroupTree} from "./IPqGroupTree.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
 
-/// @title A group's ratchet tree, for any contract that keeps one (owner 2026-11-23, CTR-CHAT-26: the two layers; and "or other
-///        systems that use a tree"): RFC 9420's array layout and tree hash over registry KEM keys, the key admission check of
+/// @title A group's ratchet tree, for any contract that keeps one (owner 2026-11-23, CTR-CHAT-26: the two layers; also for other
+///        systems that use a tree): RFC 9420's array layout and tree hash over registry KEM keys, the key admission check of
 ///        scheme 1, the live tree and the no-return sets (R16) of each group, in an ERC-7201 namespace of the inheritor.
 /// @notice App-agnostic: no record type, no domain, no error of its own. The inheritor fixes, by the hooks below, the namespace
 ///         slot (`_treeSlot`: ERC-7201 of its own namespace id followed by `.tree`, so two apps whose ids differ never share

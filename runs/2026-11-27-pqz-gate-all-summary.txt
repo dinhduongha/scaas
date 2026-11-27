@@ -1,0 +1,85 @@
+# pqz-core full gate on CI, all four sets: PASS (2026-11-27)
+# workflow pqz-gate.yml (ARCH-POS-26), run https://github.com/dinhduongha/scaas/actions/runs/45938208449
+# branch pqz-gate/2026-11-27-b = dev 86bce90ec (the RustCrypto next generation + chain id 22779 / 22777 + the vendor move);
+# later dev commits up to this one change no pqz-core path. Two parts per set (a: kat..diff, b: fnv..fuzz), one runner each.
+# The earlier run 45930024184 was cancelled (clippy missing on the runner, a workflow fault fixed in 86bce90ec).
+
+set n2048-kmax1024: PASS
+
+tree n2048-kmax1024-3e03bab6a24f60c9, commit 86bce90, 2 part(s)
+
+step | commit | rc | time | parts
+--- | --- | --- | --- | ---
+kat | 86bce90 | 0 | 0h0m21s | -
+tbox | 86bce90 | 0 | 0h1m44s | -
+sv | 86bce90 | 0 | 0h3m57s | -
+ct | 86bce90 | 0 | 0h28m58s | -
+ub | 86bce90 | 0 | 0h1m4s | -
+diff | 86bce90 | 0 | 1h8m1s | 3 ok
+fnv | 86bce90 | 0 | 0h5m40s | 3 ok
+vectors | 86bce90 | 0 | 0h8m10s | 6 ok
+ffi | 86bce90 | 0 | 0h6m14s | 5 ok
+rust | 86bce90 | 0 | 0h28m27s | 22 ok
+cargo | 86bce90 | 0 | 0h2m42s | 2 ok
+xcheck | 86bce90 | 0 | 0h1m8s | 2 ok
+fuzz | 86bce90 | 0 | 0h5m45s | 4 ok
+
+set n2304-kmax4096: PASS
+
+tree n2304-kmax4096-3e03bab6a24f60c9, commit 86bce90, 2 part(s)
+
+step | commit | rc | time | parts
+--- | --- | --- | --- | ---
+kat | 86bce90 | 0 | 0h0m15s | -
+tbox | 86bce90 | 0 | 0h1m23s | -
+sv | 86bce90 | 0 | 0h4m28s | -
+ct | 86bce90 | 0 | 0h26m6s | -
+ub | 86bce90 | 0 | 0h0m49s | -
+diff | 86bce90 | 0 | 1h18m40s | 3 ok
+fnv | 86bce90 | 0 | 0h9m57s | 3 ok
+vectors | 86bce90 | 0 | 0h15m30s | 6 ok
+ffi | 86bce90 | 0 | 0h11m5s | 5 ok
+rust | 86bce90 | 0 | 0h53m48s | 22 ok
+cargo | 86bce90 | 0 | 0h5m22s | 2 ok
+xcheck | 86bce90 | 0 | 0h0m19s | 1 ok
+fuzz | 86bce90 | 0 | 0h7m6s | 4 ok
+
+set n2560-kmax16384: PASS
+
+tree n2560-kmax16384-3e03bab6a24f60c9, commit 86bce90, 2 part(s)
+
+step | commit | rc | time | parts
+--- | --- | --- | --- | ---
+kat | 86bce90 | 0 | 0h0m20s | -
+tbox | 86bce90 | 0 | 0h1m17s | -
+sv | 86bce90 | 0 | 0h4m5s | -
+ct | 86bce90 | 0 | 0h24m20s | -
+ub | 86bce90 | 0 | 0h0m44s | -
+diff | 86bce90 | 0 | 1h24m49s | 3 ok
+fnv | 86bce90 | 0 | 0h7m46s | 3 ok
+vectors | 86bce90 | 0 | 0h15m17s | 6 ok
+ffi | 86bce90 | 0 | 0h8m33s | 5 ok
+rust | 86bce90 | 0 | 0h40m37s | 22 ok
+cargo | 86bce90 | 0 | 0h3m20s | 2 ok
+xcheck | 86bce90 | 0 | 0h0m13s | 1 ok
+fuzz | 86bce90 | 0 | 0h6m14s | 4 ok
+
+set n2816-kmax65536: PASS
+
+tree n2816-kmax65536-3e03bab6a24f60c9, commit 86bce90, 2 part(s)
+
+step | commit | rc | time | parts
+--- | --- | --- | --- | ---
+kat | 86bce90 | 0 | 0h0m25s | -
+tbox | 86bce90 | 0 | 0h1m59s | -
+sv | 86bce90 | 0 | 0h6m4s | -
+ct | 86bce90 | 0 | 0h46m7s | -
+ub | 86bce90 | 0 | 0h1m7s | -
+diff | 86bce90 | 0 | 1h58m58s | 3 ok
+fnv | 86bce90 | 0 | 0h17m20s | 4 ok
+vectors | 86bce90 | 0 | 0h33m14s | 6 ok
+ffi | 86bce90 | 0 | 0h9m2s | 5 ok
+rust | 86bce90 | 0 | 0h58m46s | 22 ok
+cargo | 86bce90 | 0 | 0h0m2s | 1 ok
+xcheck | 86bce90 | - | skipped (set n2816-kmax65536 has no PQZH (set.json pqzh)) | -
+fuzz | 86bce90 | 0 | 0h6m50s | 4 ok

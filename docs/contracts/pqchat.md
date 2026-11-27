@@ -234,7 +234,7 @@ calls, owner may override).
 <a id="CTR-CHAT-23"></a>**CTR-CHAT-23** — **Every `PqChat` instance has a signature-storage setting fixed when it is created,
 `none` or `sstore2`, the default `sstore2`: an `sstore2` instance keeps the signature of every accepted control-plane record and
 posted message in state, read by views; `none` keeps each record's `sigHash` only** (owner 2026-11-23, the pqchat-core spec's O11:
-"by way 2, with SSTORE2 as the default, plus (d) as an option", verbatim in the
+way 2, with SSTORE2 as the default, plus (d) as an option, recorded in the
 [register](../decisions.md#ctr-chat-23--every-pqchat-instance-has-a-signature-storage-setting-fixed-at-creation-none-or-sstore2-the-default-sstore2);
 the storage form, the views and the numbering are controller calls, the
 owner may override). Status: **BUILT on branch `pqchat-sigs` (EVM), UNAUDITED** (plan
@@ -301,7 +301,7 @@ figures come first in the gas rows; groups stay correct and tested, and no 1:1 g
 
 <a id="CTR-CHAT-25"></a>**CTR-CHAT-25** — **`PqChatSession` carries `uint8 groupMode`, its last field, fixed at creation: 0 flat
 wraps; this release accepts 0 only and refuses any other value first, `PqChatModeUnsupported(groupMode)`** (owner 2026-11-23,
-"add the field now, in pqchat-sigs", verbatim in the
+the field added now, in pqchat-sigs, recorded in the
 [register](../decisions.md#ctr-chat-25--pqchatsession-carries-uint8-groupmode-fixed-at-creation-this-release-accepts-0-only);
 its place last, after the TreeKEM research note, a controller call). Status: **BUILT on branch `pqchat-sigs`, UNAUDITED**
 (`test/pqchat/PqChatGroupMode.t.sol`; the vector row `sessionTreeKem`).
@@ -328,8 +328,8 @@ its place last, after the TreeKEM research note, a controller call). Status: **B
 
 <a id="CTR-CHAT-24"></a>**CTR-CHAT-24** — **A member may sit in an epoch with several KEM keys: `members` is strictly sorted
 by `(ua, keyId)`, one or more keys per UA and at most `KEYS_PER_UA_MAX` = 8, one wrap per entry, each a KEM key its UA holds
-here; every other rule stays per UA** (owner 2026-11-23, (M): "Choose M. It is still an option, isn't it?", yes: optional per member,
-verbatim in the [register](../decisions.md#ctr-chat-24--a-member-may-hold-several-kem-keys-in-an-epoch-members-sorted-by-ua-keyid-at-most-8-per-ua);
+here; every other rule stays per UA** (owner 2026-11-23, option (M), optional per member,
+recorded in the [register](../decisions.md#ctr-chat-24--a-member-may-hold-several-kem-keys-in-an-epoch-members-sorted-by-ua-keyid-at-most-8-per-ua);
 the cap of 8 a controller call). Status: **BUILT on branch `pqchat-sigs` in `PqGroupBase` (PqChat and PqVault), UNAUDITED**
 (`test/pqchat/PqChatDevices.t.sol`, `test/pqvault/PqVaultDevices.t.sol`).
 
@@ -439,7 +439,7 @@ the parent** (owner D4 of 2026-11-04, O2 and O4; the exact test 3C-D7 is a contr
   that has not left it (`PqChatNotMember(author)`; Fable review 2026-11-10, P1-2 fix (a)).
 - **The limit** (UA-7 spec P9): the first complete child wins, so a member can take the slot before an admin's
   membership change (O2) and the admin rekeys again from that child. Liveness only (the member never reads an epoch it is
-  not wrapped into). **An exit is not exposed to it (Change 2026-11-24, E-3; owner 2026-11-24: "Yes, both modes"; BUILT on
+  not wrapped into). **An exit is not exposed to it (Change 2026-11-24, E-3; owner 2026-11-24: in both modes; BUILT on
   branch `review-fix-contract`):** at home `remove` ([CTR-CHAT-20](#CTR-CHAT-20)) and `leave`
   ([CTR-CHAT-10](#CTR-CHAT-10)) name the head or an ancestor of it and apply at the head, so a member about to be removed
   can no longer keep itself in by answering each new tip, and a member's rekey no longer voids another's leave.
@@ -456,7 +456,7 @@ review's P1-2 fix (b); **BUILT** on `ua-mtx-merge`, plan 3c, UNAUDITED; UA-7 spe
   admin of `epochId` (`PqChatNotAdmin`) who signs it; the nonce in the epoch scope `(sessionId, admin)` (`PqChatNonceUsed`).
   Anyone submits it, relayable with a fee of 0. The record and its `sigHash` are kept in state.
 - **At home, applied at the head (Change 2026-11-24, E-3 of the TreeKEM code review, the rule of
-  [CTR-CHAT-27](#CTR-CHAT-27)'s C9 in mode 0; owner 2026-11-24: "Yes, both modes"; BUILT on branch
+  [CTR-CHAT-27](#CTR-CHAT-27)'s C9 in mode 0; owner 2026-11-24: in both modes; BUILT on branch
   `review-fix-contract`).** Replaces "at home with no complete child" above:
   - `epochId` is the head or an ancestor of it: stored for `sessionId` and complete (`PqChatUnknown`, `PqChatIncomplete`).
     At home a child completes only by taking its parent's slot ([CTR-CHAT-08](#CTR-CHAT-08)), so every complete epoch is
@@ -517,7 +517,7 @@ and its nonce 3C-D8 are a controller call, owner may override).
 
 `leave(PqChatLeave l, UASig sig)`: `l.epochId` stored for `l.sessionId` (`PqChatUnknown(epochId)`), `l.member` in its
 `members` (`PqChatNotMember(member)`), signed by `member`, nonce in the epoch scope `(sessionId, member)` shared with its
-rekeys. **At home, applied at the head (Change 2026-11-24, E-3; owner 2026-11-24: "Yes, both modes"; BUILT on branch `review-fix-contract`):**
+rekeys. **At home, applied at the head (Change 2026-11-24, E-3; owner 2026-11-24: in both modes; BUILT on branch `review-fix-contract`):**
 `l.epochId` is the head or an ancestor of it within `EXIT_LAG_MAX` = 16 epochs (`PqChatExitLag` beyond; the spec check),
 complete (`PqChatIncomplete` for a staged or losing child, which was accepted before), `l.member` a member of the head
 that has not left it and was not removed from it (`PqChatNotMember`: a repeated leave is refused, the spec check, sc-E-5)
@@ -995,7 +995,7 @@ scheme 1, in minimal scope (a commit with an UpdatePath, Adds and Removes, Welco
   commit. A session option `pathRefreshBound`, fixed at creation: 0 never forced; N > 0, the (N + 1)-th path-less leaf since
   the last path commit is refused, every path-less leaf counted; the client default 20 and, with 0, the admins warned after
   20. Removals, exits, admin changes and refreshes keep a path. Mode 0 and `PqVault` do not change.
-- **Two layers (owner 2026-11-23: "agreed, that is how it should be"; and "or other systems that use a tree"; verbatim in
+- **Two layers (owner 2026-11-23: agreed, the shared base also serving other systems that use a tree; recorded in
   the [register](../decisions.md#ctr-chat-26--pqchats-treekem-mode-groupmode--1-is-built-now-in-minimal-scope-in-a-body-module)).** The tree
   is built as `PqGroupBase` and `PqChat` are: `src/pqgroup/PqGroupTree.sol`, an abstract base with no app domain, record
   type or error of its own, for any contract that keeps a group tree (another first-party contract, a later `PqVaultTree`, a
@@ -1083,8 +1083,8 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
   record's transaction carries no per-member index slot. The wraps of epoch 0 are made once and signed by hash: a
   creation is finished only from the prepared pieces ([CLI-PQC-17](../clients/pqchat-core.md#CLI-PQC-17)); an
   incomplete one is usable by nobody.
-- **Bounds.** `TREE_LEAVES_MAX` = 512 keys, depth 9 (owner; 256, depth 8, until the owner's change of 2026-11-25, "OK, then raise it to
-  512"), `TREE_CHANGES_MAX` = 20 adds plus removes per commit (owner 2026-11-25, "Choose 20", in English; 32 until then),
+- **Bounds.** `TREE_LEAVES_MAX` = 512 keys, depth 9 (owner; 256, depth 8, until the owner's change of 2026-11-25 to
+  512), `TREE_CHANGES_MAX` = 20 adds plus removes per commit (owner 2026-11-25; 32 until then),
   `TREE_ADMINS_MAX` =
   32, `TREE_INFO_MAX` = 4,124 B (at creation too), 64 leaves per `treeLeaves` call, at most 8 keys per UA. The contract enforces no minimum size; "useful from about 7 keys, where
   several members commit" is a client hint. **Measured at 512 and 20 changes (plan T3d's harness, `test/pqchat/PqChatTreeGas.t.sol`, forge, the verify's gas

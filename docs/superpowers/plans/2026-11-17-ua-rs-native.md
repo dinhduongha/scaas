@@ -8,7 +8,7 @@ docs and closing gates); T13 (the closing review) waits for the coordinator. Spe
 [`2026-11-17-ua-rs-native.md`](../specs/2026-11-17-ua-rs-native.md) (SPECIFIED; revised after Fable's review F1–F24, spec §18).
 UNAUDITED.
 
-**When it runs (owner 2026-11-17, "Code luôn, không chờ sau p6h"):** now, on branch `ua-rs-native` (from `ua-rs-sign`
+**When it runs (owner 2026-11-17: coded now, not after P6h):** now, on branch `ua-rs-native` (from `ua-rs-sign`
 `d823d61f0`), worktree `.claude/worktrees/ua-rs-native`. Independent of `scaas-sdk` and `scaas-rpc` (TODO 8b): it touches only
 `clients/clientkeys`, `clients/ua-rs`, `clients/ua-c`, the `ua-*` bindings, `smartcontracts/vectors/native/` and docs. It merges into
 `ua-rs-sign` / `main` on the owner's word only (merge commits; `main` is PR-only). `ua-rs` is an audit unit of the pre-freeze audit

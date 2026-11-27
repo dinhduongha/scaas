@@ -10,6 +10,7 @@ use crate::error::SdkError;
 use crate::events::Event;
 use crate::Sdk;
 use scaas_ua::wallet::{SecretBytes, Vault as V1, Wallet};
+use std::collections::BTreeSet;
 use std::sync::{Arc, PoisonError};
 
 /// How a seed opens (spec §6.10). `Passkey` and `Platform` go through the seed's PRF envelope (plan T7).
@@ -176,9 +177,10 @@ impl Vault {
             .unwrap_or_default()
     }
 
-    /// Locks every seed.
+    /// Locks every seed: each seed with an open main set or a hidden set (one `lock` each), so a hidden set opened on a locked
+    /// seed is locked too.
     pub async fn lock_all(&self) -> Vec<String> {
-        let ids: Vec<String> = self
+        let mut ids: BTreeSet<String> = self
             .sdk
             .open
             .lock()
@@ -186,6 +188,14 @@ impl Vault {
             .keys()
             .cloned()
             .collect();
+        ids.extend(
+            self.sdk
+                .hidden
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .values()
+                .map(|(seed, _)| seed.clone()),
+        );
         let mut out = vec![];
         for id in ids {
             out.extend(self.lock(id).await);

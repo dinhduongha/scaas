@@ -142,11 +142,11 @@ with its id and say it belongs to the base.
   PqVault follows)
 - spec `T/docs/superpowers/specs/2026-11-17-pqvault.md` §3 (rulings and controller calls), §5 (the contract), §6.4
   (`sealedInfo`), §6.7 (rotation, sharing), §15 (rule ids), §16-§17 (review findings and their fixes)
-- decisions: the PqVault entries (owner rulings V1-V10, O1 (c), O3 (b), the admin model "(b)" of 2026-11-21, the Fable
+- decisions: the PqVault entries (owner rulings V1-V10, O1 (c), O3 (b), the admin model (b) of 2026-11-21, the Fable
   code review F1-F15 Changes), ARCH-POS-13, NET-ALL-25 (`T/docs/networks/README.md`), CTR-UA-46 (the open portable app namespace)
 
 **Invariants to check (beyond section 5):**
-1. **The admin model (b)** (owner 2026-11-21, "keep (b)"): a vault keeps several admins; only an admin of the parent epoch
+1. **The admin model (b)** (owner 2026-11-21, option (b) kept): a vault keeps several admins; only an admin of the parent epoch
    who was not removed from it and did not leave rekeys (`PqVaultNotAdmin`); members read, write and leave; the creator is an
    admin and a member at creation; with no admin left, membership and keys are frozen and items stay writable under the last
    epoch; an admin that is no member (an `msig`) is removable; a child whose author was removed from the parent no longer

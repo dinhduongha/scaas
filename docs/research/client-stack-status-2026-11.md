@@ -3,16 +3,15 @@
 # Client stack: components, layers, specs, plans and code (status note, 2026-11-17)
 
 A map of the client-side work and the last contract change before the pre-freeze tag: what each part is, where its spec and
-plan live, how far its code is, and what it waits for. Owner 2026-11-17: "Lưu thông tin bảng các phần và spec, plan, code +
-nhóm và nội dung … vào file docs/research" (save the table of parts, with spec, plan, code, groups and content, under
-docs/research). This note is a snapshot; the specs, plans and `docs/decisions.md` are the sources. Everything here is
+plan live, how far its code is, and what it waits for. Owner 2026-11-17: save the table of parts, with spec, plan, code,
+groups and content, under docs/research. This note is a snapshot; the specs, plans and `docs/decisions.md` are the sources. Everything here is
 UNAUDITED.
 
 ## 1. Layers
 
 Owner rulings 2026-11-17: `ua-rs` is the only signer from `scaas-sdk` down (CLI-UAL-01 scope); app cores depend on
-`scaas-sdk`, never the reverse ("Đồng ý đảo chiều", "pqchat-core cũng đảo chiều luôn"); app contracts may sign by path A (an
-open portable app namespace in `UARegistry`) or path B (chain-bound `requireAuthorized`) ("Support cả A và B").
+`scaas-sdk`, never the reverse (the dependency reversed, for pqchat-core too); app contracts may sign by path A (an
+open portable app namespace in `UARegistry`) or path B (chain-bound `requireAuthorized`), both supported.
 
 ```mermaid
 flowchart TB
@@ -62,7 +61,7 @@ State of 2026-11-17 evening. "Branch" is a local branch of this repository unles
 ## 3. scaas-app task groups
 
 Plans: `docs/superpowers/plans/2026-11-17-scaas-app-next.md` in the Qt repository (groups A, B, C) and, being moved, groups
-R, M, X with a new F into the scaas-app repository (owner 2026-11-17 "chuyển sang scaas-app").
+R, M, X with a new F into the scaas-app repository (owner 2026-11-17: moved to scaas-app).
 
 | Group | Crate / part | Content | Code |
 |---|---|---|---|
@@ -89,7 +88,7 @@ R, M, X with a new F into the scaas-app repository (owner 2026-11-17 "chuyển s
 - Real-crypto client e2e in the `pqchat-core` and PqVault plans: today's on-chain PqChat runs use stand-in wraps
   (`smartcontracts/evm/script/onchain/PqChat.s.sol`), contract-only.
 - The `0x05` / `0x19 0x01` first-byte refusal withdrawn from `ua-rs` and the SDK raw entry (closing review C1).
-- Specs are written early as frames (owner: "cứ viết spec, để có khung sẵn").
+- Specs are written early as frames (owner: specs are written so that a frame is ready).
 
 ## 5. Open points
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Rust PQZL roll-out on chain 7622 (2026-10-19), path A as the op 7 section of chain/RUNBOOK.md. PREPARED, NEVER RUN:
-# the owner stopped the roll-out before the live step ("Dừng và rollback", PQZL Fiat–Shamir finding). Kept as the
+# the owner stopped the roll-out before the live step (stop and roll back, PQZL Fiat–Shamir finding). Kept as the
 # prepared procedure for the next roll-out (the rows file and the image will change with the new proofSystemId).
 #   sh runs/2026-10-19-rust-live.sh before   stop, back up, third schedule at T, image pqz2 -> pqz3, start, probe before T
 #   sh runs/2026-10-19-rust-live.sh after    after T: probe and e2e (writes nothing on the chain host)

@@ -57,7 +57,7 @@ done
 if grep -q "RustAutoOpaqueInner<SecretBytes>" "$F/src/frb_generated.rs"; then
     fail "decrypted content as an opaque of the surface, not the SDK's SecretBytes handle with its copy calls"
 fi
-# every type holding a decrypted content or `sealedInfo` plaintext, member by member (owner 2026-11-22, "Handle SecretBytes")
+# every type holding a decrypted content or `sealedInfo` plaintext, member by member (owner 2026-11-22)
 python3 -I "$W/clients/pqchat-core/runs/bind_surface.py" "$F/dart/lib/src/rust" || fail "a decrypted content not only as the handle"
 # the handle's id for the copy calls in the surface (the calls themselves are the library's C exports, checked below)
 grep -rqE "BigInt secretId\(\{required ArcSecretBytes s\}\)" "$F/dart/lib/src/rust" || fail "no secretId of the handle in the surface"

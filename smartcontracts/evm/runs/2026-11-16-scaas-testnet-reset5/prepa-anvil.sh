@@ -78,7 +78,7 @@ for c in "${@:-good fee stop}"; do for c in $c; do
             echo "[prepa] stop $ok: FAIL lines $rc ($(grep -m1 '^\[deploy\] FAIL' "$L" | cut -c1-140)), send lines $s, nonce $nn, pending $np"
             ;;
         sets)
-            # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): two refusals before anything is sent,
+            # deploy sets (owner 2026-11-16: option 2, one chain, two deploy sets): two refusals before anything is sent,
             # then mldsa-on and mldsa-off on one chain, each its own salt and releases book; the book holds both, mldsa-off on top
             rm -f deployments/local-31337-testnet.json deployments/local-31337-testnet-releases.json deployments/local-31337-testnet-mldsa-on-releases.json
             dep sets-x DEPLOY_SET=mldsa-x >"$L" 2>&1

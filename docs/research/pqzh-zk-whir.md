@@ -376,7 +376,7 @@ main-mask openings [inference from `ZkWhirProof` / `BaseCaseZkProof` and the con
 
 ## 10. Re-examination (2026-10-14)
 
-Owner request of 2026-10-14, "Xem lại WHIR": re-examine the ZK WHIR result critically. Method: (1) a field-by-field
+Owner request of 2026-10-14: re-examine the ZK WHIR result critically. Method: (1) a field-by-field
 byte breakdown of one fresh `R_TX` proof at the §7 setting, plus span timings of its prover and `HidingWhirPcs`
 micro-timings (probe crate `runs/wr-probe/`, runner `runs/wr-probe.sh`, outputs `runs/wr-tx.jsonl`,
 `runs/wr-tx-spans.txt`, `runs/wr-micro.jsonl`, `runs/wr-report.txt`, build `runs/wr-probe-build.txt`; every number

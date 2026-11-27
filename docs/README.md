@@ -189,6 +189,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | Doc | Covers |
 |---|---|
 | [README](networks/README.md) | Common model, chain identity (`chain_uid`), signing domains, passkeys, availability |
+| [chain-support.md](networks/chain-support.md) · [key-schemes.md](networks/key-schemes.md) | What each chain supports; the UA kinds by signature and key scheme, beside Sui, Cellframe and the families' native schemes |
 | [evm.md](networks/evm.md) · [hedera.md](networks/hedera.md) | EVM chains and their tiers; Hedera (tier 3, not yet eligible) |
 | [cosmos.md](networks/cosmos.md) · [soroban.md](networks/soroban.md) · [ton.md](networks/ton.md) | CosmWasm, Stellar / Pi, GRAM |
 | [sui.md](networks/sui.md) · [aptos.md](networks/aptos.md) · [solana.md](networks/solana.md) | Move families and Solana |
@@ -202,8 +203,10 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [signers-clientkeys.md](clients/signers-clientkeys.md) | Signers, key vault, what a wallet checks before signing |
 | [ua-libraries.md](clients/ua-libraries.md) | UA identity layer in Solidity, JS, Rust, Python, Go, C#; C, C++, QML and Dart bindings |
 | [app.md](clients/app.md) | Console and dApp |
+| [stack.md](clients/stack.md) | Client stack: which client crate depends on which (graph and the rules it keeps) |
 | [scaas-rpc.md](clients/scaas-rpc.md) | The shared network crate: endpoint lists, failover and strict-majority reads, sends to several nodes, the scaas-node client (BUILT on branch `scaas-sdk`: EVM, the verifier, the node's families; the rest SPECIFIED) |
 | [scaas-sdk.md](clients/scaas-sdk.md) | The one API apps call: several seeds in a vault v1 keystore, accounts, operations, confidential tokens, chat, generated bindings (SPECIFIED) |
+| [scaas-cli.md](clients/scaas-cli.md) | The command line `scaas` over `scaas-sdk`: one command per SDK call, confirm before signing or submitting, secrets by descriptor or terminal, pinned profiles, JSON output and exit codes (BUILT; user profiles and `SignReview` PLANNED) |
 | [scaas-tui.md](clients/scaas-tui.md) | The terminal front-end over `scaas-sdk`: review before signing, terminal secret handling, endpoints, accessibility (SPECIFIED) |
 | [pqchat-core.md](clients/pqchat-core.md) | The PqChat client core, an app core above `scaas-sdk`: key handles only, PqChat records through the SDK's named entries, the app's Matrix client as its store, recovery from contract state (SPECIFIED) |
 | [integration.md](integration.md) | Connecting any ERP or back office |

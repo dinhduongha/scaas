@@ -460,14 +460,14 @@ wording of FIP #266 (90-day cap, "0 = no expiry"); the operators behind the vali
 completion of the Network School deal and the "social smart contract"; the IMC 2026 paper's figures on node economics; OP gas per
 registry write; the rules of storage lending.
 
-**Correction (owner, 2026-11-25): "Tôi chưa hề đề cập build ledger service".** No off-chain "ledger service" is decided
+**Correction (owner, 2026-11-25): the owner never mentioned building a ledger service.** No off-chain "ledger service" is decided
 or scheduled; the name was the controller's label for the owner's research direction of 2026-11-24 (an API between SCaaS
 and a backend such as immudb, Supabase, S3 or Arweave). Read every "ledger service", "after the freeze, with the ledger
 service's spec" and "the ledger" in this note as "a possible off-chain deployment, if one is ever decided". `groupMode = 2`
 and `3` are only reserved values; the questions here wait until such a build is decided.
 
-**Owner, 2026-11-25 (the off-chain shape):** "Ở Offchain mode, chỉ cần 1 API SERVICE đảm nhiệm việc đọc ghi vào
-immutabledb / supabase". If an off-chain mode is ever built, it is **one API service** that reads and writes the store
+**Owner, 2026-11-25 (the off-chain shape):** an off-chain mode needs only one API service that reads and writes
+immudb / Supabase. If an off-chain mode is ever built, it is **one API service** that reads and writes the store
 (immudb, Supabase, ...): no BFT committee, no on-chain node set, no availability certificate. That service orders commits; it
 cannot forge a record (every record is client-signed), but it can refuse or delay; clients still verify every signature and
 walk forward as on chain; immudb gives a tamper-evident log, Supabase does not. Of the Farcaster note's questions, the

@@ -1,5 +1,5 @@
-# SCaaS testnet (7622) reset 2, 2026-11-10 (owner, in chat: "reset 2: chỉ làm đến bước 2. Deploy bản 26586d2e theo NET-EVM-11, đủ
-# mọi kind, gồm DEPLOY_ZETHER=1 và DEPLOY_PQCHAT=1. Các việc khác về nhà làm."). Steps 1 (reset, no backup: owner 2026-10-31) and 2
+# SCaaS testnet (7622) reset 2, 2026-11-10 (owner: reset 2 up to step 2 only; deploy 26586d2e by NET-EVM-11 with
+# every kind, DEPLOY_ZETHER=1 and DEPLOY_PQCHAT=1 included; the other steps later). Steps 1 (reset, no backup: owner 2026-10-31) and 2
 # (deploy) only; Blockscout verification, the on-chain matrix and the e2e runs are not part of it. Branch ua-mtx-merge at 26586d2e.
 # UNAUDITED. Full output in git-ignored .log files beside this file (reset2.log, build.log, deploy.log, deploy-1gib-oom.log,
 # smoke.log); scripts reset2.sh (step 1), deploy2.sh (step 2), check2.py (read-only checks), smoke2.sh (Step 5's smoke).

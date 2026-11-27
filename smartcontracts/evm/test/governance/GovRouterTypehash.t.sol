@@ -872,7 +872,7 @@ contract GovRouterTypehashTest is Test {
         assertEq(T.UA_SET_MAX_WRAP_SUPPLY, 0x70d8a5c0eb38fe1d35cfcd4a86e0418d74b60bd54341104a655ddfddaecb6dc3);
     }
 
-    /// Round 3zb + 3zc (CTR-GOV-28 Change, owner 2026-11-13 "(2), gộp vào round 3zb + 3zc."; O5 for `UASetWrapLimits`): the 25
+    /// Round 3zb + 3zc (CTR-GOV-28 Change, owner 2026-11-13, option (2), merged into round 3zb + 3zc; O5 for `UASetWrapLimits`): the 25
     /// structs before `bytes32 chainUid` joined them, legacy pins of retired forms (old → new in the commit): a client or a node
     /// row still signing one signs for no entry.
     function test_holderOpsWithoutTheWordAreLegacyPins() public pure {

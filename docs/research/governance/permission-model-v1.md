@@ -6,9 +6,9 @@
 
 **Version 1, kept for the record; superseded by [permission-model.md](permission-model.md).** Rebuilt from the agent's transcript, since version 2 overwrote the file before it was committed: three late edits could not be re-applied, so a few lines near the owner questions may differ.
 
-Owner request (2026-11-02, translated): *"You are fixating on mint. That was only my example. There are many other
-things related to granting authority. Is there a right or not? If right X is granted, which parameters are accepted,
-what limits are there? Having a right is not the same as its parameters."* And: under the contract owner, should there
+Owner request (2026-11-02): mint was only an example; many other things relate to granting authority. Is there a
+right or not? If right X is granted, which parameters are accepted, and what limits are there? Having a right is not
+the same as its parameters. And: under the contract owner, should there
 be owner – admin – moderators, or individual grants as today? This note derives the answer from the model; it builds
 nothing.
 
@@ -284,7 +284,7 @@ Common: kind `NORMAL`, `decimals 0`, `owner` = the issuer's Safe (or msig UA wit
 | disclosure sentences | "the owner can mint without limit" | "a minter can mint up to N per window until T" | + "a moderator can move tokens out of any account [up to N per window]" |
 | what a stolen moderator key does | nothing (no moderator) | mints up to the envelope | moves up to the envelope; unrestricted variant: everything, which is why Q7 makes that holder a contract |
 
-Note the owner's A: "no moderator needed" is not a role left empty but a **bit left out**, which is the stronger
+Note the owner's A: no moderator needed. That is not a role left empty but a **bit left out**, which is the stronger
 guarantee and already expressible today. B needs only the envelope holder. C needs the one new token power.
 
 ## 8. The smallest first step that closes no door

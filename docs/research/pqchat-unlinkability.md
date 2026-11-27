@@ -2,8 +2,8 @@
 
 # PqChat: hiding who talks to whom (research, 2026-10-25)
 
-**Status:** research note (owner request 2026-10-25: "study how to hide the link between session, recipients and
-sender, e.g. with a Merkle tree"). Not a decision; UA-7 ([spec](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md)
+**Status:** research note (owner request 2026-10-25: study how to hide the link between session, recipients and
+sender, e.g. with a Merkle tree). Not a decision; UA-7 ([spec](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md)
 C10) points here. All claims are [inference] unless marked.
 
 ## 1. What the UA-7 design shows today

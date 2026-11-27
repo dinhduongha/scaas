@@ -35,17 +35,16 @@ Figures: **[baseline]** is `size-baseline.json` at `f655cb0e` (a ratchet: each r
 its measured size); **[estimate]** is arithmetic over it and over the per-stub cost the burner / wrap-caps spec measured
 (about 165 B per stub). Nothing here was measured; plan task A0 measures.
 
-## 1. Rulings (owner, 2026-11-17, verbatim)
+## 1. Rulings (owner, 2026-11-17)
 
-1. First, on "no setter now; threshold re-sharing; PQZ key versions": **"Ok, theo đề xuất"** (OK, as proposed). Recorded as
+1. First, on "no setter now; threshold re-sharing; PQZ key versions": **as proposed**. Recorded as
    CTR-ZTH-41's Change of 2026-11-17 (no setter, CTR-ZTH-09 holds).
-2. Then, replacing it: **"Do format phải chạy lại rất nhiều, tiện thể làm luôn '- setAuditor', dùng 1 bit cho việc này. Gom
-   chung vào format code, để chạy gate .v.v. 1 lần"** (since formatting forces a long re-run anyway, build `setAuditor` now,
-   on one bit, and bundle it with the formatting so the gates run once).
-3. Then: **"Làm luôn"** (do it now).
-4. On the holder (the first draft's O3, contract or `msig` only, overruled): **"Vẫn UA như bình thường chứ, bao gồm cả contract
-   và msig"** (an ordinary UA as usual, contracts and `msig`s included): any holder, a single key too.
-5. On O1, O2, O4 of the revised draft: **"Ok, theo đề xuất cả O1, O2, O4"** (OK, as proposed: O1, O2 and O4):
+2. Then, replacing it: since formatting forces a long re-run anyway, **build `setAuditor` now, on one bit, and bundle it with
+   the formatting so the gates run once**.
+3. Then: **it is done now**.
+4. On the holder (the first draft's O3, contract or `msig` only, overruled): **an ordinary UA as usual, contracts and `msig`s
+   included**: any holder, a single key too.
+5. On O1, O2, O4 of the revised draft: **as proposed**:
    - **O1:** the delay is `max(noticePeriod(), grantDelay)`;
    - **O2:** the kind-4 setter stays in `NormalPqzTokenQ`, measured at A0; the work stops and asks only if a figure crosses T-1;
    - **O4:** when the delay is 0 the change applies at once, and the wallet says so.

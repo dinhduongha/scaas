@@ -1,6 +1,6 @@
 # SCaaS testnet reset 3: state (done)
 
-Branch ua-mtx-merge at d709d672 (short final gate green at 7c85c2a3). Owner 2026-11-10 "tự động làm, không cần hỏi nữa".
+Branch ua-mtx-merge at d709d672 (short final gate green at 7c85c2a3). Owner 2026-11-10: the controller runs these steps without asking.
 
 - Prep: the previous chain's books (deployments/scaas-testnet*.json, onchain-scaas-testnet-*), broadcast/*/7622 and the
   vcheck block-scan cache moved to `pre-reset3-20261112/` folders (git-ignored), not deleted.
@@ -21,7 +21,7 @@ Branch ua-mtx-merge at d709d672 (short final gate green at 7c85c2a3). Owner 2026
   scaas-testnet, MATRIX_OUT=matrix/ (this dir), RPC named, remote broadcast (compile under capped, sends in a 1G scope).
 - Step 4 matrix (matrix/): group tokens ok, 504 tx / 504 status 1, negatives 5 / 5 refused (records-scaas-testnet-tokens.jsonl,
   5062 s). Matrix cut after group tokens (controller decision 2026-11-12: full matrix at reset 4); its post-group
-  Blockscout verify skipped at 35/162 (35 ok) (owner 2026-11-12: "bỏ bước verify này: dừng ngay, chạy smoke 2 rồi commit";
+  Blockscout verify skipped at 35/162 (35 ok) (owner 2026-11-12: this verify step dropped; stop at once, run smoke 2, then commit;
   reset 4 resets Blockscout; the deploy's own verify was complete: 91 verified, 0 unverified). The summary row
   `groups | fail` is that stop (TERM), not a red. Groups gov, dex, liquidity, misc, zether, pq, pqoff, verifiers, views:
   not run.

@@ -1,6 +1,6 @@
 # Rust PQZL core: calibration against the live schedule (2026-10-19)
 
-Roll-out of the Rust-backed image on chain 7622 (owner 2026-10-19: "Đưa image Rust lên 7622, hiệu chỉnh gas").
+Roll-out of the Rust-backed image on chain 7622 (owner 2026-10-19: the Rust image goes to 7622, with a gas calibration).
 Image `scaas/nethermind-pqz:1.39.0-pqz3` (`sha256:69e799a98cac…74efc1`, commit `1adbd56`, log
 `2026-10-19-image-pqz3.txt`), library `libpqz_ffi.so` sha256
 `16dd99ce77d05a9bea9f54142979bc21511240aeff6d4442d784470a428c9caf` (= image label; test-hook names 0, GMP / MPFR / HEXL
@@ -171,7 +171,7 @@ The copy was torn down afterwards (`copy.sh down`).
 
 ## Outcome: stopped before the live chain (owner, 2026-10-19)
 
-The owner ruled "Dừng và rollback" (stop and roll back) before the live step. Reason: a whole-code review found a P0
+The owner ruled to stop and roll back before the live step. Reason: a whole-code review found a P0
 Fiat–Shamir soundness break in PQZL, inherited from LaZer and present in both the C and the Rust core. Its fix changes
 the `proofSystemId`, so this roll-out was abandoned. **Chain 7622 was never touched:** no stop, no backup, no edit. It
 still runs image `pqz2` with its two schedules (checked: `docker ps`, the compose image, live `engine.Pqz` = the

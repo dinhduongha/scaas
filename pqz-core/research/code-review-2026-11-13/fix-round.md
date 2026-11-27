@@ -30,7 +30,7 @@ Each guard or check removed alone (sources restored after each run); "red" = the
 
 ## Gate
 
-Owner 2026-11-13 ("Đồng ý, chỉ chạy n2304."): the full gate at `n2304-kmax4096` only. The PQZ three-key round changes
+Owner 2026-11-13: the full gate at `n2304-kmax4096` only. The PQZ three-key round changes
 `stmt` / `pqzl` / `ffi` and moves `PQZL_ID` and `PQZH_ID`, so its mandatory full gate at all four sets runs on top of
 this branch and covers these changes at the other three sets; the 3w changes are set-generic and change no proof
 byte; the SCaaS testnet and reset 4 use `n2304-kmax4096`.
@@ -59,7 +59,7 @@ that step already failed at `EXTRA state.json` (review 3w u5-1), not a regressio
 
 ## T-20, the exit-120 drill (closed at reset 4)
 
-Owner 2026-11-15 ("Làm vào testnet luôn"): run once on the SCaaS testnet after reset 4's reset, before its deploy
+Owner 2026-11-15: run once on the SCaaS testnet after reset 4's reset, before its deploy
 (`smartcontracts/evm/runs/2026-11-15-reset4.txt`, row T-20; image `2.2.0-pqz9`, pin `29c351ec…a677c`). (a) The
 fault-hook library mounted over the rpc node's: `PQZ-REFUSE … sha256 1726b2ee… != the reviewed 29c351ec…; exit 120` at
 start-up, before any block; `restart: unless-stopped` restarted it 10 times in 90 s with a growing back-off, refused each

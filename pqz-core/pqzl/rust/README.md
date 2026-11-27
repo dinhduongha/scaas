@@ -237,7 +237,8 @@ their rows from the re-run. The first-pass files stay in `runs/d6/` for the reco
   M = 8 10.76 / 14.86 ms against 14.83 / 21.42 ms; the largest Rust PQZL p99 is 14.9 ms (C 21.4 ms). Tables in
   `runs/d6/results-d6.md`.
 
-### The wasm32 op 7 limit (owner 2026-10-18: "if it is enough, raise it")
+<a id="the-wasm32-op-7-limit-owner-2026-10-18-if-it-is-enough-raise-it"></a>
+### The wasm32 op 7 limit (owner 2026-10-18: raised if the measurement is enough)
 
 wasm32 proved op 7 only up to M = 4 (`pqzl::WASM_MAX_LEGS` and `pqz-ffi`'s `WASM_PQZL_MAX_LEGS`). That limit came
 from the C core's arena, where M = 8 peaks at 495.3 MiB, over the browser's 256 MiB. `d6.sh` measured this crate's

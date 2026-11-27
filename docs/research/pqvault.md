@@ -56,8 +56,8 @@ replaced by `pqvault-core` as an app core above `scaas-sdk`. See the spec `docs/
 
 ## 1. The idea and its place
 
-The owner (2026-11-17): "pqvault là một kiểu tương tự pq topics, lưu dữ liệu (notes, password) trên chain" [pqvault is a
-kind of thing like the PQ topics, storing data (notes, passwords) on chain]. A future product of the SCaaS stack:
+The owner (2026-11-17): PqVault is a kind of thing like the PQ topics, storing data (notes,
+passwords) on chain. A future product of the SCaaS stack:
 contract → `pqvault-core` crate (separate, like `pqchat-core`) → a `scaas-sdk` module → the apps, offered only in
 scaas-app's `scaas` build (it needs a chain and `ua-rs`, [F `docs/decisions.md:9758-9761`, the CLI-UAL-01 Change of
 2026-11-17]). Research now; build later.
@@ -139,7 +139,7 @@ Items live in a thin contract that reads membership from a `PqChat` instance by 
 
 - Snapshot: the whole vault re-encrypted as one chained SSTORE2 blob from time to time. A 500-item vault is ≈ 140 KB, ≈
   215 M state gas per snapshot, over a 60 M block [E]: rejected.
-- Off-chain body, on-chain pointer and hash: contradicts the owner's "stored on chain" and the repository's practice of
+- Off-chain body, on-chain pointer and hash: contradicts the owner's storage on chain and the repository's practice of
   ciphertext in state (CTR-CHAT-05; the never-lose-ciphertext rule is written for PQZ and Zether, PqChat follows it [F
   `pqchat.md:209-210`]); kept only for attachments (V7).
 

@@ -245,8 +245,8 @@ members proved theirs) and registers with an empty `pop`; where a member's own r
 ([CTR-UA-34](#CTR-UA-34), Soroban), "proved theirs" is false for that member and the `msig`'s `CHAIN` mark says only that its `pop`
 holds nothing unverified.
 
-**Minimal form of a stored `msig` signature** (owner 2026-10-31, scope controller call under the owner's rule: "with `T` = the
-slots' total weight and `N` the threshold, require `T ≥ N` and, for every slot `i`, `T − weight(i) < N` (each slot necessary)").
+**Minimal form of a stored `msig` signature** (owner 2026-10-31, scope controller call under the owner's rule: with `T` = the
+slots' total weight and `N` the threshold, require `T ≥ N` and, for every slot `i`, `T − weight(i) < N` (each slot necessary)).
 It applies to the three portable purposes, the signatures the registry stores and copies byte for byte (`pop` v2, `kem`, `pqz-key`):
 `UARegistry._msig(…, portable = true)` on EVM, `check_msig(…, portable = true)` on Soroban, one pass summing `T` and keeping the
 smallest slot weight `w_min` (accept iff `T ≥ N` and `T − w_min < N`), every slot counting its member's weight, native members
@@ -256,8 +256,8 @@ fails). A front-runner that drops a slot from a valid `pop` gets a refusal, and 
 **BUILT** on EVM (ua-portable-soroban M2) and Soroban (M3). NEAR UA round: requirement, to be built in that family's own UA registry; Algorand
 UA round: requirement, to be built in that family's own UA registry (neither has a UA registry today, [NET-ALL-84](../networks/README.md#NET-ALL-84)).
 
-**Minimal form of a stored `msig` signature** (owner 2026-10-31, U8S-D1: "with `T` = the slots' total weight and `N` the threshold,
-require `T ≥ N` and, for every slot `i`, `T − weight(i) < N` (each slot necessary)"). It applies to the three portable purposes, the
+**Minimal form of a stored `msig` signature** (owner 2026-10-31, U8S-D1: with `T` = the slots' total weight and `N` the threshold,
+require `T ≥ N` and, for every slot `i`, `T − weight(i) < N` (each slot necessary)). It applies to the three portable purposes, the
 signatures the registry stores and copies byte for byte (`pop` v2, `kem`, `pqz-key`): `UARegistryCoreLib._msig` on EVM, one pass summing
 `T` and keeping the smallest slot weight `w_min` (accept iff `T ≥ N` and `T − w_min < N`), every slot counting its member's weight,
 native members included. Failure is `UAPoP` in `register` and `UAUnauthorized` in `setKemKey` / `setPqzKey`; no new error, no ABI change.
@@ -330,9 +330,9 @@ immutable `IRegistrationPolicy` (invite / attested) per registry generation is t
 
 <a id="portable-registration"></a>
 <a id="CTR-UA-31"></a>**CTR-UA-31** — **A registration is portable: the same record bytes on every chain, anyone copies it, every field is
-in state, and `checked` says what the chain verified** (owner 2026-10-25: "when an account is registered on Ethereum, anyone can
-take exactly that information and register it on another chain: a UA account does not depend on the chain, its
-transactions do"; scope every family, owner 2026-10-29; details are controller calls, owner may override;
+in state, and `checked` says what the chain verified** (owner 2026-10-25: an account registered on Ethereum may be registered by anyone
+on another chain from exactly that information; a UA account does not depend on the chain, its
+transactions do; scope every family, owner 2026-10-29; details are controller calls, owner may override;
 [decisions.md](../decisions.md)).
 
 - **Copying.** The UA id is chain-independent already ([CTR-UA-03](#CTR-UA-03)); with the portable PoP ([CTR-UA-07](#CTR-UA-07))
@@ -497,7 +497,8 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   (owner 2026-11-05, confirmed 2026-11-07; BUILT on EVM and Soroban, plan T66a): an `msig`, PQ-eligible or not, reverts
   `UAKemHolder` at `register` (a whole or a hash-committed key) and at `setKemKey`, before any signature; a PQ-eligible `msig` still
   holds a PQZ key ([CTR-UA-16](#CTR-UA-16)). Senders seal to each accepted member's own KEM key. Operators: a client on the old
-  builders that registers an `msig` with a KEM key gets `UAKemHolder` (a refused job).
+  builders that registers an `msig` with a KEM key gets `UAKemHolder` (a refused job). So PqChat and PqVault parties are PQ UAs only: a classical-only UA holds no
+  KEM key and gets none attached (owner 2026-11-27).
 - **No revocation** (what has been on chain stays public forever and cannot be withdrawn; if an old secret key may have leaked,
   the UA must assume that anything sent to that key can be read) and **no one-owner check** (a KEM record carries no proof of
   possession of the KEM secret, so a uniqueness rule would let anyone who sees a key first list it under their own UA and block
@@ -663,7 +664,7 @@ Algorand: not built, see Staging; Solana, Move, TON and Cosmos have no `msig`.
   under `member` with `PURPOSE_MSIG_UPDATE = keccak256("scaas.ua.purpose.msig-update.v1")`, an `msig` member by its own list
   ([CTR-UA-38](#CTR-UA-38)). It is not a `requirePortable` purpose. `registry` is the registry's own address: a signed update serves exactly
   one registry, gen 1 and gen 2 of one chain word included. `version` must be the stored version + 1 (0 for a record never updated; owner
-  2026-11-14: per chain, so the next version is version + 1, no jump; verbatim in decisions.md), `block.number ≤ validUntilBlock`.
+  2026-11-14: per chain, so the next version is version + 1, no jump; recorded in decisions.md), `block.number ≤ validUntilBlock`.
   Nothing reads an event; the node has no role beyond relaying the call.
 - **Check order and errors.** `chainUid_` (`ChainUidMismatch(expected, got)`) → `validUntilBlock` (`UAMsigExpired`) → an `msig` held by this
   registry (`UAUnauthorized`; a gen-1 record on gen 2 too) → `version == stored + 1` (`UAMsigVersion(ua, stored)`) → at least the stored
@@ -696,7 +697,7 @@ Algorand: not built, see Staging; Solana, Move, TON and Cosmos have no `msig`.
   An `msig` that is a token's PQZ verifier changes its shape with any update: its tokens refuse `PqzVerifierChanged` until re-assigned
   (the frozen-shape rule, [pq-zero-knowledge.md](pq-zero-knowledge.md)); ua-rs builds such an update only when told so.
 - **One update per registry** (owner 2026-11-14: no events, they may be deleted, and no node role; apply per chain, by `chainUid`;
-  verbatim in decisions.md). On a registry with no update the first structure stays in power, and anyone can register the `msig` there from public bytes.
+  recorded in decisions.md). On a registry with no update the first structure stays in power, and anyone can register the `msig` there from public bytes.
   Client rule: at every change sign the same target for each `(chainUid, registry)` that holds or may hold the `msig`, keep the signed
   updates and the key records in one ordered log, and bring a new registry current by replaying them in order. A stored signature of an
   earlier structure was checked when it was written and is not re-judged later.
@@ -901,7 +902,10 @@ subdomains, WebAuthn related origins) can request a signature. Deployment rule: 
 the app's origins, and no untrusted content is served under it (an ERP portal origin under it is part of the trusted
 computing base). The verifier still enforces the clientDataJSON grammar (type, challenge, `crossOrigin` absent or false)
 but compares no origin. A sorted origins root was rejected: origins are fixed at id creation, so a later origin would
-still need a new UA.
+still need a new UA. **Accepted residual** (owner 2026-11-27, [CLI-SDK-37](../decisions.md#CLI-SDK-37) (I6)): any browser
+extension with host permissions over the `rpId`'s domain can ask the authenticator for an assertion over a challenge it chose, and
+the platform prompt shows the `rpId`, not the operation; the deployment rule does not cover it. An origin-bound passkey kind may be
+revisited later.
 
 **Closed kind sets (enforced).**
 
@@ -1717,7 +1721,7 @@ without it reverts, which is a refusal). `UAVerifyGas` when too little gas is le
 
 <a id="CTR-UA-74"></a>**CTR-UA-74** — **Every version of an `msig`'s structure stays readable, and an `msig`'s signature names the
 version it was accepted under** (owner 2026-11-25, on finding F-1b of the Fable re-review: add the view "msig structure by version" to the
-registry, a contract fix before the freeze, in this round; verbatim in [decisions.md](../decisions.md); the version tag and its form are
+registry, a contract fix before the freeze, in this round; recorded in [decisions.md](../decisions.md); the version tag and its form are
 controller calls under that ruling, its place inside the signature object an owner ruling of 2026-11-26, R-4, in the same entry).
 UNAUDITED. **EVM: BUILT** (contract side; the client readers are a follow-up, listed below). Soroban, NEAR and Algorand: with their
 `updateMsig` round ([Staging](#msig-staging)), the same rule; the other families have no `msig`.
@@ -2195,7 +2199,7 @@ dispatch verification by that kind; id shape (`>> 160`) is an EVM/Cosmos-20-byte
 #### <a id="registry-line"></a>1.8.1 The registry line and verify-only kinds — BUILT (EVM: contracts, deploy, node, scaas-sdk targets and verify rows, clients' target check); PLANNED (the ua-rs bindings' export, other families)
 
 The design record is the spec [2026-11-19-registry-verify-only-kinds.md](../superpowers/specs/2026-11-19-registry-verify-only-kinds.md)
-(revision 4; the owner's rulings verbatim in its §0 and in [decisions.md](../decisions.md), entry CTR-UA-58, which also lists
+(revision 4; the owner's rulings recorded in its §0 and in [decisions.md](../decisions.md), entry CTR-UA-58, which also lists
 the rulings behind each rule below); the rules below are normative. Built on branch `multi-gen-verify` (plan `2026-11-19-registry-verify-only-kinds`): contracts `d2f6b6c32` (`txGasCap`),
 `9ebf6931c` (kind flags, the line), `2bbe3380d` (the walk, readers, probes), `0a78d4d64` (writes), `cc82e3ecc` (consumer path),
 `4f643c791` (fallback), `72ced51f3` and `0812a0467` (bounds), `a40d8acc0` (PQZ home), `de05b0789` (ML-DSA verify-only verifiers),

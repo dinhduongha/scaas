@@ -2,8 +2,8 @@
 
 # The StarkWare Ethereum STARK verifier and what PQZH can take from it
 
-Written 2026-10-14 for the owner's request: "Starknet has a STARK verifier smart contract in Solidity — check what
-is special about it." Context: a PQZH proof does not verify in one Ethereum transaction under the EIP-7825 cap of
+Written 2026-10-14 for the owner's request: Starknet has a STARK verifier smart contract in Solidity; check what
+is special about it. Context: a PQZH proof does not verify in one Ethereum transaction under the EIP-7825 cap of
 16,777,216 gas. Ligero proven `R_TX` measured 534.6 M gas per transaction, ≈ 124 M at the opcode floor
 (`pqzh-ligero.md` §11). FRI + ZK Goldilocks⁵ `R_TX` is 25.1 M conjectured / 38.2 M proven as written, 12.5 / 21.4 M at
 the floor, where the EIP-7623 calldata floor binds (`pqzh-solidity-verifier.md` §1, §8). Owner rule: if PQZH fits a

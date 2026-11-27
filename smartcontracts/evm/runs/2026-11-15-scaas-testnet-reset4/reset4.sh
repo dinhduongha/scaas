@@ -7,7 +7,7 @@
 # SCAAS_DEV_RESCUE, test-key admin and rescuer) with engine-pqz-provisional-n2304.json (the three-key ids), then
 # add-schedule.py --mldsa (schedule 1: ML-DSA-44 / -65 / -87 = 59,000 / 68,000 / 135,000). No chain-data backup (owner
 # 2026-10-31): data dirs renamed *.pre-reset4-<D>, never deleted; genesis.json, docker-compose.yml, config.json,
-# config.rpc.json get .bak-pre-reset4-<D> copies. Also the T-20 exit-120 drill (owner 2026-11-15 "Lam vao testnet luon"):
+# config.rpc.json get .bak-pre-reset4-<D> copies. Also the T-20 exit-120 drill (owner 2026-11-15: run it on the testnet directly):
 # the drill's compose override lives outside the stack directory (DRILL_DIR) and is removed by `restore`.
 #   NEW=<chainspec> SCAAS_TESTNET_DIR=<stack> RPC_7622=<rpc> sh reset4.sh reset   stop, back up, install, rename, start
 #   ... sh reset4.sh check | explorer

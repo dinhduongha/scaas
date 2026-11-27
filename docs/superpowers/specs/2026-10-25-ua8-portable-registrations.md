@@ -5,9 +5,9 @@ before fs3 Task 13** (owner 2026-10-25; the SCaaS testnet redeploys the registry
 
 **Superseded in part (`typed-signing`, owner 2026-10-31; this text is kept as written).** The current rules are in `docs/contracts/accounts.md`: the digest encodings of §P1 / P7 (`portablePopDigest`, `KEM_RECORD_TAG`, `PQZ_KEY_RECORD_TAG`, `abi.encode` of words) by the typed EIP-712 records of CTR-UA-07; a native `msig` member's EIP-191 `personal_sign` by the record's typed digest (CTR-UA-07, CTR-UA-33); `UAAttrs.kemVersion`, "KEM versions start at 1" and `setKemKey`'s refusal of 0 by version 0 = the `register` key, the hash commit and write-once in every version (CTR-UA-32); `bytes` key data and signature blobs in the registry's calls by the explicit ABI (CTR-UA-36, CTR-UA-35).
 
-**Request (owner 2026-10-25).** "When an account is registered in `UARegistry` on Ethereum, anyone can take exactly
+**Request (owner 2026-10-25).** When an account is registered in `UARegistry` on Ethereum, anyone can take exactly
 that information and register it on another chain: a UA account does not depend on the chain (its transactions do).
-The KEM keys likewise."
+The KEM keys likewise.
 
 ## 1. Before UA-8
 
@@ -52,8 +52,8 @@ attached to the UA; `pop` is the consent over identity and attributes; `pqzPop` 
 different key, the PQZ one, made by a different proof system) is optional (P8). It stays permissionless: the submitter
 pays the gas. Copying a UA to another chain = sending the same fields to that chain's registry; a client or a relayer
 service can do it for any UA it sees on another chain. Today the registry stores `keyData` and the PQZ key (SSTORE2)
-but not `pop` / `pqzPop`; **UA-8 stores every `register` field in contract state** (owner 2026-10-25: "store all of
-it": `pop`, `pqzPop`, the KEM record and its signature, as SSTORE2 blobs), so anyone can rebuild the registration from
+but not `pop` / `pqzPop`; **UA-8 stores every `register` field in contract state** (owner 2026-10-25: all of
+it is stored: `pop`, `pqzPop`, the KEM record and its signature, as SSTORE2 blobs), so anyone can rebuild the registration from
 state and re-submit it elsewhere even when logs are gone (history expiry); the event carries them as well. Cost **[measured 2026-10-30, `smartcontracts/evm/runs/2026-10-30-ua8-gas.txt`; the first draft's estimate was ≈ 1,530 state gas per byte and 75–95 M]**: a
 single classical key 1.3–1.9 M gas, `mldsa65` 9.7 M, `fndsa512` 9.3 M, `slhdsa128s` 14.4 M, a PQ registration with a stored `R_REG` proof (28,191–35,479 B by set)
 84.8–109.1 M (regular + state): more than a 60 M block, so on such a chain the proof is stored by a second call `storePqzPop` (P9; 45.6–57.5 M, the real `R_REG`
@@ -67,7 +67,7 @@ unproven (`proven = false`) and nothing is refused — the first draft of this p
 (corrected 2026-10-30). `msig` UAs: the structure is key data, so the id and the members'
 PoP are portable the same way: **every member signs `uaMessage(MSIG, POP_V2, registrationDigest)`** wrapped by `memberDigest`
 (corrected 2026-10-30; the first draft said `portablePopDigest`, which would leave the proof hash signed by nobody), and a native
-(EOA) member signs it chain-free with EIP-191 `personal_sign` (a member with code answers ERC-1271) — owner-requested "a UA does not depend on the chain", ruling C7 in decisions.md CTR-UA-07.
+(EOA) member signs it chain-free with EIP-191 `personal_sign` (a member with code answers ERC-1271) — owner-requested (a UA does not depend on the chain), ruling C7 in decisions.md CTR-UA-07.
 A front-runner holding a quorum's signatures may submit another valid subset first: the stored `pop` differs, the key, version and id do not.
 
 **P4 — Only the chat (KEM) key changes; the balance key never does.** The PQZ key (balance encryption, UA-6) is
@@ -97,8 +97,8 @@ signature, and the signature is stored with it).** The UA signs a **chain-indepe
 `kemRecord = (ua, version, pk)` (the digest has no chain id and no registry address, P4); `UARegistry.setKemKey(ua, version, pk, sig)` stores it on any chain, submitted by **anyone**
 (the submitter pays the gas; no fee, P9): the contract checks the signature
 against the UA's registered key and stores the record under `(ua, version)` if that version is not stored yet (any
-order, P4). So a key set on Ethereum can be copied to any other chain by anyone, every version likewise (owner 2026-10-25: "UA accounts do
-not depend on the chain; the KEM keys too"). `keyId` = `version`. **One
+order, P4). So a key set on Ethereum can be copied to any other chain by anyone, every version likewise (owner 2026-10-25: UA accounts do
+not depend on the chain; the KEM keys too). `keyId` = `version`. **One
 scheme only: ML-KEM-1024 + X25519** (owner 2026-10-25: the default and the only one): the X-Wing combiner with
 ML-KEM-1024 (FIPS 203, NIST level 5) in place of ML-KEM-768, the QSF construction of the CFRG hybrid-KEM draft; pk
 1,600 B, ciphertext 1,600 B, shared secret 32 B; secure while either part holds. The contract accepts only 1,600-byte
@@ -177,7 +177,7 @@ by anyone (the submitter — the UA or a relayer — pays the gas), chain-indepe
 any chain. **There are no `mtx*` fee forms** (`mtxRegister` / `mtxSetKemKey` / `mtxStorePqzPop` dropped): these writes
 are not token operations, so there is no token to take a fee from; a relayer that wants payment arranges it off chain.
 
-**P10 — Every family (owner 2026-10-29: "UA-8 phủ tất cả family").** The portable registration is one record with
+**P10 — Every family (owner 2026-10-29: UA-8 covers every family).** The portable registration is one record with
 the same bytes on every family, not an EVM feature. Common rules:
 
 - `portablePopDigest` (P1), `uaMessage(kind, POP_V2, …)` and the KEM record digest (P7) are byte-identical on every
@@ -215,7 +215,7 @@ Order (owner 2026-10-29, final): **1. EVM** (P1–P9); **2. Soroban** (the facto
 verified by the CAP-0087 host functions of Protocol 30); **3. NEAR** (a new `ua-registry` contract; `mldsa65` verified
 by the `ml_dsa_verify` host function; after the near-algorand merge); **4.** Cosmos, Sui, Aptos, Solana; **5.** Algorand
 (the `account` app gains the writes; `fndsa512` on chain once AVM v14 ships); **6.** TON (after its registry design).
-**The UA-8 plan covers steps 1–2 only** (owner: "Làm 1-2 trước"); steps 3–6 are later plans. Testnets (checked
+**The UA-8 plan covers steps 1–2 only** (owner: steps 1–2 first); steps 3–6 are later plans. Testnets (checked
 2026-10-29, re-check before starting): Stellar testnet votes Protocol 30 on 2026-11-03 and mainnet on 2026-11-23
 (secondary sources) — until then the Soroban step runs on a local network / quickstart at Protocol 30; NEAR testnet
 voted protocol 88 from 2026-10-21 (read `protocol_version` from the RPC before relying on it). NEAR and Algorand are separate tasks: different storage
@@ -247,7 +247,7 @@ Native PQ **accounts** (Cosmos `ml_dsa_65`, Sui ML-DSA-65, NEAR NEP-645) are not
 transactions, while a UA registry must verify a UA's signature over the portable digest inside a contract. A family
 gets status (b) only when a contract can run the verifier.
 
-**Relayer-checked mode (owner 2026-10-29: "phải có thêm phần trách nhiệm của relayer").** Where a part cannot be
+**Relayer-checked mode (owner 2026-10-29: the relayer's responsibility is added).** Where a part cannot be
 verified on chain — the PQ signature of `pop` or of a KEM record, the PQZ proof (P8, already "unproven"), a KEM key
 proof if one is added later — the record may still be stored, under these rules (controller proposals, owner may
 override):

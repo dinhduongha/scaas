@@ -17,7 +17,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UACall} from "../ua/UACall.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 
-/// Step 8 of the three-key round (spec 2026-11-13-pqz-three-keys §12; owner 2026-11-14 "không cần hỏi"): the cost table per set,
+/// Step 8 of the three-key round (spec 2026-11-13-pqz-three-keys §12; owner 2026-11-14): the cost table per set,
 /// measured. Each row is its own transaction (`isolate`) measured cold (a snapshot reverted around it): REGULAR gas (intrinsic,
 /// calldata or the EIP-7976 floor, execution) and EIP-8037 STATE gas apart, as `PqzStatePinGasTest`. Op 1 and the refresh are
 /// relayed full transactions with a FIXED outer fee of 7 on both paths (`mtxExecute`, ECDSA; `uaExecute`, an `mldsa65` fee UA);
