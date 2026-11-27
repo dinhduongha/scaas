@@ -147,10 +147,12 @@ def harness(hit, sc):
     return bool(hit) and hit[2].startswith("script/") and sc.get("name") == hit[3]
 
 
-def classify(code, sc, impl_verified=False, genesis=False, harness=False, ours=None):
+def classify(code, sc, impl_verified=False, genesis=False, harness=False, ours=None, shown=()):
     """(state, note) of one address from its code, Blockscout's smart-contracts answer, for a clone whether its
     implementation is verified, and whether it is a harness contract (harness()). `ours`: for a genesis account that is
-    ours (ours_at_genesis), its expected runtime code: it passes only verified on the explorer or equal byte for byte."""
+    ours (ours_at_genesis), its expected runtime code: it passes only verified on the explorer or equal byte for byte.
+    `shown`: the linked libraries' addresses the explorer must list among the contract's external libraries
+    (ARCH-POS-29, CTR-CHAT-32; `linked_shown()`)."""
     c = (code or "0x").lower()
     if c in ("0x", "0x0", ""):
         return "no code", ""
@@ -183,6 +185,10 @@ def classify(code, sc, impl_verified=False, genesis=False, harness=False, ours=N
             f"implementation verified {bool(impl_verified)}"
         )
     if full(sc):
+        listed = {(x.get("address_hash") or x.get("address") or "").lower() for x in sc.get("external_libraries") or []}
+        missing = [x for x in shown if x.lower() not in listed]
+        if missing:
+            return "unverified", f"verified, its linked libraries not shown (ARCH-POS-29): {', '.join(missing)}"
         return "verified", ""
     if harness and sc.get("is_verified") is True and sc.get("is_partially_verified") is True:
         return "verified (partial, harness)", "partial match (the metadata hash differs) of a script/ harness contract"
@@ -609,8 +615,26 @@ def tx_init(st, a):
     return inp if kind == "create" else "0x" + inp[66:]
 
 
-def forge_verify(a, hit, args, chain):
-    """One forge verify-contract; (ok, reason, seconds). Raises SystemExit(2) when forge compiles."""
+def linked_libraries(hit, deployed):
+    """ARCH-POS-29, CTR-CHAT-32 (owner 2026-11-28: the library shown on the verified contract): for an artifact named in
+    VERIFY_LIBRARIES (default PqChat), each library it links as (source, name, address), the address read from the
+    deployed code at the artifact's first link offset; empty for any other contract (its placeholders are matched as
+    library transformations)."""
+    if not hit or hit[3] not in os.environ.get("VERIFY_LIBRARIES", "PqChat").split():
+        return []
+    with open(hit[1]) as f:
+        refs = json.load(f)["deployedBytecode"].get("linkReferences") or {}
+    d = (deployed or "0x")[2:]
+    return [
+        (f, lib, "0x" + d[2 * spots[0]["start"] : 2 * spots[0]["start"] + 40])
+        for f, libs in sorted(refs.items())
+        for lib, spots in sorted(libs.items())
+    ]
+
+
+def forge_verify(a, hit, args, chain, deployed=None):
+    """One forge verify-contract; (ok, reason, seconds). Raises SystemExit(2) when forge compiles. A contract of
+    VERIFY_LIBRARIES declares its linked libraries (`--libraries`), so the explorer lists them."""
     root, _, src, name = hit
     cmd = [
         "systemd-run",
@@ -638,6 +662,8 @@ def forge_verify(a, hit, args, chain):
         "--skip-is-verified-check",
     ]
     cmd += ["--constructor-args", "0x" + args] if args else []
+    for f, lib, at in linked_libraries(hit, deployed):
+        cmd += ["--libraries", f"{f}:{lib}:{at}"]
     env = forge_env(os.environ, CFG["key"])
     t0, lim = time.time(), int(os.environ.get("VERIFY_TIMEOUT", "600"))
     p = subprocess.Popen(cmd, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -743,8 +769,15 @@ def main():
         impl = clone_impl(code[a])
         iv = full(sc.get(impl) or lookup(impl, code.get(impl, ""), chain)) if impl else False
         j = sc.get(a, {})
+        hit = idx.get(cbor(code[a]))
         return classify(
-            code[a], j, iv, a in gen, harness(idx.get(cbor(code[a])), j), ours.get(a.lower()) if a in gen else None
+            code[a],
+            j,
+            iv,
+            a in gen,
+            harness(hit, j),
+            ours.get(a.lower()) if a in gen else None,
+            [x[2] for x in linked_libraries(hit, code[a])],
         )
 
     for a, c in code.items():
@@ -790,12 +823,15 @@ def main():
                     if bs(f"addresses/{a}").get("is_contract") is True:
                         break
                     time.sleep(3)
-                good = lambda j: classify(code[a], j, harness=harness(hit, j))[0] != "unverified"
+                shown = [x[2] for x in linked_libraries(hit, code[a])]
+                good = lambda j, shown=shown: (
+                    classify(code[a], j, harness=harness(hit, j), shown=shown)[0] != "unverified"
+                )
                 for attempt in (
                     1,
                     2,
                 ):  # forge "Pass - Verified" with nothing on the explorer was seen once per ~10: retry once
-                    ok, why, s = forge_verify(a, hit, args or "", chain)
+                    ok, why, s = forge_verify(a, hit, args or "", chain, code[a])
                     j = {}
                     for _ in range(6):
                         j = lookup(a, code[a], chain)
@@ -806,7 +842,7 @@ def main():
                         break
                     say(f"{hit[3]} {a}: {why}, not on the explorer; attempt 2")
                 sc[a] = j
-                st_, note = classify(code[a], j, harness=harness(hit, j))
+                st_, note = classify(code[a], j, harness=harness(hit, j), shown=shown)
                 rows[a] = (
                     (st_, hit[3], note)
                     if st_ != "unverified"

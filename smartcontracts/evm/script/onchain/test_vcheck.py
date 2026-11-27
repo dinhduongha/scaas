@@ -21,6 +21,21 @@ assert (
 assert v.classify(CODE, {"is_verified": True, "is_partially_verified": True})[0] == "unverified"  # partial match
 assert v.classify(CODE, {"is_verified": True, "is_fully_verified": False})[0] == "unverified"
 assert v.classify(CODE, {})[0] == "unverified"
+# ARCH-POS-29: a contract whose linked library must be shown passes only when the explorer lists it (control, then one change)
+LIB = "0x" + "cd" * 20
+assert (
+    v.classify(
+        CODE,
+        dict(
+            VER0 := {"is_verified": True, "is_fully_verified": True},
+            external_libraries=[{"name": "L", "address_hash": LIB.upper().replace("0X", "0x")}],
+        ),
+        shown=[LIB],
+    )[0]
+    == "verified"
+)
+assert v.classify(CODE, VER0, shown=[LIB])[0] == "unverified"  # the library not listed
+assert v.classify(CODE, VER0)[0] == "verified"  # nothing to show
 assert v.classify(CODE, {"is_verified": True}, genesis=True)[0] == "genesis"
 # NET-EVM-14: a genesis account of ours passes only verified or with its expected runtime byte for byte
 VER = {"is_verified": True, "is_partially_verified": False, "is_fully_verified": True}
@@ -204,3 +219,16 @@ for _ds, _name in (("mldsa-x", "DEPLOY_SET_UNKNOWN"), ("mldsa-on", "DEPLOY_SET_M
     except _db.BookError as e:
         assert str(e).startswith(_name + ":"), str(e)
 print("test_vcheck: ok")
+
+# linked_libraries: only for the names of VERIFY_LIBRARIES, the address read at the artifact's link offset
+import json as _j
+import tempfile as _t
+
+with _t.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+    _j.dump({"deployedBytecode": {"linkReferences": {"src/L.sol": {"L": [{"start": 3, "length": 20}]}}}}, f)
+dep = "0x" + "11" * 3 + "cd" * 20 + "22" * 4
+os.environ.pop("VERIFY_LIBRARIES", None)
+assert v.linked_libraries(("r", f.name, "src/P.sol", "PqChat"), dep) == [("src/L.sol", "L", "0x" + "cd" * 20)]
+assert v.linked_libraries(("r", f.name, "src/T.sol", "NormalToken"), dep) == []  # not a VERIFY_LIBRARIES name
+os.unlink(f.name)
+print("test_vcheck: linked libraries ok")

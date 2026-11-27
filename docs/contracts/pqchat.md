@@ -157,6 +157,9 @@ UNAUDITED.
   factory ties only the modules to the release (`modules()`), not the library's address: as for every linked release,
   that `libs[0]` is the address in the release's code is checked by the deploy's tests (`GovDeploy.t.sol`,
   `LinkClosure.t.sol`) and the onchain script (Fable E-4).
+- **On the explorer.** `PqChat` is verified with its library declared (`--libraries`), so Blockscout lists
+  `PqChatRecordLib` among its external libraries, and the verification step fails a `PqChat` row that does not
+  ([evm.md](../networks/evm.md), owner 2026-11-28).
 - **Instances share nothing**: each keeps its sessions, epochs, messages, stored messages and topics in its own ERC-7201
   namespace `scaas.pqchat` (no plain slot; layout pinned in `test/v2/layout/PqChat.json` and `PqChatLayout.t.sol`). A
   client and the node take as a `PqChat` only an address the chain's factory lists as class 3 with version ≠ 0

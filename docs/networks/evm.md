@@ -784,6 +784,13 @@ binaries.soliditylang.org, never Blockscout's hosted service) backs the backend,
 every contract on the chain is verified by the step of [NET-EVM-12](#NET-EVM-12), `sh script/onchain/verify.sh
 scaas-testnet` (this Blockscout's API `http://127.0.0.1:8548/api` and the RPC `http://127.0.0.1:8545`, both on the host's
 loopback: the earlier LAN address is gone; the whole-chain scan on; the older per-broadcast `verify-blockscout.sh` stays);
+a contract whose linked libraries must show on the explorer ([ARCH-POS-29](../decisions.md#ARCH-POS-29); `VERIFY_LIBRARIES`,
+default `PqChat`, owner 2026-11-28) is verified with `--libraries <source>:<name>:<address>` (`vcheck.py` reads each
+address from the deployed code at the artifact's link offset; `verify-blockscout.sh` from the broadcast), and its row
+passes only when Blockscout lists every one of them in the contract's `external_libraries`. With `bytecode_hash = "none"`
+no metadata hash is in the bytecode, so declaring the libraries keeps a full match: the verify request for `PqChat` (its
+`--show-standard-json-input`, `settings.libraries` naming `PqChatRecordLib`) compiles to the linked release's runtime byte
+for byte (checked 2026-11-28 with solc 0.8.37); every other linked contract keeps the library transformation;
 upstream v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so the live stack uses a locally patched verifier
 image (built outside the repo, `~dockers/mba-chain-nethermind/blockscout/sc-verifier/`), temporary until upstream supports
 Amsterdam (owner ruling 2026-10-31 option (a)): the 31 `Deploy.s.sol` contracts and the PQZ e2e contracts verified, full match; the e2e tokens are EIP-1167 clones Blockscout links to their verified implementations (RUNBOOK § Contract verification).
