@@ -5,18 +5,22 @@
 //! SDK. Built so far: the store's `SecureStore` face ([`PartStore`]) and the mapping of its codes (plan UP5); the profiles
 //! over the crate ([`UserProfiles`]), an open profile's `Sdk`, stores and lock ([`UserProfile`]), `Sdk::close` at lock, the
 //! events (plan UP6); the re-seal's calls and the refusal of every secret-creating call on an unprotected profile's `Sdk`
-//! (plan UP7); hidden profiles: `create_hidden`, `open_hidden`, `hide`, `show`, `rename` (plan UP8). Outside the binding
-//! surface in wave 1. UNAUDITED.
+//! (plan UP7); hidden profiles: `create_hidden`, `open_hidden`, `hide`, `show`, `rename` (plan UP8); delete with the seeds'
+//! backups checked, `delete_locked`, `rebuild_index`, the migration of the CLI's store into "default" and the refusal of
+//! every vault call on it until it is sealed (plan UP9). Outside the binding surface in wave 1. UNAUDITED.
 pub use scaas_profile::{
-    keychain_name, Anchor, Core, CoreOpen, Error, Head, Item, KdfParams, Manifest, MatrixStore,
-    Plain, ProfileEvent, ProfileInfo as UserProfileInfo, ProfileKeychain, ProfilePart, Verdict,
-    WriteGuard, PART_MAX,
+    keychain_name, Anchor, ConfirmDeleteUnreadable, ConfirmRebuildIndex, Core, CoreOpen, Error,
+    Head, Item, KdfParams, Manifest, MatrixStore, Plain, ProfileEvent,
+    ProfileInfo as UserProfileInfo, ProfileKeychain, ProfilePart, Verdict, WriteGuard, PART_MAX,
 };
 
 use crate::error::SdkError;
 use crate::platform::Authenticator;
 use crate::vault::store::blocking;
-use crate::vault::{FileStore, SecureStore, StoreError, StoreLock, StorePolicy, StoredItem, HEAD};
+use crate::vault::{
+    FileStore, Keystore, SecureStore, StoreError, StoreLock, StorePolicy, StoredItem, HEAD,
+    KEYSTORE,
+};
 use crate::{ChainProfile, Clock, Event, GasTable, Limits, RuntimeChoice, Sdk, SdkConfig};
 use async_trait::async_trait;
 use scaas_profile::{OpenProfile, Profiles};
@@ -36,6 +40,9 @@ pub struct ProfilesConfig {
     pub limits: Limits,
     /// this device's largest Argon2id memory in KiB (spec §7.5): 1 GiB by default, lower on mobile
     pub kdf_max_kib: u32,
+    /// the CLI's data directory of today's single store (spec §12), migrated into "default" at start; the caller computes it
+    /// (the SDK reads no environment)
+    pub legacy: Option<String>,
 }
 
 impl ProfilesConfig {
@@ -47,8 +54,25 @@ impl ProfilesConfig {
             authenticator: None,
             limits: Limits::default(),
             kdf_max_kib: KdfParams::MAX_KIB,
+            legacy: None,
         }
     }
+}
+
+/// `delete`'s name typed again (spec §10), compared by `name_key`.
+pub struct ConfirmDeleteProfile {
+    pub name: Arc<SecretBytes>,
+}
+
+/// The second marker of `delete`, for a profile holding a seed whose backup is `pending`.
+#[derive(Debug, Clone, Copy)]
+pub struct ConfirmDeleteUnbacked {}
+
+/// What a delete loses (spec §10): the seeds of the profile's keystore and how many have no backup (`backup: pending`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeletePreview {
+    pub seeds: u32,
+    pub unbacked: u32,
 }
 
 /// How a protected profile opens (spec §11; the platform unlock is wave 2).
@@ -98,6 +122,7 @@ impl UserProfiles {
         c.keychain = config.keychain;
         c.kdf_max_kib = config.kdf_max_kib;
         c.max_concurrent_heavy = config.limits.max_concurrent_heavy as usize;
+        c.legacy = config.legacy.map(Into::into);
         let profiles = Arc::new(run(move || Profiles::new(c)).await?);
         Ok(Arc::new(UserProfiles {
             profiles,
@@ -157,6 +182,25 @@ impl UserProfiles {
         let p = self.profiles.clone();
         let open = run(move || name.with2(&passphrase, |n, s| p.open_hidden(n, s))).await?;
         Ok(self.profile(open))
+    }
+
+    /// Deletes the visible profile `id` without opening it (spec §10, a lost passphrase): its name typed again and
+    /// `ConfirmDeleteUnreadable` (the client said the data cannot be opened and is lost). `ProfileInUse`, `ProfileUnknown`
+    /// (also a hidden profile: no call deletes it by id), `ConfirmationMissing`.
+    pub async fn delete_locked(
+        &self,
+        id: String,
+        confirm: ConfirmDeleteProfile,
+        unreadable: ConfirmDeleteUnreadable,
+    ) -> Result<(), SdkError> {
+        let p = self.profiles.clone();
+        run(move || confirm.name.with(|n| p.delete_locked(&id, n, unreadable))).await
+    }
+
+    /// The index rebuilt from the envelopes on demand (spec §6).
+    pub async fn rebuild_index(&self, confirm: ConfirmRebuildIndex) -> Result<(), SdkError> {
+        let p = self.profiles.clone();
+        run(move || p.rebuild_index(confirm)).await
     }
 
     fn profile(&self, open: OpenProfile) -> Arc<UserProfile> {
@@ -276,6 +320,47 @@ impl UserProfile {
         .await
     }
 
+    /// The seeds a delete loses (spec §10), from the keystore as stored (no unlock; a migrated "default"'s too).
+    pub async fn delete_preview(&self) -> Result<DeletePreview, SdkError> {
+        let core = self.open.core().clone();
+        let ks = match run(move || core.get(ProfilePart::Sdk, KEYSTORE)).await? {
+            Some((pt, _)) => Keystore::parse(&pt)?,
+            None => Keystore::default(),
+        };
+        let n = |c: usize| u32::try_from(c).unwrap_or(u32::MAX);
+        Ok(DeletePreview {
+            seeds: n(ks.seeds.len()),
+            unbacked: n(ks.seeds.iter().filter(|e| e.backup == "pending").count()),
+        })
+    }
+
+    /// Deletes this profile (spec §10): with a seed whose backup is `pending` `unbacked` is required, and the name typed again
+    /// (`ConfirmationMissing` for either, nothing changed); then the profile is locked as by [`UserProfile::lock`] (its `Sdk`
+    /// closed) and removed by tombstone. The keychain items go with it.
+    pub async fn delete(
+        self: Arc<Self>,
+        confirm: ConfirmDeleteProfile,
+        unbacked: Option<ConfirmDeleteUnbacked>,
+    ) -> Result<(), SdkError> {
+        let held = self.sdk.lock().await;
+        if self.delete_preview().await?.unbacked > 0 && unbacked.is_none() {
+            return Err(SdkError::ConfirmationMissing);
+        }
+        let name = self.open.info().name;
+        let typed = confirm
+            .name
+            .with(|t| std::str::from_utf8(t).is_ok_and(|t| scaas_profile::same_name(&name, t)));
+        if !typed {
+            return Err(SdkError::ConfirmationMissing);
+        }
+        if let Some(s) = held.as_ref() {
+            s.vault().lock_all().await;
+            s.close().await;
+        }
+        let (p, open) = (self.profiles.clone(), self.open.clone());
+        run(move || confirm.name.with(|n| p.delete(&open, n))).await
+    }
+
     /// The `SecureStore` face of part `part` for an app core (the part `profile` is the manifests' and no `ProfilePart`).
     pub fn part_store(&self, part: ProfilePart) -> Result<Arc<dyn SecureStore>, SdkError> {
         self.open.core().live()?;
@@ -338,6 +423,7 @@ impl From<Error> for SdkError {
             Error::ProfilePassphraseWeak => SdkError::ProfilePassphraseWeak,
             Error::ProfileHiddenLimit => SdkError::ProfileHiddenLimit,
             Error::ProfileSearchTooLarge => SdkError::ProfileSearchTooLarge,
+            Error::ConfirmationMissing => SdkError::ConfirmationMissing,
         }
     }
 }
@@ -368,7 +454,8 @@ fn store_code(e: Error) -> StoreError {
         | Error::ProfileKdfOutOfMemory
         | Error::ProfilePassphraseWeak
         | Error::ProfileHiddenLimit
-        | Error::ProfileSearchTooLarge => StoreError::Io,
+        | Error::ProfileSearchTooLarge
+        | Error::ConfirmationMissing => StoreError::Io,
     }
 }
 
@@ -387,6 +474,17 @@ impl PartStore {
             _ => None,
         };
         Ok(Arc::new(PartStore { core, part, head }))
+    }
+
+    /// Spec §12: a migrated "default" (unprotected, `migration: pending`) holds the CLI's keystore in clear, so every call of
+    /// part `sdk` but `settings` is `ProfilePassphraseRequired` until `set_passphrase` seals it. Every vault call reads or
+    /// writes the keystore through here, so each is refused before any store call (controller call UP9).
+    fn gate(&self, name: &str) -> Result<(), StoreError> {
+        let migrated = self.core.migration_pending() && !self.core.protected();
+        match migrated && self.part == ProfilePart::Sdk && name != "settings" {
+            true => Err(StoreError::ProfilePassphraseRequired),
+            false => Ok(()),
+        }
     }
 
     /// `keystore.head`'s pass-through in part `sdk`, refused once the store is closed.
@@ -409,6 +507,7 @@ impl PartStore {
 #[async_trait]
 impl SecureStore for PartStore {
     async fn get(&self, name: String, reason: String) -> Result<Option<StoredItem>, StoreError> {
+        self.gate(&name)?;
         if let Some(h) = self.head(&name)? {
             return h.get(name, reason).await;
         }
@@ -426,6 +525,7 @@ impl SecureStore for PartStore {
         bytes: Vec<u8>,
         policy: StorePolicy,
     ) -> Result<(), StoreError> {
+        self.gate(&name)?;
         if let Some(h) = self.head(&name)? {
             return h.put_if(name, prev_rev, bytes, policy).await;
         }
@@ -435,6 +535,7 @@ impl SecureStore for PartStore {
     }
 
     async fn delete(&self, name: String) -> Result<(), StoreError> {
+        self.gate(&name)?;
         if let Some(h) = self.head(&name)? {
             return h.delete(name).await;
         }
@@ -442,6 +543,7 @@ impl SecureStore for PartStore {
     }
 
     async fn lock(&self, name: String) -> Result<Arc<StoreLock>, StoreError> {
+        self.gate(&name)?;
         if let Some(h) = self.head(&name)? {
             return h.lock(name).await;
         }

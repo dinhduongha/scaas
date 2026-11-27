@@ -32,7 +32,7 @@ use zeroize::Zeroizing;
 /// The journal of a re-seal (spec §5, §7.3).
 pub(crate) const NEXT: &str = "profile.envelope.next";
 
-/// The re-seal's steps, after each of which a `test-hooks` hook may stop it (spec §17 G4).
+/// The steps of a re-seal, a delete and a migration, after each of which a `test-hooks` hook may stop it (spec §17 G4, G10).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
     /// `profile.envelope.next` written
@@ -43,6 +43,18 @@ pub enum Step {
     Renamed,
     /// the store moved, the anchor and the marker written; `g<N>/` not yet removed
     Committed,
+    /// delete: `p/<id>/` renamed to its tombstone
+    Tombstone,
+    /// delete: the row dropped
+    RowDropped,
+    /// delete: the keychain items removed; the tombstone not yet
+    KeychainRemoved,
+    /// migration: under the root lock and the legacy lock, "default" not yet created
+    Migrating,
+    /// migration step 1: "default" created with `migration: pending`, its row written
+    MigrationCreated,
+    /// migration step 2: one legacy item moved (after each)
+    MigrationMoved,
 }
 
 /// A test hook: called after each step; `true` stops the re-seal there, the files left as they are.
@@ -142,8 +154,10 @@ impl OpenProfile {
             taken(found, &info.id)?;
         }
         let gen = env.gen.checked_add(1).ok_or(Error::ProfileFormat)?;
+        // spec §12 step 3: a migrated "default"'s `migration: pending` ends with its seal (controller call UP9)
         let mut next = Envelope {
             state: State::Protected,
+            migration: None,
             rev: env.rev.checked_add(1).ok_or(Error::ProfileFormat)?,
             gen,
             kdf: Some(new_kdf),

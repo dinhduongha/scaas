@@ -6,7 +6,8 @@
 //! far (plan UP5 to UP8): the sealed store core of one open profile ([`Core`]), the manifests and the anchor; the profile
 //! root, the index, the envelope, the instance lock, start, create, open, list and lock ([`Profiles`], [`OpenProfile`]); the
 //! re-seal (`set_passphrase`, `change_passphrase`, spec §7.3); hidden profiles (`create_hidden`, `open_hidden`, `hide`, `show`,
-//! `rename`, spec §8). UNAUDITED.
+//! `rename`, spec §8); delete, `delete_locked`, `rebuild_index` (spec §6, §10) and the migration of the CLI's single store into
+//! "default" (spec §12). UNAUDITED.
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -23,6 +24,8 @@ pub mod envelope;
 mod file;
 mod hidden;
 mod index;
+mod lifecycle;
+mod migrate;
 pub mod names;
 mod profile;
 mod reseal;
@@ -31,6 +34,7 @@ pub mod store;
 pub use anchor::{Anchor, Head, Verdict};
 pub use envelope::{Envelope, Kdf, KdfParams, State};
 pub use file::rev_of;
+pub use lifecycle::{ConfirmDeleteUnreadable, ConfirmRebuildIndex};
 pub use names::{check_name, name_key, same_name, uuid7};
 pub use profile::{MatrixStore, OpenProfile, ProfileEvent, ProfileInfo, Profiles, ProfilesConfig};
 pub use reseal::Step;
@@ -108,6 +112,8 @@ codes! {
     ProfileHiddenLimit,
     /// more than 32 candidates for a hidden search (spec §8 step 1), before any KDF run
     ProfileSearchTooLarge,
+    /// a delete's name typed again that is not the profile's (spec §10)
+    ConfirmationMissing,
 }
 
 impl std::fmt::Display for Error {

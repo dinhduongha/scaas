@@ -663,8 +663,12 @@ impl Sdk {
         }
         let rt = runtime(config.runtime)?;
         let keystore = vault::KeystoreFile::new(config.store.clone());
-        // the keystore is read once here: a container this build refuses is refused at open
-        keystore.load().await?;
+        // the keystore is read once here: a container this build refuses is refused at open; a migrated user profile's store
+        // refuses it until it is sealed (user-profiles spec §12), and its first vault call after the seal reads it
+        match keystore.load().await {
+            Err(SdkError::ProfilePassphraseRequired) | Ok(_) => {}
+            Err(e) => return Err(e),
+        }
         let (events, _) = broadcast::channel(config.limits.event_queue.max(1) as usize);
         let heavy = Arc::new(Semaphore::new(
             config.limits.max_concurrent_heavy.max(1) as usize

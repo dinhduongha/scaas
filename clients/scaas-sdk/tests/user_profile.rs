@@ -73,7 +73,7 @@ fn file_of(dir: &Path, keys: &ProfileKeys, part: &str, name: &str) -> PathBuf {
 /// The store's codes reach the SDK by name: each `scaas-profile` code is the `SdkError` of the same name (none collapsed).
 #[test]
 fn store_codes_are_the_sdks() {
-    assert_eq!(Error::ALL.len(), 24);
+    assert_eq!(Error::ALL.len(), 25);
     for e in Error::ALL {
         assert_eq!(SdkError::from(*e).code(), e.code());
     }
@@ -646,4 +646,186 @@ async fn hidden_calls_route() {
     assert_eq!(names().await, ["Renamed", "default"]);
     up.hide(sec(PASS)).await.unwrap();
     assert_eq!(names().await, ["default"]);
+}
+
+// ---- UP9: delete, delete_locked, rebuild_index, the migrated "default" (spec §6, §10, §12; §17 G10, G4) ----
+
+/// Spec §12: a migrated "default" holds the CLI's keystore while unprotected, so every vault call on its `Sdk` is
+/// `ProfilePassphraseRequired` before any store call, until `set_passphrase` seals it; then the migrated keystore opens with
+/// its seeds (the positive control: the legacy store written by the SDK itself over a `FileStore` at the CLI's directory, one
+/// generated seed and one imported), the plain `g0/` is gone, the anchor followed, and the profile reopens under the
+/// passphrase. `delete_preview` reads the migrated keystore throughout (two seeds, one without a backup).
+#[tokio::test(flavor = "multi_thread")]
+async fn migrated_default_refused_until_sealed() {
+    use scaas_sdk::vault::{FileStore, Generate};
+    use scaas_sdk::{Sdk, SdkConfig};
+    let base = tmp();
+    let (root, cli) = (base.join("root"), base.join("cli"));
+    let legacy = Sdk::open(SdkConfig {
+        profiles: vec![],
+        store: FileStore::new(&cli).unwrap(),
+        authenticator: None,
+        rp_id: None,
+        runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: Default::default(),
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    let (lv, gen) = (legacy.vault(), sec(VAULT_PASS));
+    let generated = lv
+        .generate(Generate {
+            label: "G".into(),
+            vault_passphrase: gen,
+        })
+        .await
+        .unwrap()
+        .info
+        .id;
+    let imported = lv
+        .import_words(ImportWords {
+            label: "Main".into(),
+            words: sec(REPO),
+            vault_passphrase: sec(VAULT_PASS),
+        })
+        .await
+        .unwrap()
+        .id;
+    lv.lock_all().await;
+    legacy.close().await;
+    assert!(cli.join("keystore.head").is_file());
+    let mut c = ProfilesConfig::new(root.to_string_lossy().into_owned());
+    c.legacy = Some(cli.to_string_lossy().into_owned());
+    let ups = UserProfiles::new(c).await.unwrap();
+    let list = ups.list().await.unwrap();
+    assert_eq!((list.len(), list[0].name.as_str()), (1, "default"));
+    assert!(!cli.join("keystore").exists());
+    let up = ups.open(list[0].id.clone(), None).await.unwrap();
+    let s = up.sdk(sdk_config(vec![])).await.unwrap();
+    let v = s.vault();
+    let core = up.core();
+    let calls = core.calls();
+    let refused = vec![
+        code(v.seeds().await.map(drop)),
+        code(v.seed(imported.clone()).await.map(drop)),
+        code(
+            v.unlock(imported.clone(), Unlock::Passphrase(sec(VAULT_PASS)))
+                .await,
+        ),
+        code(v.keystore_rollback().await.map(drop)),
+        code(v.accept_rollback().await),
+        code(
+            v.import_words(ImportWords {
+                label: "Two".into(),
+                words: sec(REPO),
+                vault_passphrase: sec(VAULT_PASS),
+            })
+            .await
+            .map(drop),
+        ),
+    ];
+    assert!(
+        refused.iter().all(|c| *c == "ProfilePassphraseRequired"),
+        "{refused:?}"
+    );
+    // the calls that first need an unlocked seed meet `WalletLocked` (no seed unlocks while the keystore is refused)
+    assert_eq!(
+        code(v.confirm_backup(generated.clone()).await),
+        "WalletLocked"
+    );
+    assert_eq!(
+        code(v.rename(imported.clone(), "Other".into()).await),
+        "WalletLocked"
+    );
+    assert_eq!(core.calls(), calls, "refused before any store call");
+    let p = up.delete_preview().await.unwrap();
+    assert_eq!((p.seeds, p.unbacked), (2, 1));
+    // the positive control: sealed, the same `Sdk` reads the migrated keystore
+    up.set_passphrase(sec(PASS), Some(TEST_KDF), None)
+        .await
+        .unwrap();
+    let mut ids: Vec<String> = v.seeds().await.unwrap().into_iter().map(|s| s.id).collect();
+    ids.sort();
+    let mut want = vec![generated.clone(), imported.clone()];
+    want.sort();
+    assert_eq!(ids, want);
+    assert!(!v.keystore_rollback().await.unwrap());
+    v.unlock(imported.clone(), Unlock::Passphrase(sec(VAULT_PASS)))
+        .await
+        .unwrap();
+    let dir = core.dir().to_path_buf();
+    assert!(
+        !dir.join("g0").exists(),
+        "the plain g0 removed after the commit"
+    );
+    up.clone().lock().await;
+    let up = ups
+        .open(
+            list[0].id.clone(),
+            Some(ProfileUnlock::Passphrase(sec(PASS))),
+        )
+        .await
+        .unwrap();
+    let s = up.sdk(sdk_config(vec![])).await.unwrap();
+    assert_eq!(s.vault().seeds().await.unwrap().len(), 2);
+}
+
+/// Delete through the SDK (spec §10, §11): `delete_preview` counts the seeds and those whose backup is `pending`; `delete` with
+/// such a seed needs `ConfirmDeleteUnbacked` and the name typed again (`ConfirmationMissing` otherwise, nothing deleted); then
+/// the profile is gone and its `Sdk` is `ProfileLocked`. `delete_locked` takes a locked visible profile with its name and
+/// `ConfirmDeleteUnreadable`; `rebuild_index` lists every visible profile again. Each refusal beside its control.
+#[tokio::test(flavor = "multi_thread")]
+async fn delete_through_sdk() {
+    use scaas_sdk::user_profile::{
+        ConfirmDeleteProfile, ConfirmDeleteUnbacked, ConfirmDeleteUnreadable, ConfirmRebuildIndex,
+    };
+    use scaas_sdk::vault::Generate;
+    let (ups, up, root) = open_protected().await;
+    let s = up.sdk(sdk_config(vec![])).await.unwrap();
+    s.vault()
+        .generate(Generate {
+            label: "G".into(),
+            vault_passphrase: sec(VAULT_PASS),
+        })
+        .await
+        .unwrap();
+    let p = up.delete_preview().await.unwrap();
+    assert_eq!((p.seeds, p.unbacked), (1, 1));
+    let named = |n: &str| ConfirmDeleteProfile { name: sec(n) };
+    assert_eq!(
+        code(up.clone().delete(named("work"), None).await),
+        "ConfirmationMissing"
+    );
+    assert_eq!(
+        code(
+            up.clone()
+                .delete(named("play"), Some(ConfirmDeleteUnbacked {}))
+                .await
+        ),
+        "ConfirmationMissing"
+    );
+    assert_eq!(s.vault().seeds().await.unwrap().len(), 1, "still open");
+    up.clone()
+        .delete(named("WORK"), Some(ConfirmDeleteUnbacked {}))
+        .await
+        .unwrap();
+    assert_eq!(code(s.vault().seeds().await.map(drop)), "ProfileLocked");
+    let names = |l: Vec<scaas_sdk::user_profile::UserProfileInfo>| {
+        let mut v: Vec<String> = l.into_iter().map(|i| i.name).collect();
+        v.sort();
+        v
+    };
+    assert!(names(ups.list().await.unwrap()).is_empty());
+    ups.create("keep".into()).await.unwrap();
+    let other = ups.create("other".into()).await.unwrap().id;
+    let c = ConfirmDeleteUnreadable {};
+    assert_eq!(
+        code(ups.delete_locked(other.clone(), named("x"), c).await),
+        "ConfirmationMissing"
+    );
+    ups.delete_locked(other, named("Other"), c).await.unwrap();
+    std::fs::remove_file(root.join("profiles.json")).unwrap();
+    ups.rebuild_index(ConfirmRebuildIndex {}).await.unwrap();
+    assert_eq!(names(ups.list().await.unwrap()), ["keep"]);
 }

@@ -28,7 +28,7 @@ use zeroize::Zeroizing;
 const ROOT_LOCK: &str = "profiles.json.lock";
 pub(crate) const INSTANCE_LOCK: &str = "instance.lock";
 pub(crate) const BUILD_LOCK: &str = "build.lock";
-const TOMBSTONE: &str = ".deleted";
+pub(crate) const TOMBSTONE: &str = ".deleted";
 /// At most 32 profile directories under `p/` (spec §6).
 pub(crate) const DIRS_MAX: usize = 32;
 /// The keychain items of a profile (spec §5, §7.1, §7.2, §7.6), removed with its tombstone.
@@ -46,6 +46,13 @@ pub struct ProfilesConfig {
     pub kdf_max_kib: u32,
     /// Argon2id runs at once (the heavy limiter of the profiles)
     pub max_concurrent_heavy: usize,
+    /// the CLI's data directory of today's single store (spec §12), migrated into "default" at start; the caller computes it
+    /// (`--data-dir`, `$XDG_DATA_HOME/scaas`, `$HOME/.local/share/scaas`): this crate reads no environment
+    pub legacy: Option<PathBuf>,
+    /// test-only (feature `test-hooks`): called after each step of a delete and a migration; `true` stops there as if the
+    /// process died (`VaultIo`, the files left as they are)
+    #[cfg(feature = "test-hooks")]
+    pub hook: Option<Box<dyn FnMut(crate::Step) -> bool + Send>>,
 }
 
 impl ProfilesConfig {
@@ -55,6 +62,9 @@ impl ProfilesConfig {
             keychain: None,
             kdf_max_kib: KdfParams::MAX_KIB,
             max_concurrent_heavy: 1,
+            legacy: None,
+            #[cfg(feature = "test-hooks")]
+            hook: None,
         }
     }
 }
@@ -130,6 +140,8 @@ pub struct Profiles {
     events: Mutex<Vec<ProfileEvent>>,
     #[cfg(feature = "test-hooks")]
     before_kdf: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+    #[cfg(feature = "test-hooks")]
+    hook: Mutex<Option<crate::reseal::Hook>>,
 }
 
 /// The root's own checks (spec §5 "Modes"): made `0700` when missing; a symlink or not a directory refused; a wider mode
@@ -239,8 +251,8 @@ impl Profiles {
     /// Start (spec §10): the root checked, then under the root lock the journal finished or undone, each `p/.tmp-*` whose
     /// `build.lock` is free removed, each tombstone whose instance lock is free removed with its keychain items, each
     /// UUID-named directory without a usable envelope reported (`ProfileDamaged`, never removed), the index rebuilt when it
-    /// is missing or does not parse while `p/` holds a profile. No live profile's lock is taken. First run (no profile
-    /// directory): "default" created unprotected.
+    /// is missing or does not parse while `p/` holds a profile, then the migration from `legacy` (spec §12, `migrate.rs`). No
+    /// live profile's lock is taken. First run (no profile directory, nothing migrated): "default" created unprotected.
     pub fn new(config: ProfilesConfig) -> Result<Profiles, Error> {
         prepare_root(&config.root)?;
         let pr = Profiles {
@@ -256,11 +268,17 @@ impl Profiles {
             events: Mutex::new(Vec::new()),
             #[cfg(feature = "test-hooks")]
             before_kdf: Mutex::new(None),
+            #[cfg(feature = "test-hooks")]
+            hook: Mutex::new(config.hook),
         };
         mkdir(&pr.p)?;
         let first_run = {
             let _root = pr.root_lock()?;
-            pr.start()?
+            let first_run = pr.start()?;
+            match &config.legacy {
+                Some(src) => pr.migrate(src, first_run)?,
+                None => first_run,
+            }
         };
         if first_run {
             // a second instance's first run at once: its commit finds the name taken
@@ -277,7 +295,7 @@ impl Profiles {
         std::mem::take(&mut *self.events.lock().unwrap_or_else(PoisonError::into_inner))
     }
 
-    fn event(&self, e: ProfileEvent) {
+    pub(crate) fn event(&self, e: ProfileEvent) {
         self.events
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -286,6 +304,21 @@ impl Profiles {
 
     pub(crate) fn root_lock(&self) -> Result<File, Error> {
         lock_file(&self.root.join(ROOT_LOCK))
+    }
+
+    /// The keychain items of profile `id` removed (spec §10: a tombstone's).
+    pub(crate) fn remove_keychain(&self, id: &str) -> Result<(), Error> {
+        if let Some(kc) = &self.keychain {
+            for what in KEYCHAIN_ITEMS {
+                kc.delete(&keychain_name(id, what))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The index file's path.
+    pub(crate) fn index_file(&self) -> PathBuf {
+        self.root.join(index::FILE)
     }
 
     /// The start's steps under the root lock; whether this is a first run.
@@ -305,11 +338,7 @@ impl Profiles {
             } else if let Some(id) = name.strip_suffix(TOMBSTONE).filter(|id| is_id(id)) {
                 if try_lock_file(&path.join(INSTANCE_LOCK))?.is_some() {
                     remove_dir(&path)?;
-                    if let Some(kc) = &self.keychain {
-                        for what in KEYCHAIN_ITEMS {
-                            kc.delete(&keychain_name(id, what))?;
-                        }
-                    }
+                    self.remove_keychain(id)?;
                 }
             }
         }
@@ -796,16 +825,19 @@ impl Profiles {
     }
 
     pub(crate) fn drop_row(&self, id: &str) -> Result<(), Error> {
-        self.update_index(|ix| {
-            let n = ix.profiles.len();
-            ix.profiles.retain(|r| r.id != id);
-            let last = ix.last.as_deref() == Some(id);
-            if last {
-                ix.last = None;
-            }
-            last || n != ix.profiles.len()
-        })
+        self.update_index(|ix| without(ix, id))
     }
+}
+
+/// `ix` without the row of `id` and without `last` naming it; whether it changed.
+pub(crate) fn without(ix: &mut Index, id: &str) -> bool {
+    let n = ix.profiles.len();
+    ix.profiles.retain(|r| r.id != id);
+    let last = ix.last.as_deref() == Some(id);
+    if last {
+        ix.last = None;
+    }
+    last || n != ix.profiles.len()
 }
 
 pub(crate) struct OpenLabel {
@@ -902,22 +934,43 @@ impl OpenProfile {
     /// Locks the profile (spec §10 "lock"): the stores refuse every later call (`ProfileLocked`), the arena is destroyed, the
     /// instance lock released. Again: nothing.
     pub fn lock(&self) {
+        drop(self.release());
+    }
+
+    /// The lock's steps but the instance lock, which is returned (`None` when already locked): a delete keeps it across the
+    /// tombstone's rename.
+    pub(crate) fn release(&self) -> Option<File> {
         self.core.close();
         if let Some(k) = self.core.keys() {
             k.lock();
         }
-        drop(
-            self.instance
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .take(),
-        );
+        self.instance
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
     }
 }
 
 impl Drop for OpenProfile {
     fn drop(&mut self) {
         self.lock();
+    }
+}
+
+impl Profiles {
+    /// Whether the test hook stops a delete or a migration after `step` (as if the process died there: `VaultIo`).
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn died(&self, step: crate::Step) -> Result<(), Error> {
+        let mut h = self.hook.lock().unwrap_or_else(PoisonError::into_inner);
+        match h.as_mut().is_some_and(|f| f(step)) {
+            true => Err(Error::VaultIo),
+            false => Ok(()),
+        }
+    }
+
+    #[cfg(not(feature = "test-hooks"))]
+    pub(crate) fn died(&self, _: crate::Step) -> Result<(), Error> {
+        Ok(())
     }
 }
 

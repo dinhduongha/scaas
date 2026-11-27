@@ -358,6 +358,11 @@ impl Core {
         self.cur().keys.is_some()
     }
 
+    /// Whether the profile was opened with `migration: pending` (spec §12: a migrated "default" until its seal).
+    pub fn migration_pending(&self) -> bool {
+        self.migration_pending
+    }
+
     /// The current generation's number.
     pub(crate) fn gen(&self) -> u64 {
         self.cur().gen
