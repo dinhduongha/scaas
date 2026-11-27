@@ -1,0 +1,3 @@
+# lockall mutants (name | outcome | commit | test | first failure line)
+lock_all locks the open seeds only (hidden sets' seeds dropped) | killed | e3b58fba3 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test vault lock_all_locks_hidden_sets_of_a_locked_seed | panicked at tests/vault.rs:508:5:
+1 mutants, 1 killed, 0 survived, 0 not loaded, 0 other failure
