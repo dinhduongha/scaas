@@ -37,3 +37,4 @@ UP5 | sdk-reg | ea96202b7 + UP5 files | 0 | vault 28, keystore_vectors 2, --lib 
 UP5 | sdk-clippy (UPF and default, --all-targets -D warnings) | ea96202b7 + UP5 files | 0 | 0 warnings
 UP5 | fmt rust js toml | ea96202b7 + UP5 files (staged) | 0 | every part ok
 UP5 | docs | ea96202b7 + UP5 files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
+UP5 | mutants up5 | 22a427755 | 0 | 8 mutants, 8 killed, 0 survived, 0 not loaded, 0 other failure
