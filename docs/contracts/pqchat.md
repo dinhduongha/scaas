@@ -74,11 +74,13 @@ Status: **BUILT** (`test/pqchat/PqChat.t.sol`, plan T85; the deploy script's reg
 reads its chain values from its own `ChainEnv`, is initialised once by the factory, and its owner UA has no power**
 (owner 2026-11-07, D22 and Q2; the env check 3C-D1 is a controller call, owner may override).
 
-- **Registration** (registrar): the four body modules first, `PqChatTopics(factory)`, `PqChatTree(factory)`,
+- **Registration** (registrar): the linked library `PqChatRecordLib` ([CTR-CHAT-32](#CTR-CHAT-32); forge places it and
+  links its address into `PqChat`'s init code), the four body modules, `PqChatTopics(factory)`, `PqChatTree(factory)`,
   `PqChatTreeViews(factory)` and `PqChatTreeMembers(factory)` (below), then
-  `publishClassEnv(3, 0, envVersion, env)` with the modules pinned in `env.libs` (their code hashes in `env.libCodeHashes`,
-  checked by the factory at `deployImplementation`), `deployImplementation(ReleaseId(3, 0, v), envVersion, IPqChat.initialize.selector,
-  type(IPqChat).interfaceId, initcode, abi.encode(topics, tree, views, members))`, `setClassKindEnabled(3, 0, true, chainUid)` after the notice period. **Creation** (anyone): `createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize,
+  `publishClassEnv(3, 0, envVersion, env)` with `env.libs` = the library, then the modules in `modules()` order (their
+  code hashes in `env.libCodeHashes`, checked by the factory at `deployImplementation`), `deployImplementation(ReleaseId(3,
+  0, v), envVersion, IPqChat.initialize.selector, type(IPqChat).interfaceId, initcode, abi.encode(topics, tree, views,
+  members))` with the linked init code, `setClassKindEnabled(3, 0, true, chainUid)` after the notice period. **Creation** (anyone): `createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize,
   (ownerUA, sigStore)))`, an EIP-1167 clone ([token-wrappers.md §6](token-wrappers.md#factory); the generic path is the factory
   index spec [`2026-11-07-factory-contract-index.md`](../superpowers/specs/2026-11-07-factory-contract-index.md) §8).
   The factory gets no `PqChat` code.
@@ -120,7 +122,7 @@ reads its chain values from its own `ChainEnv`, is initialised once by the facto
   in that order: topics, tree, views, members.
 
 <a id="CTR-CHAT-32"></a>**CTR-CHAT-32** — **No `fallback`: every entry is in `PqChat`'s ABI; the size split is the linked
-library `PqChatRecordLib`** (owner 2026-11-27/28, [ARCH-POS-29](../decisions.md#arch-pos-29--no-fallback-routing-every-callable-entry-is-declared-in-its-contracts-abi-a-size-split-prefers-a-linked-external-library)). Status: **BUILT**
+library `PqChatRecordLib`** (owner 2026-11-27/28, [ARCH-POS-29](../decisions.md#ARCH-POS-29)). Status: **BUILT**
 (`test/pqchat/PqChatTreeViews.t.sol`, `PqChatRecordLib.t.sol`, `PqChat.t.sol`, `test/governance/GovDeploy.t.sol`),
 UNAUDITED.
 
@@ -144,8 +146,14 @@ UNAUDITED.
   - Called on its own it has no env and refuses.
   - The check order is unchanged (shapes, signature, nonce, store), and so are the stored bytes, the events and the errors.
     A registry revert comes back verbatim.
+  - Only a flat session's `postMessage` uses the library. A tree session's `postMessage` is forwarded to `PqChatTree`, which
+    keeps the signature and store steps inline (`PqChatCore._post`, unchanged). Both store the same blob form, and a test
+    pins each path's stored bytes to it (Fable A-1, E-5).
 - **The env.** The class env pins the library first (the release's link closure), then the four modules in `modules()`
-  order. The factory checks every pin's code hash at `deployImplementation` (`LibraryCodeHashMismatch`).
+  order. The factory checks every pin's code hash at `deployImplementation` (`LibraryCodeHashMismatch`). On chain, the
+  factory ties only the modules to the release (`modules()`), not the library's address: as for every linked release,
+  that `libs[0]` is the address in the release's code is checked by the deploy's tests (`GovDeploy.t.sol`,
+  `LinkClosure.t.sol`) and the onchain script (Fable E-4).
 - **Instances share nothing**: each keeps its sessions, epochs, messages, stored messages and topics in its own ERC-7201
   namespace `scaas.pqchat` (no plain slot; layout pinned in `test/v2/layout/PqChat.json` and `PqChatLayout.t.sol`). A
   client and the node take as a `PqChat` only an address the chain's factory lists as class 3 with version ≠ 0
@@ -830,8 +838,11 @@ the pins' comments; before the first split it was 34,223 B and asked 58.0 M. Sin
 (2026-11-28: no `fallback`, the 13 views declared, the linked library `PqChatRecordLib`): `PqChat` 33,605 B (2,341,506 +
 51,990,930, 57.0 M asked; regular + state 54,332,436, within a 60 M block); the library 4,918 B (348,379 + 7,708,140,
 8.5 M asked). The views declared without the library: 36,022 B. The split costs each session, rekey and message write
-one `DELEGATECALL` with its calldata: about +7 k to +8.4 k regular per 2-member row, +25 k for a 20-member
-`createSession` (the record copied once more); no state gas. Since the topics' G1, G2 and G5
+one `DELEGATECALL`: the entry's whole calldata (record, wraps and signature) copied once into the library's frame, the
+record copied twice back (return data, `abi.decode`): about +7 k to +8.4 k regular per 2-member row, +25 k for a 20-member
+`createSession` above the calldata floor; no state gas. One more call frame stands before the registry's check, so its
+verifier receives 63/64 of the gas the library has (Fable E-6: it matters only for a verifier within about 2 % of the
+2^24 cap). Since the topics' G1, G2 and G5
 ([CTR-CHAT-29](#CTR-CHAT-29) to [CTR-CHAT-31](#CTR-CHAT-31), 2026-11-27): `PqChat` 34,029 B (2,368,552 + 52,639,650,
 57.8 M asked), `PqChatTopics` 18,523 B (1,236,756 + 28,523,790, 31.2 M asked); the topic writes' rows below moved by
 less than the ±500 pin slack, their state gas not at all (the times sit in slots already written).
@@ -841,19 +852,22 @@ less than the ±500 pin slack, their state gas not at all (the times sit in slot
 
 | Write | Regular | State |
 |---|---:|---:|
-| `createSession`, 2 members, both wraps | 344,756 | 8,082,990 |
-| `createSession`, 2 members, one wrap; then `addWraps` of the other | 297,087; 144,280 | 5,402,430; 2,865,690 |
-| `rekey`, 2 members, plain (first epoch-list entry; next) | 371,249; 371,131 | 8,131,950; 8,034,030 |
-| `remove` 1 of 3 members; then the rekey dropping it (2 left) | 176,666; 389,335 | 1,459,620; 8,034,030 |
-| `postMessage`, 2 members, 1,040 B ciphertext (new list; warm) | 157,767; 157,779 | 3,124,260; 2,928,420 |
-| `leave`, 2 members | 150,721 | 1,116,900 |
+| `createSession`, 2 members, both wraps (index 2) | 356,047 | 8,229,870 |
+| `createSession`, 2 members, one wrap; then `addWraps` of the other | 307,555; 144,280 | 5,549,310; 2,865,690 |
+| `rekey`, 2 members, plain (first epoch-list entry; next) | 384,774; 384,303 | 8,131,950; 8,034,030 |
+| `remove` 1 of 3 members; then the rekey dropping it (2 left) | 185,096; 403,229 | 1,459,620; 8,034,030 |
+| `postMessage`, 2 members, 1,040 B ciphertext (new list; warm) | 167,129; 167,141 | 3,124,260; 2,928,420 |
+| `leave`, 2 members | 169,508 | 1,116,900 |
 | `storeMessage`, 2,400 B envelope (new hint; warm); 5,100 B | 177,048; 351,128 | 4,248,810 (4,150,890 warm); 8,312,490 |
-| `createSession`, 10 members, all wraps | 1,356,696 | 32,660,910 |
-| `createSession`, 20 members, in two calls (10 wraps; `addWraps` 10) | 1,525,793; 1,231,768 | 34,521,390; 26,990,730 |
+| `createSession`, 10 members, all wraps | 1,362,840 | 32,807,790 |
+| `createSession`, 20 members, in two calls (10 wraps; `addWraps` 10) | 1,568,121; 1,231,768 | 34,668,270; 26,990,730 |
 | `rekey`, 20 members, plain | 2,648,984 | 59,907,150 |
-| `createTopic` (256 B about); `setTopicWriter` | 179,045; 112,920 | 1,851,300; 293,760 |
-| `postEntry` 1 KiB post; 256 B reply; `editEntry` 1 KiB | 178,583; 183,285; 144,427 | 3,075,300; 1,900,260; 2,487,780 |
-| `voteEntry` first; changed | 101,326; 102,292 | 195,840; 0 |
+| `createTopic` (256 B about); `setTopicWriter` | 179,655; 113,350 | 1,851,300; 293,760 |
+| `postEntry` 1 KiB post; 256 B reply; `editEntry` 1 KiB | 179,444; 183,989; 145,268 | 3,075,300; 1,900,260; 2,487,780 |
+| `voteEntry` first; changed | 101,799; 102,765 | 195,840; 0 |
+
+The rows above are the pins of `PqChatGas.t.sol` as measured on 2026-11-28 (CTR-CHAT-32's tree); the 10- and 20-member
+writes sit on the EIP-7976 calldata floor, so the split moves only the rows above it.
 
 Since CTR-CHAT-23 (2026-11-23) the rows above are measured on an `sstore2` instance, the default, with the 32-B stand-in
 signature: each keeps 256 B more per record than before (+391,680 state gas), every signed session write reads the setting, and a `leave` keeps

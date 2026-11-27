@@ -14,7 +14,8 @@ import {PqChatBase} from "./PqChatBase.sol";
 /// verifier is a stand-in that accepts every signature (its own gas excluded, as in `PqChatGas.t.sol`), so a row is `PqChat`'s
 /// and the registry's own cost plus the signature's calldata and, at `sstore2`, its bytes in the record's blob. Regular within
 /// ±500 gas, state exact; a move needs old -> new figures in its commit. At these sizes each row's regular gas is the
-/// calldata floor (EIP-7623 / EIP-7976), equal in both modes; `sstore2` adds the encoded signature and one head word to the
+/// calldata floor (EIP-7623 / EIP-7976), equal in both modes, except the FN-DSA-512 `rekey` rows: since CTR-CHAT-32 (the
+/// linked `PqChatRecordLib`) their execution is above the floor and differs by mode (393,605 `none`, 395,729 `sstore2`); `sstore2` adds the encoded signature and one head word to the
 /// blob at 1,530 state gas a byte: ML-DSA-65 3,552 B (5,434,560), FN-DSA-512 896 B (1,370,880).
 contract PqChatSigGasTest is PqChatBase {
     uint256 internal constant SLACK = 500;

@@ -155,21 +155,6 @@ contract GovDeployTest is Test {
     /// the `(3, 0)` switch on, and with a notice period of 0 one instance owned by no UA (JSON `pqchat_implementation`,
     /// `pqchat_instance`), listed by `contractsPage(3, …)`; with a notice period the release waits and no instance is made;
     /// without the flag nothing of class 3.
-    /// Whether `code` holds the 20 bytes of `a` (a linked library's address in a release's runtime).
-    function _holds(bytes memory code, address a) internal pure returns (bool) {
-        bytes20 w = bytes20(a);
-        for (uint256 i; i + 20 <= code.length; ++i) {
-            if (bytes20(_word20(code, i)) == w) return true;
-        }
-        return false;
-    }
-
-    function _word20(bytes memory code, uint256 i) private pure returns (bytes32 w) {
-        assembly ("memory-safe") {
-            w := mload(add(add(code, 32), i))
-        }
-    }
-
     function test_deployPqChatPath() public {
         DeployHarness h = new DeployHarness();
         h.setPqChat(true);
@@ -196,7 +181,7 @@ contract GovDeployTest is Test {
             assertEq(lib, address(PqChatRecordLib), "the linked library");
             assertEq(e.libs[0], lib, "the linked library pinned in libs");
             assertEq(e.libCodeHashes[0], lib.codehash);
-            assertTrue(_holds(r.implementation.code, lib), "the release links it");
+            assertTrue(_holds(r.implementation.code, abi.encodePacked(lib)), "the release links it");
         }
         assertEq(e.libs[1], topics, "the body module pinned in libs (CTR-TOK-30, 3C-D2)");
         assertEq(e.libCodeHashes[1], topics.codehash);

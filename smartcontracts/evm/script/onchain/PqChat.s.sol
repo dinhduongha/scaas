@@ -221,7 +221,19 @@ contract PqChatOnchain is OnchainBase {
         _book(PqChatFace(impl).modules()[1], "PqChatTree");
         _book(PqChatFace(impl).modules()[2], "PqChatTreeViews");
         _book(PqChatFace(impl).modules()[3], "PqChatTreeMembers");
-        _book(address(PqChatRecordLib), "PqChatRecordLib"); // CTR-CHAT-32: the linked library
+        // CTR-CHAT-32 (Fable D-3): the library the release runs, `libs[0]` of its class env, held in the release's code
+        IFactoryToken.Env memory ce = f.classEnvOf(3, 0, f.classReleaseOf(IOpenFactory.ReleaseId(3, 0, 1)).envVersion);
+        require(_holds(impl.code, abi.encodePacked(ce.libs[0])), "PqChat: libs[0] is not the release's linked library");
+        _book(ce.libs[0], "PqChatRecordLib");
+    }
+
+    function _holds(bytes memory code, bytes memory x) internal pure returns (bool) {
+        for (uint256 i; i + x.length <= code.length; ++i) {
+            uint256 j;
+            while (j < x.length && code[i + j] == x[j]) ++j;
+            if (j == x.length) return true;
+        }
+        return false;
     }
 
     function _instance() internal {

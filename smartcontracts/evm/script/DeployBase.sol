@@ -705,7 +705,9 @@ abstract contract DeployBase is DeployBook {
     ///         the module pinned in `libs`), release 1 from the chain-neutral init code with `implArgs` naming the module,
     ///         the `(3, 0)` switch on, and one instance owned by no UA when the notice period lets it be created now (JSON
     ///         `pqchat_instance`; else created after the notice period by anyone, `createInstance`). JSON
-    ///         `pqchat_implementation`, `pqchat_topics`, `pqchat_tree` (CTR-CHAT-26), `pqchat_tree_views`, `pqchat_tree_members` (owner 2026-11-24). **UNAUDITED.**
+    ///         `pqchat_implementation`, `pqchat_record_lib` (CTR-CHAT-32: the linked library, pinned first in `libs`),
+    ///         `pqchat_topics`, `pqchat_tree` (CTR-CHAT-26), `pqchat_tree_views`, `pqchat_tree_members` (owner 2026-11-24).
+    ///         **UNAUDITED.**
     function _deployPqChat(OpenFactory f, address reg) internal {
         _requireKindHere("PqChat", uid); // NET-ALL-25 (C18), where PqChat is created (review P3-1)
         address topics = _module("PqChatTopics.sol:PqChatTopics", abi.encode(address(f)), 3, 0);

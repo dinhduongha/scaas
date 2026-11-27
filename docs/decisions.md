@@ -692,6 +692,7 @@ signature beside the Ed25519 one keeps a verifier without `ua-rs` able to check.
 release whose binaries no one can tie to a commit.
 **Source.** Owner ruling 2026-11-27: the recommendations of the owner questions of 2026-11-27 accepted as recommended, A3 (publishing entity, key custody) left open; A2 accept, A4 register once A3, A5 not now, A6 none, A7 upload our own key, A9 AMO then Chrome then Safari, A10 Ed25519 offline plus a UA PQ signature beside it; [app-distribution note](research/2026-11-27-app-distribution.md) §1.2, §3, §5, §7, §8.
 
+<a id="ARCH-POS-29"></a>
 ### ARCH-POS-29 — No `fallback()` routing: every callable entry is declared in its contract's ABI; a size split prefers a linked external library
 - old: — · status: current · owner: yes · date: 2026-11-28 · normative: decisions.md#ARCH-POS-29 · superseded-by: —
 

@@ -543,11 +543,11 @@ contract PqChat is IPqChat, IPqChatTreeViews, PqChatCore {
     }
 
     function topicOf(bytes32) external view returns (PqTopic memory, uint64) {
-        _forwardView();
+        _topicsView();
     }
 
     function entryOf(bytes32) external view returns (EntryView memory) {
-        _forwardView();
+        _topicsView();
     }
 
     function versionAt(bytes32, uint32)
@@ -555,55 +555,55 @@ contract PqChat is IPqChat, IPqChatTreeViews, PqChatCore {
         view
         returns (string memory, bytes memory, bytes32, uint64, uint64, uint64)
     {
-        _forwardView();
+        _topicsView();
     }
 
     function entryRows(bytes32[] calldata, bytes32) external view returns (EntryRow[] memory) {
-        _forwardView();
+        _topicsView();
     }
 
     function writerOf(bytes32, bytes32) external view returns (bool, uint64) {
-        _forwardView();
+        _topicsView();
     }
 
     function scoreOf(bytes32) external view returns (uint128, uint128) {
-        _forwardView();
+        _topicsView();
     }
 
     function voteOf(bytes32, bytes32) external view returns (int8, uint64) {
-        _forwardView();
+        _topicsView();
     }
 
     function topics(uint256, uint256) external view returns (bytes32[] memory, uint256) {
-        _forwardView();
+        _topicsView();
     }
 
     function topicsByAdmin(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
-        _forwardView();
+        _topicsView();
     }
 
     function writersOf(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
-        _forwardView();
+        _topicsView();
     }
 
     function posts(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
-        _forwardView();
+        _topicsView();
     }
 
     function replies(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
-        _forwardView();
+        _topicsView();
     }
 
     function byAuthor(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
-        _forwardView();
+        _topicsView();
     }
 
     function topicNonceUsed(bytes32, uint64) external view returns (bool) {
-        _forwardView();
+        _topicsView();
     }
 
     function entryNonceUsed(bytes32, bytes32, uint64) external view returns (bool) {
-        _forwardView();
+        _topicsView();
     }
 
     /// @dev CTR-TOK-30's unguarded stub (no entry here holds a guard): `DELEGATECALL` of this call's calldata to the module,
@@ -626,7 +626,7 @@ contract PqChat is IPqChat, IPqChatTreeViews, PqChatCore {
     }
 
     /// @dev A `view` entry (the module's body writes nothing): `_forward` under a view cast, as the token faces do.
-    function _forwardView() internal view {
+    function _topicsView() internal view {
         function() f = _forwardTopics;
         function() view v;
         assembly ("memory-safe") {
@@ -649,57 +649,86 @@ contract PqChat is IPqChat, IPqChatTreeViews, PqChatCore {
     // CTR-CHAT-32 (owner 2026-11-28): each view of `IPqChatTreeViews` is declared here (a verified source lists it) and
     // forwarded by `DELEGATECALL` to the read-only module, its return and revert data verbatim; the caps are constants here.
 
-    function treeOf(bytes32)
+    /// @inheritdoc IPqChatTreeViews
+    function treeOf(bytes32 sessionId)
         external
         view
-        returns (bytes32, uint32, uint32, bytes32, bytes32, bytes32, uint32, uint32)
+        returns (
+            bytes32 treeId,
+            uint32 leaves,
+            uint32 used,
+            bytes32 treeHash,
+            bytes32 genesisTreeHash,
+            bytes32 headEpochId,
+            uint32 owed,
+            uint32 sincePath
+        )
     {
-        _forwardViews();
+        _treeView();
     }
 
-    function treeLeaves(bytes32, uint256, uint256) external view returns (TreeLeafView[] memory) {
-        _forwardViews();
+    /// @inheritdoc IPqChatTreeViews
+    function treeLeaves(bytes32 sessionId, uint256 first, uint256 count) external view returns (TreeLeafView[] memory) {
+        _treeView();
     }
 
-    function treeNodes(bytes32, uint256, uint256) external view returns (TreeNodeView[] memory) {
-        _forwardViews();
+    /// @inheritdoc IPqChatTreeViews
+    function treeNodes(bytes32 sessionId, uint256 first, uint256 count) external view returns (TreeNodeView[] memory) {
+        _treeView();
     }
 
-    function treeNodeKey(bytes32, uint256) external view returns (bytes memory) {
-        _forwardViews();
+    /// @inheritdoc IPqChatTreeViews
+    function treeNodeKey(bytes32 sessionId, uint256 node) external view returns (bytes memory) {
+        _treeView();
     }
 
-    function commitOf(bytes32) external view returns (PqChatCommit memory, bytes32) {
-        _forwardViews();
+    /// @inheritdoc IPqChatTreeViews
+    function commitOf(bytes32 epochId) external view returns (PqChatCommit memory c, bytes32 sigHash) {
+        _treeView();
     }
 
-    function pathListOf(bytes32) external view returns (uint32[] memory, bytes32[] memory) {
-        _forwardViews();
+    /// @inheritdoc IPqChatTreeViews
+    function pathListOf(bytes32 epochId) external view returns (uint32[] memory ctTargets, bytes32[] memory ctHashes) {
+        _treeView();
     }
 
-    function pathKeys(bytes32) external view returns (bytes[] memory) {
-        _forwardViews();
+    /// @inheritdoc IPqChatTreeViews
+    function pathKeys(bytes32 epochId) external view returns (bytes[] memory) {
+        _treeView();
     }
 
-    function pathCtAt(bytes32, uint256) external view returns (PathCt memory) {
-        _forwardViews();
+    /// @inheritdoc IPqChatTreeViews
+    function pathCtAt(bytes32 epochId, uint256 i) external view returns (PathCt memory) {
+        _treeView();
     }
 
-    function goneOf(bytes32, bytes32) external view returns (uint8, uint64) {
-        _forwardViews();
+    /// @inheritdoc IPqChatTreeViews
+    function goneOf(bytes32 sessionId, bytes32 ua) external view returns (uint8 kind, uint64 epoch) {
+        _treeView();
     }
 
-    function goneKeyOf(bytes32, bytes32) external view returns (bool, uint64, uint64) {
-        _forwardViews();
+    /// @inheritdoc IPqChatTreeViews
+    function goneKeyOf(bytes32 sessionId, bytes32 kemHash)
+        external
+        view
+        returns (bool gone, uint64 joinEpoch, uint64 endEpoch)
+    {
+        _treeView();
     }
 
-    function goneOwnKeyOf(bytes32, bytes32, bytes32) external view returns (bool, uint64, uint64) {
-        _forwardViews();
+    /// @inheritdoc IPqChatTreeViews
+    function goneOwnKeyOf(bytes32 sessionId, bytes32 ua, bytes32 kemHash)
+        external
+        view
+        returns (bool gone, uint64 joinEpoch, uint64 endEpoch)
+    {
+        _treeView();
     }
 
-    /// @dev A tree view: `_forward` to the read-only `PqChatTreeViews` under a view cast, as `_forwardView`.
-    function _forwardViews() internal view {
-        function() f = _forwardTreeViews;
+    /// @dev A tree view: `_forward` to the read-only `PqChatTreeViews` under a view cast, as `_topicsView` (Fable A-2: the
+    ///      two casts named by their module).
+    function _treeView() internal view {
+        function() f = _forwardViewsModule;
         function() view v;
         assembly ("memory-safe") {
             v := f
@@ -707,7 +736,7 @@ contract PqChat is IPqChat, IPqChatTreeViews, PqChatCore {
         v();
     }
 
-    function _forwardTreeViews() internal {
+    function _forwardViewsModule() internal {
         _forward(VIEWS);
     }
 

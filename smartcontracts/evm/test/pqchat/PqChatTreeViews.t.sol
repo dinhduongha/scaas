@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {VmSafe} from "forge-std/Vm.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IPqChatTreeViews} from "../../src/pqchat/IPqChatTreeViews.sol";
 import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
 import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
@@ -384,8 +385,51 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
             }
         }
         assertEq(found, (1 << 13) - 1, "the 13 tree views in PqChat's ABI");
+        // Fable D-6: each declared view's inputs and outputs, names included, are the interface's (what Blockscout shows)
+        string memory face = vm.readFile(
+            string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/IPqChatTreeViews.sol/IPqChatTreeViews.json")
+        );
+        for (uint256 j; j < want.length; ++j) {
+            (string memory a, string memory b) = (_fnAt(art, want[j]), _fnAt(face, want[j]));
+            assertEq(
+                keccak256(vm.parseJson(art, string.concat(a, ".inputs"))),
+                keccak256(vm.parseJson(face, string.concat(b, ".inputs"))),
+                string.concat(want[j], ": the interface's inputs")
+            );
+            assertEq(
+                keccak256(vm.parseJson(art, string.concat(a, ".outputs"))),
+                keccak256(vm.parseJson(face, string.concat(b, ".outputs"))),
+                string.concat(want[j], ": the interface's outputs")
+            );
+        }
         assertEq(_v().TREE_RANGE_MAX(), viewsModule.TREE_RANGE_MAX(), "PqChat's cap is the module's");
         assertEq(_v().TREE_LEAF_PAGE_MAX(), viewsModule.TREE_LEAF_PAGE_MAX(), "PqChat's leaf cap is the module's");
+    }
+
+    /// The ABI path of the function `name` in `art`.
+    function _fnAt(string memory art, string memory name) internal view returns (string memory at) {
+        for (uint256 i;; ++i) {
+            at = string.concat(".abi[", vm.toString(i), "]");
+            require(vm.keyExistsJson(art, at), string.concat("no function ", name));
+            if (!vm.keyExistsJson(art, string.concat(at, ".name"))) continue;
+            if (keccak256(bytes(art.readString(string.concat(at, ".name")))) == keccak256(bytes(name))) return at;
+        }
+    }
+
+    /// Fable A-1, E-5: a tree session's message goes through `PqChatTree`'s own copy of the store step (`PqChatCore._post`),
+    /// not the library; it is stored in the same form as a flat session's (`PqChatRecordLib.t.sol` test_flatMessageBlobForm):
+    /// the code's STOP byte, the flag 0, `abi.encode(m, sigHash, sig)`.
+    function test_treeMessageBlobIsTheFlatForm() public {
+        (M memory m, Step memory st,) = _grown();
+        IPqChat.PqChatMessage memory msg_;
+        (msg_.sessionId, msg_.epochId, msg_.sender, msg_.counter, msg_.ciphertext) =
+        (m.sid, st.epochId, A, 1, hex"0a0b0c");
+        IUARegistry.UASig memory sig = _sig(A, h.message(msg_));
+        vchat.postMessage(msg_, sig);
+        uint256 root = uint256(keccak256(abi.encode(uint256(keccak256("scaas.pqchat")) - 1))) & ~uint256(0xff);
+        uint256 list = uint256(keccak256(abi.encode(m.sid, root + 5)));
+        address at = address(uint160(uint256(vm.load(address(vchat), keccak256(abi.encode(list))))));
+        assertEq(at.code, bytes.concat(hex"0000", abi.encode(msg_, keccak256(abi.encode(sig)), sig)), "the flat form");
     }
 
     /// The interface ids (pins): `IPqChat`'s unchanged by the views, which have their own; both reported. CTR-CHAT-32:
