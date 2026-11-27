@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# cargo-deny policy of scaas-matrix (CLI-MTX-01): pqchat-core's (clients/pqchat-core/deny.toml) without its SDK-only
+# exceptions; every exception below names its crate and reason. Gate: `cargo deny check`.
+
+[graph]
+all-features = true
+
+[advisories]
+# Every advisory in the RustSec database fails the check, unmaintained and unsound included; an exception needs an
+# `ignore` entry with its reason.
+version = 2
+yanked = "deny"
+ignore = [
+  # matrix-sdk 0.19.1 -> matrix-sdk-sqlite -> rusqlite 0.40.2 -> libsqlite3-sys 0.38.2 (bundled SQLite 3.53.2): stale page-cache
+  # bytes when a process opens a database together with a crafted `-wal` file of another page size. Local only: the files
+  # are the profile's own store in its private directory, written by this client; who can plant a pair there can already
+  # replace the store. The fix (libsqlite3-sys 0.39, rusqlite 0.41) needs matrix-sdk 0.20.0 (2026-11-25), under 14 days
+  # old today: move to it from 2026-12-09 and remove this entry.
+  { id = "RUSTSEC-2026-0459", reason = "local-only SQLite WAL page-size bug in the profile's own store; fix needs matrix-sdk 0.20, under 14 days old; remove from 2026-12-09" },
+  # unmaintained, no vulnerability: hard dependencies of matrix-sdk 0.19.1 (anymap2 directly, chrono through oauth2 5.0.0)
+  { id = "RUSTSEC-2026-0319", reason = "anymap2 unmaintained, no vulnerability; a direct dependency of matrix-sdk 0.19.1" },
+  { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, no vulnerability; via oauth2 5.0.0 of matrix-sdk 0.19.1" },
+]
+
+[licenses]
+version = 2
+# Permissive licences only, compatible with LicenseRef-Vegan-Community-1.0 (pqchat-core's list).
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "ISC",
+  "CDLA-Permissive-2.0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+confidence-threshold = 0.9
+# MPL-2.0 (file-level copyleft) only for these crates, each a hard dependency of matrix-sdk 0.19.1 with no feature that drops
+# it; used unmodified from crates.io, so the obligation is to keep their source available as published (controller call
+# 2026-11-27, CLI-MTX-01, owner may override; the same terms as the Status QML files of scaas-app). Not on the allow list:
+# a new MPL crate fails the check until it is named here.
+exceptions = [
+  { crate = "as_variant", allow = [
+    "MPL-2.0",
+  ] },
+  { crate = "eyeball", allow = [
+    "MPL-2.0",
+  ] },
+  { crate = "eyeball-im", allow = [
+    "MPL-2.0",
+  ] },
+  { crate = "imbl", allow = [
+    "MPL-2.0",
+  ] },
+  { crate = "imbl-sized-chunks", allow = [
+    "MPL-2.0",
+  ] },
+  { crate = "readlock", allow = [
+    "MPL-2.0",
+  ] },
+  { crate = "readlock-tokio", allow = [
+    "MPL-2.0",
+  ] },
+]
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+# no OpenSSL-licensed TLS provider and no native TLS: rustls with ring only (CLI-MTX-01)
+deny = [{ crate = "aws-lc-sys" }, { crate = "aws-lc-rs" }, { crate = "openssl-sys" }, { crate = "native-tls" }]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

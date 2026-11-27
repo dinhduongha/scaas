@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+[package]
+name = "scaas-matrix"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license-file = "../../LICENSE"
+description = "The Matrix client crate for every chat front-end: one matrix-rust-sdk client per open user profile, the store key from the profile, private defaults, Matrix and PqChat rooms apart, the PqChat transport (CLI-MTX-01..12). No SCaaS signing, no SDK. UNAUDITED."
+
+# docs/clients/scaas-matrix.md (CLI-MTX-*), spec docs/superpowers/specs/2026-11-27-scaas-matrix.md. CLI-MTX-01: no scaas-sdk,
+# pqchat-core, scaas-ua or scaas-rpc in the normal graph (tests/deps.rs).
+[dependencies]
+# matrix-rust-sdk 0.19.1 (2026-09-18; 0.20.0 of 2026-11-25 is under 14 days old), its defaults off: no aws-lc-rs TLS
+# provider, no automatic room-key forwarding; the SQLite stores compiled in (bundled) and encrypted by the caller's key
+matrix-sdk = { version = "=0.19.1", default-features = false, features = [
+  "e2e-encryption",
+  "sqlite",
+  "bundled-sqlite",
+] }
+# the room-key recipient strategy type (CollectStrategy), not re-exported by matrix-sdk; the same release
+matrix-sdk-base = { version = "=0.19.1", default-features = false }
+# matrix-sdk's reqwest 0.13 is built `rustls-no-provider`: ring is installed as the process's provider (Apache-2.0 AND ISC)
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+pqchat-transport = { path = "../pqchat-transport" }
+tokio = { version = "1", features = ["sync", "rt", "time", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+url = "2"
+zeroize = "1"
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+# the e2e's Synapse helper (clients/pqchat-core/tests/e2e/matrix.rs, included by #[path]) speaks HTTP with reqwest 0.12
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+
+# the dependencies built at opt-level 3 (vodozemac and SQLite crawl unoptimised)
+[profile.dev.package."*"]
+opt-level = 3
