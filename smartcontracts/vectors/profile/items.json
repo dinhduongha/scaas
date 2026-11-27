@@ -298,7 +298,7 @@
   "anchors": [
     {
       "case": "protected profile, parts sdk and pqchat",
-      "envelope_file": "{\"format\":\"scaas.profile\",\"v\":1,\"id\":\"01a21ce0-6e7b-7e63-9b1d-f667cc7d8daa\",\"state\":\"protected\",\"rev\":3,\"gen\":1,\"name\":\"Alice\",\"kdf\":{\"alg\":\"argon2id\",\"v\":1,\"m\":8192,\"t\":1,\"p\":4,\"salt\":\"aYUzKlcknEHHJJy90r2kgA==\"},\"pass\":\"W+uBVdm34Z4oSdx6VmMHrpUgtGzVwYPoSOdQb/+DnHUJGYjgKIo3WgrMkimJV2omlv9rjT17d1J5vWCN\",\"platform\":{\"salt\":\"jGvEiaYLQ1XOnOxIhL1d1as5G/CMy2cLecMvRsQ5UQw=\",\"wrap\":\"moSYz3Jfq9DFM8zM/tSRax3iXnKeI711H+Pn6UVgWUIZSt9IFlhH37dH1GHKi39WG2+hw4bNP7E2O2xu\"},\"label\":\"qbIIR1xpJBD6jqqh1Ru6Lj1OwWbu8Jvy6aq3+K0q1LelyUW2IqABJIICfaw8+mVUp15AFiuYWkjTf+4=\"}",
+      "envelope_file": "{\"format\":\"scaas.profile\",\"v\":1,\"id\":\"01a21ce0-6e7b-7e63-9b1d-f667cc7d8daa\",\"state\":\"protected\",\"rev\":3,\"gen\":1,\"name\":\"Alice\",\"kdf\":{\"alg\":\"argon2id\",\"v\":1,\"m\":8192,\"t\":1,\"p\":4,\"salt\":\"aYUzKlcknEHHJJy90r2kgA==\"},\"pass\":\"W+uBVdm34Z4oSdx6VmMHrpUgtGzVwYPoSOdQb/+DnHUJGYjgKIo3WgrMkimJV2omlv9rjT17d1J5vWCN\",\"platform\":{\"salt\":\"jGvEiaYLQ1XOnOxIhL1d1as5G/CMy2cLecMvRsQ5UQw=\",\"wrap\":\"moSYz3Jfq9DFM8zM/tSRax3iXnKeI711H+Pn6UVgWUIZSt9IFlhH37dH1GHKi39WG2+hw4bNP7E2O2xu\"},\"label\":\"qbIIR1xpJBD6jqqhb+zJN4DZfAvZM61Lfin2akLz61xmSIzEGUsAeyFTq3vAivXFIKuWFGFY0AKelRU=\"}",
       "manifest_files": {
         "sdk": "{\"rev\":5,\"sealed\":\"exM2YkyaFCNjBag2rIsX8q5gp46lYRHgcWnHH0hR29CzugJerfU7zlc2/5IqGJI4cpltO/4zHA271rYwGFWDrovkjQNYwhIUw82B/HxsrGYpANR32GMVWugjhPN6dTfHjr8zZ+j3pBK8tpMllXORnc+xSCwmyIv5leUZHCku6zPhtNvR2MchF1NojeCei/xB2cPUi5nZIzimupgMGwVPK/51RTfLLMUql6Q5u+tJ0PbSxj4zNhE=\"}",
         "pqchat": "{\"rev\":9,\"sealed\":\"/P1lzM5pIGU1IGz0uDW14jHFEKZDsS5lyOK2FSEsJZVW1+F3PD+oVjDBxvlMvNuM0YgMenrSeMgW+ihit2RxIqpr8SmkhlU6hnT4grwMG1f72/0uFys/Z5lazvHcDdTdwyeq8CGKtqj1bLsngIJAXHpuPhDdao39YDbHFiJPAiMzqh6svogapPrMxgM6eXguuibclvfyPKavnf6DCJC1ML6QgpYgQOnaOs3o4SNfNWSC3BmZ6v+Py1dbRgWvVTER3iMW/40oYKEkcvPlf+/HkxeCLZciYdjJaNG8spvA91EAHFmppZkEzvEf4ezY+D3rwNksm9hH25xOT/L91PopD3O9N8MH99hg0WfdykEvsFF1Mhx2L6ui2p1hGwFbjyqPz/HUYoQxeXdF6XY=\"}"
@@ -307,7 +307,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -320,7 +320,7 @@
           }
         }
       },
-      "json": "{\"gen\":1,\"envelope\":{\"rev\":3,\"sha256\":\"54afb07435a1d98d90a71235355f9da4\"},\"parts\":{\"pqchat\":{\"rev\":9,\"sha256\":\"da3d6ca7415bfba4b664a8912bc76509\"},\"sdk\":{\"rev\":5,\"sha256\":\"3d4e8babe6cee2fbe3af593903b5ca61\"}}}"
+      "json": "{\"gen\":1,\"envelope\":{\"rev\":3,\"sha256\":\"855a28893bdf4613690a48b07eb8653f\"},\"parts\":{\"pqchat\":{\"rev\":9,\"sha256\":\"da3d6ca7415bfba4b664a8912bc76509\"},\"sdk\":{\"rev\":5,\"sha256\":\"3d4e8babe6cee2fbe3af593903b5ca61\"}}}"
     }
   ],
   "anchor_compare": [
@@ -330,7 +330,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -347,7 +347,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -368,7 +368,7 @@
         "gen": 2,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -385,7 +385,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -406,7 +406,7 @@
         "gen": 0,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -423,7 +423,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -461,7 +461,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -499,7 +499,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -537,7 +537,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -558,7 +558,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -575,7 +575,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -596,7 +596,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -613,7 +613,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -634,7 +634,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -651,7 +651,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -672,7 +672,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "sdk": {
@@ -685,7 +685,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -706,7 +706,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -727,7 +727,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -748,7 +748,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -765,7 +765,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -807,7 +807,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -828,7 +828,7 @@
         "gen": 2,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {
@@ -841,7 +841,7 @@
         "gen": 1,
         "envelope": {
           "rev": 3,
-          "sha256": "54afb07435a1d98d90a71235355f9da4"
+          "sha256": "855a28893bdf4613690a48b07eb8653f"
         },
         "parts": {
           "pqchat": {

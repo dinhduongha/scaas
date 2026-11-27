@@ -134,6 +134,7 @@ fn protected(root: &Path, hint: Option<&str>, label: &str, hidden: bool, pass: &
     let sealed = k
         .seal_label(
             &id,
+            1,
             format!(r#"{{"name":"{label}","hidden":{hidden}}}"#).as_bytes(),
         )
         .unwrap();
@@ -537,6 +538,13 @@ fn g12_root_modes_and_symlink() {
     assert_eq!(code(Profiles::new(cfg(&made))), "ok");
 }
 
+/// An envelope's fields but its label, which every envelope write re-seals at the new rev (owner 2026-11-28, review F-2).
+fn resealed(env: &str) -> Value {
+    let mut v: Value = serde_json::from_str(env).unwrap();
+    v.as_object_mut().unwrap().remove("label").unwrap();
+    v
+}
+
 /// The vector envelope files (envelope.json `files`, `name_hint`): the protected visible one opens with its passphrase
 /// (label "Alice"), a wrong passphrase is `ProfileOpen`; the hidden one is not opened by id (`ProfileOpen`, no KDF run); a
 /// changed hint opens with `ProfileIndexMismatch` and is rewritten from the label, after which it opens with no event.
@@ -595,7 +603,10 @@ fn envelope_files_open() {
     );
     let env =
         std::fs::read_to_string(root.join("p").join(id_of(&hid)).join("profile.envelope")).unwrap();
-    assert_eq!(env, hid.replace(r#""rev":5"#, r#""rev":6"#));
+    assert_eq!(
+        resealed(&env),
+        resealed(&hid.replace(r#""rev":5"#, r#""rev":6"#))
+    );
     assert_eq!(names(&p), [("Alice".to_string(), true)]);
     drop(o);
 
@@ -609,7 +620,10 @@ fn envelope_files_open() {
     assert_eq!(o.info().name, "Alice");
     assert_eq!(p.drain_events(), [ProfileEvent::ProfileIndexMismatch]);
     let env = std::fs::read_to_string(root.join("p").join(&id).join("profile.envelope")).unwrap();
-    assert_eq!(env, file(0).replace(r#""rev":3"#, r#""rev":4"#));
+    assert_eq!(
+        resealed(&env),
+        resealed(&file(0).replace(r#""rev":3"#, r#""rev":4"#))
+    );
     assert_eq!(names(&p), [("Alice".to_string(), true)]);
     o.lock();
     drop(p.open(&id, Some(PASS.as_bytes())).unwrap());

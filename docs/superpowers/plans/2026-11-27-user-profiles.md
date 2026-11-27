@@ -115,7 +115,9 @@ These fill only what spec §7 and §10.1 leave open; everything the spec pins st
 4. **Wraps** (`pass`, `platform.wrap`): `seal_key` output, `nonce ‖ ct ‖ tag` (60 bytes), AD = `"scaas/ua/v1/keywrap" ‖ 0x01 ‖
    lp("scaas.profile.wrap" | "scaas.profile.platform") ‖ public JSON`, public JSON =
    `{"format":"scaas.profile","v":1,"id":"<id>","state":"protected","gen":N,"kdf":{"alg":"argon2id","v":1,"m":M,"t":T,"p":4,"salt":"<b64>"}}`.
-5. **Label** plaintext: `{"name":"<NFC>","hidden":false|true}`; sealed `nonce ‖ ct ‖ tag`, AD spec §7.1.
+5. **Label** plaintext: `{"name":"<NFC>","hidden":false|true}`; sealed `nonce ‖ ct ‖ tag`, AD spec §7.1:
+   `lp("scaas.profile.label") ‖ be16(1) ‖ lp(id) ‖ be64(rev)`, `rev` the holding envelope's, its 8 bytes last (owner
+   2026-11-28, review F-2; task R6); re-sealed at every envelope write.
 6. **Item on disk**: `{"rev":N,"sealed":"<b64 of nonce ‖ ct ‖ tag>"}`; AD and file name spec §7.2; `N` = the item's stored rev.
 7. **Manifest** (the item `manifest:<part>` of part `profile`, plaintext):
    `{"format":"scaas.profile-manifest","v":1,"part":"<part>","rev":M,"items":[["<name>",rev],…],"tombstones":[["<name>",rev],…]}`,

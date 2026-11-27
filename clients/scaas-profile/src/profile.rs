@@ -695,13 +695,21 @@ impl Profiles {
         };
         let mut name = hint.clone();
         if let Some(keys) = &keys {
-            let label = open_label(keys, &env).inspect_err(|_| keys.lock())?;
-            if label.hidden {
-                // a planted hint on a hidden profile: removed, its row dropped, nothing else written (spec §6)
+            let label = open_label(keys, &env).inspect_err(|e| {
                 keys.lock();
+                if *e == Error::ProfileRollback {
+                    self.event(ProfileEvent::ProfileRollback);
+                }
+            })?;
+            if label.hidden {
+                // a planted hint on a hidden profile: removed (the label re-sealed at the raised rev, review F-2), its row
+                // dropped, nothing else written (spec §6)
                 let mut e = env.clone();
                 e.name = None;
                 e.rev = e.rev.checked_add(1).ok_or(Error::ProfileFormat)?;
+                let sealed = crate::hidden::seal_label(keys, id, e.rev, &label.name, true);
+                keys.lock();
+                e.label = Some(sealed?);
                 file::write(&dir, &dir.join(envelope::FILE), &e.json()?)?;
                 self.drop_row(id)?;
                 return Err(Error::ProfileOpen);
@@ -718,8 +726,8 @@ impl Profiles {
         Ok(opened)
     }
 
-    /// The hint of the open profile `opened` rewritten from its label's `name` (spec §6), the envelope's rev raised; the
-    /// anchor follows.
+    /// The hint of the open profile `opened` rewritten from its label's `name` (spec §6), the envelope's rev raised and its
+    /// (visible) label re-sealed at it (review F-2); the anchor follows.
     pub(crate) fn rewrite_hint(
         &self,
         opened: &OpenProfile,
@@ -729,6 +737,11 @@ impl Profiles {
         let dir = self.p.join(&env.id);
         env.name = Some(name.into());
         env.rev = env.rev.checked_add(1).ok_or(Error::ProfileFormat)?;
+        if let Some(keys) = opened.core.keys() {
+            env.label = Some(crate::hidden::seal_label(
+                &keys, &env.id, env.rev, name, false,
+            )?);
+        }
         let b = env.json()?;
         file::write(&dir, &dir.join(envelope::FILE), &b)?;
         opened.core.set_envelope(Head::of(env.rev, &b))
@@ -912,15 +925,20 @@ impl Profiles {
     }
 }
 
-/// The sealed label of a protected envelope: `{name, hidden}`, the name as stored; anything else (a hidden label beside a
-/// platform wrap included) `ProfileFormat`.
+/// The sealed label of a protected envelope at its `rev`: `{name, hidden}`, the name as stored. A label whose tag fails at the
+/// envelope's id and rev (the wrap opened, so `DEK_p` is right) is `ProfileRollback` (owner 2026-11-28, review F-2: an older
+/// envelope written back with its rev raised; a label damaged in place reads the same); anything else (not base64, a
+/// plaintext of no label form, a hidden label beside a platform wrap) `ProfileFormat`.
 pub(crate) fn open_label(keys: &ProfileKeys, env: &Envelope) -> Result<OpenLabel, Error> {
     let sealed = B64
         .decode(env.label.as_deref().unwrap_or_default())
         .map_err(|_| Error::ProfileFormat)?;
     let pt = keys
-        .open_label(&env.id, &sealed)
-        .map_err(|_| Error::ProfileFormat)?;
+        .open_label(&env.id, env.rev, &sealed)
+        .map_err(|e| match e {
+            scaas_ua::wallet::Error::Aead => Error::ProfileRollback,
+            _ => Error::ProfileFormat,
+        })?;
     let l: Label = serde_json::from_slice(&pt).map_err(|_| Error::ProfileFormat)?;
     let name = Zeroizing::new(l.name);
     if check_name(&name).ok().as_deref() != Some(name.as_str())

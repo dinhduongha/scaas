@@ -44,6 +44,7 @@ ARCH-POS-15. Order of sources: AGENTS.md "Which source wins".
 | O13 | 2026-11-27 | The user-profile store is its own crate, `scaas-profile`, over `ua-rs` only, so scaas-app's default build (no SDK) holds a profile (its Matrix session key, its settings) with `scaas-matrix`; the SDK depends on it and adds what needs the SDK (§11). | CLI-UPR-02 (Change) |
 | O14 | 2026-11-27 | Each profile has its own Matrix: its own logins, session, store, crypto keys and device id, sealed in that profile (the Matrix store key a sealed item); nothing Matrix-side is shared between profiles; one `scaas-matrix` client per open profile; switching profiles closes the current client first. | CLI-UPR-29 |
 | O15 | 2026-11-27 | scaas-app's default build links `ua-rs` only with the profile-crypto features; no signing code is compiled into it: `scaas-profile` takes `ua-rs`'s `user-profile` (the new feature `key-handles`: the arena, key handles, AEAD, HKDF, HMAC, Argon2id, `ProfileKeys`, `ExportKey`) and `json`, never `wallet`, `pq`, `signers`, `fam-*`, `zether` or `pqz` (§11). Source: "Owner ruling 2026-11-27 (chat): scaas-app's default build links ua-rs only with the profile-crypto features; no signing code is compiled into it." | CLI-UPR-32 |
+| O16 | 2026-11-28 | The label's associated data binds the envelope's revision: `lp("scaas.profile.label") ‖ be16(1) ‖ lp(id) ‖ be64(rev)` (§7.1), and the label is re-sealed at every envelope write. An older envelope written back with its `rev` raised opens its wrap and fails its label at that `rev`: `ProfileRollback` (review F-2). A pinned-format change: clientkeys and the vectors first, then `ua-rs`, `scaas-profile` and the SDK; no old-format reader (test-only chains). | CLI-UPR-12, CLI-UPR-19 |
 
 Standing rules applied: secrets never leave the SDK and every KDF, AEAD and MAC runs in `ua-rs` (CLI-SDK-01, CLI-SDK-02); fail closed
 with named errors; no decryption oracle (ARCH-POS-13); every RPC consumer takes a list of nodes (ARCH-POS-15); the node is open and
@@ -222,7 +223,7 @@ drop, never written in clear, never across the FFI). `profile.envelope` is canon
 | `format`, `v` | `scaas.profile`, 1 |
 | `id` | the profile's id, equal to its directory's name |
 | `state` | `unprotected` or `protected` |
-| `rev` | the envelope's own revision, raised at every envelope write (rename, `hide`, `show`, platform unlock, a re-seal's commit); compared with the anchor (§7.2), outside the wraps' associated data |
+| `rev` | the envelope's own revision, raised at every envelope write (rename, `hide`, `show`, platform unlock, a re-seal's commit, a hint repaired); compared with the anchor (§7.2), outside the wraps' associated data, inside the label's (O16) |
 | `gen` | the current generation `N` (0 while unprotected) |
 | `migration` | `pending` while a migration fills this profile (§12), else absent |
 | `name` | a visible profile's name (NFC), in clear: a hint, outside the wraps' associated data, checked against `label` after unlock; absent on a hidden profile |
@@ -258,7 +259,13 @@ shown, without a terminator; integers big-endian at the width shown.
   `rev`, not `name`). A changed state, generation, parameter or salt fails the wrap; clientkeys produces the same bytes. So `rename`,
   `hide()` and `show()` re-seal only `label` under `DEK_p` and never touch the wraps: they need no passphrase and no biometric, and no
   key outlives its call (`hide()` still drops the platform wrap, §7.6).
-- `label`: AD = `lp("scaas.profile.label") ‖ be16(1) ‖ lp(id)`.
+- `label`: AD = `lp("scaas.profile.label") ‖ be16(1) ‖ lp(id) ‖ be64(rev)`, `rev` the envelope's own (owner O16, 2026-11-28):
+  the domain, the profile-format version, the id, then the revision of the envelope that holds the label, last. Every envelope
+  write (rename, `hide()`, `show()`, a re-seal's commit, a hint removed or repaired, anything that raises `rev`) re-seals the
+  label at the new `rev` under `DEK_p`. At open, after the wrap opens, a label whose tag fails at the envelope's `id` and `rev`
+  is **`ProfileRollback`** with `Event::ProfileRollback`, nothing written (an older envelope written back with its `rev` raised
+  above the anchor's; a label damaged in place reads the same); a label that opens but is of no label form is `ProfileFormat`.
+  The hidden search counts such a candidate as no match (one error for every hidden failure, §8).
 
 **Refusals by state** (no item is read before these hold):
 
@@ -312,7 +319,8 @@ shown, without a terminator; integers big-endian at the width shown.
   above the manifest's is a crash between the two writes, and the manifest is brought forward; an item the manifest **lists but whose
   file is missing** is `Event::ProfileDamaged` (a removed `settings` does not silently fall back to defaults); a manifest, an
   envelope or a `gen` below the anchor, or another hash at the same rev, is `ProfileRollback` for the profile, so an envelope from
-  before a `hide()` or a rename put back is seen. Where the anchor is the file `profile.head` in the same directory (every client whose store
+  before a `hide()` or a rename put back is seen, and one put back with its `rev` raised above the anchor's fails its label
+  (§7.1, O16). Where the anchor is the file `profile.head` in the same directory (every client whose store
   has no keychain: the CLI and the TUI on every OS, the desktop app on Linux), **the anchor file and whatever it covers, put back
   together** (one item, its manifest and `profile.head`; or the whole directory), is not seen: stated in §14. A passphrase change
   rotates `DEK_p` (§7.3), so an old envelope and the old passphrase open nothing written after the change.

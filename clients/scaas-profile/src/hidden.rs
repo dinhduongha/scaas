@@ -159,15 +159,17 @@ pub(crate) fn search(
     Ok(found)
 }
 
-/// The label `{name, hidden}` sealed under the held `DEK_p`, base64.
+/// The label `{name, hidden}` sealed under the held `DEK_p` for the envelope of profile `id` at `rev` (owner 2026-11-28, review
+/// F-2: the rev in its AD; re-sealed at every envelope write), base64.
 pub(crate) fn seal_label(
     keys: &ProfileKeys,
     id: &str,
+    rev: u64,
     name: &str,
     hidden: bool,
 ) -> Result<String, Error> {
     let pt = label_json(name, hidden)?;
-    let sealed = keys.seal_label(id, &pt).map_err(kdf_code)?;
+    let sealed = keys.seal_label(id, rev, &pt).map_err(kdf_code)?;
     Ok(B64.encode(sealed))
 }
 
@@ -180,9 +182,19 @@ pub(crate) fn unchanged(core: &Core, id: &str, bytes: &[u8]) -> Result<Envelope,
     }
 }
 
-/// `env` written with its rev raised, under the store write lock `w`; the anchor follows.
-fn write_envelope(core: &Core, w: &WriteGuard, env: &mut Envelope) -> Result<(), Error> {
+/// `env` written with its rev raised and, on a protected profile, its label `{name, hidden}` re-sealed at that rev (review
+/// F-2), under the store write lock `w`; the anchor follows.
+fn write_envelope(
+    core: &Core,
+    w: &WriteGuard,
+    env: &mut Envelope,
+    name: &str,
+    hidden: bool,
+) -> Result<(), Error> {
     env.rev = env.rev.checked_add(1).ok_or(Error::ProfileFormat)?;
+    if let Some(keys) = core.keys() {
+        env.label = Some(seal_label(&keys, &env.id, env.rev, name, hidden)?);
+    }
     let b = env.json()?;
     file::write(core.dir(), &core.dir().join(envelope::FILE), &b)?;
     core.envelope_written(w, Head::of(env.rev, &b))
@@ -232,7 +244,7 @@ impl Profiles {
         let keys = Arc::new(ProfileKeys::new());
         let built = (|| {
             keys.create_dek().map_err(kdf_code)?;
-            env.label = Some(seal_label(&keys, &id, &name, true)?);
+            env.label = Some(seal_label(&keys, &id, env.rev, &name, true)?);
             let wrap = {
                 let _h = self.heavy.acquire();
                 keys.wrap_pass(passphrase, &salt, argon, &env.public_json()?)
@@ -356,7 +368,7 @@ impl Profiles {
         self.mine(o)?;
         let (core, info) = (o.core(), o.info());
         core.live()?;
-        let keys = core.keys().ok_or(Error::ProfilePassphraseRequired)?;
+        core.keys().ok_or(Error::ProfilePassphraseRequired)?;
         if info.hidden {
             return Err(Error::Argument);
         }
@@ -376,10 +388,9 @@ impl Profiles {
         let mut env = unchanged(core, &info.id, &bytes)?;
         // the row first, then the envelope (review A-7): a crash between them leaves no row naming a hidden profile
         self.drop_row(&info.id)?;
-        env.label = Some(seal_label(&keys, &info.id, &info.name, true)?);
         env.name = None;
         env.platform = None;
-        write_envelope(core, &w, &mut env)?;
+        write_envelope(core, &w, &mut env, &info.name, true)?;
         if let Some(kc) = &self.keychain {
             kc.delete(&keychain_name(&info.id, "unlock"))?;
         }
@@ -396,14 +407,13 @@ impl Profiles {
         let (core, info) = (o.core(), o.info());
         let w = core.write_lock()?;
         let (mut env, _) = read_envelope(core.dir(), &info.id)?.ok_or(Error::ProfileFormat)?;
-        let keys = core.keys().ok_or(Error::ProfilePassphraseRequired)?;
+        core.keys().ok_or(Error::ProfilePassphraseRequired)?;
         if !info.hidden {
             return Err(Error::Argument);
         }
-        env.label = Some(seal_label(&keys, &info.id, &info.name, false)?);
         env.name = Some(info.name.clone());
         self.put_row(&info.id, &info.name)?;
-        write_envelope(core, &w, &mut env)?;
+        write_envelope(core, &w, &mut env, &info.name, false)?;
         o.set_hidden(false);
         Ok(())
     }
@@ -448,9 +458,6 @@ impl Profiles {
                     .0
             }
         };
-        if let Some(keys) = core.keys() {
-            env.label = Some(seal_label(&keys, &info.id, &name, hidden)?);
-        }
         match hidden {
             false => {
                 self.put_row(&info.id, &name)?;
@@ -459,7 +466,7 @@ impl Profiles {
             // a hint planted on a hidden profile goes
             true => env.name = None,
         }
-        write_envelope(core, &w, &mut env)?;
+        write_envelope(core, &w, &mut env, &name, hidden)?;
         o.set_name(&name);
         Ok(())
     }

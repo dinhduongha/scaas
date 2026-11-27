@@ -206,6 +206,7 @@ fn plant_protected(root: &Path, name: &str) -> String {
     let label = k
         .seal_label(
             &id,
+            1,
             format!(r#"{{"name":"{name}","hidden":false}}"#).as_bytes(),
         )
         .unwrap();

@@ -154,13 +154,21 @@ test("envelope: sub-keys, labels (visible, hidden) and their refusals", () => {
   }
   for (const r of ENV.labels) {
     assert.equal(p.labelJson(r.label_name, r.hidden), r.plaintext, r.case);
-    assert.equal(hex(p.labelAd(r.id)), r.ad, r.case);
-    const sealed = p.sealLabel(b(r.k_label), b(r.nonce), r.id, r.label_name, r.hidden);
+    // owner 2026-11-28 (review F-2): the envelope's rev in the AD, last
+    assert.equal(hex(p.labelAd(r.id, r.rev)), r.ad, r.case);
+    assert.ok(r.ad.endsWith(r.rev.toString(16).padStart(16, "0")), r.case);
+    const sealed = p.sealLabel(b(r.k_label), b(r.nonce), r.id, r.rev, r.label_name, r.hidden);
     assert.equal(hex(sealed), r.sealed, r.case);
     assert.equal(p.b64(sealed), r.sealed_b64, r.case);
-    assert.deepEqual(p.openLabel(b(r.k_label), sealed, r.id), { name: r.label_name, hidden: r.hidden });
+    assert.deepEqual(p.openLabel(b(r.k_label), sealed, r.id, r.rev), { name: r.label_name, hidden: r.hidden });
     assert.equal(
-      code(() => p.openLabel(b(r.k_label), sealed, r.other_id)),
+      code(() => p.openLabel(b(r.k_label), sealed, r.other_id, r.rev)),
+      "Aead",
+      r.case,
+    );
+    // an older envelope's label under a raised rev fails its tag
+    assert.equal(
+      code(() => p.openLabel(b(r.k_label), sealed, r.id, r.rev + 1)),
       "Aead",
       r.case,
     );
@@ -181,7 +189,7 @@ test("envelope: whole files (protected visible, protected hidden, unprotected) r
     assert.equal(hex(dek), r.dek, r.case);
     if (env.platform)
       assert.equal(hex(p.openWrap(b(r.k_plat), p.unb64(env.platform.wrap), p.WRAP_PLATFORM, pub)), r.dek);
-    const label = p.openLabel(p.subKeys(dek).label, p.unb64(env.label), env.id);
+    const label = p.openLabel(p.subKeys(dek).label, p.unb64(env.label), env.id, env.rev);
     assert.equal(label.hidden, env.name === undefined, r.case);
     if (!label.hidden) assert.equal(label.name, env.name);
   }

@@ -176,7 +176,13 @@ impl OpenProfile {
         };
         let keys = Arc::new(ProfileKeys::new());
         keys.create_dek().map_err(kdf_code)?;
-        next.label = Some(seal_label(&keys, &info.id, &info.name, info.hidden)?);
+        next.label = Some(seal_label(
+            &keys,
+            &info.id,
+            next.rev,
+            &info.name,
+            info.hidden,
+        )?);
         let wrap = {
             let _heavy = self.heavy.acquire();
             keys.wrap_pass(pass, &salt, argon, &next.public_json()?)

@@ -728,7 +728,10 @@ every open and its settings shown before they are sealed; the passphrase in Opaq
 never kept; an unprotected profile holds no secret (`ProfilePassphraseRequired`); the biometric wrap per device, off by default, under
 a policy that requires the current biometric enrollment, never on a hidden profile, dropped at a passphrase change. Owner 2026-11-27:
 the default is 64 MiB / 3 / 4, stronger allowed within the bounds, no timing run; at the first secret the profile passphrase and the
-seed's vault passphrase are two entries.
+seed's vault passphrase are two entries. **Change (owner 2026-11-28; BUILT, vectors first):** the label's associated data
+binds the envelope's revision, `lp("scaas.profile.label") ‖ be16(1) ‖ lp(id) ‖ be64(rev)`; every envelope write re-seals the label
+at its new revision; an older envelope written back with its revision raised opens its wrap and fails its label:
+`ProfileRollback` with its event, nothing written.
 
 <a id="CLI-UPR-13"></a>**CLI-UPR-13** — **At most 16 hidden profiles, created without ever being listed, never two with one name and
 passphrase, found by a bounded search over the envelopes with no early stop and one error; hidden from the list, not deniable on

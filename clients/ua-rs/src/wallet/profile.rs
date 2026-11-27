@@ -54,8 +54,15 @@ fn wrap_ad(domain: &[u8], public: &[u8]) -> Result<Vec<u8>> {
     Ok([lp(domain)?, public.to_vec()].concat())
 }
 
-fn label_ad(id: &str) -> Result<Vec<u8>> {
-    Ok([lp(LABEL)?, 1u16.to_be_bytes().to_vec(), lp(id.as_bytes())?].concat())
+/// `lp("scaas.profile.label") ‖ be16(1) ‖ lp(id) ‖ be64(rev)`, `rev` the envelope's (owner 2026-11-28, review F-2).
+fn label_ad(id: &str, rev: u64) -> Result<Vec<u8>> {
+    Ok([
+        lp(LABEL)?,
+        1u16.to_be_bytes().to_vec(),
+        lp(id.as_bytes())?,
+        rev.to_be_bytes().to_vec(),
+    ]
+    .concat())
 }
 
 fn item_ad(part: &str, name: &str, rev: u64) -> Result<Vec<u8>> {
@@ -329,19 +336,21 @@ impl ProfileKeys {
     }
 
     /// The envelope's `label`: `json` (`{"name":…,"hidden":…}`) under `K_label`, AD `lp("scaas.profile.label") ‖ be16(1) ‖
-    /// lp(id)`, a random nonce.
-    pub fn seal_label(&self, id: &str, json: &[u8]) -> Result<Vec<u8>> {
+    /// lp(id) ‖ be64(rev)`, `rev` the envelope's that holds it (owner 2026-11-28: re-sealed at every envelope write), a random
+    /// nonce.
+    pub fn seal_label(&self, id: &str, rev: u64, json: &[u8]) -> Result<Vec<u8>> {
         self.with(|k| {
             self.keys
-                .seal(&k.label, Nonce::Random, &label_ad(id)?, json)
+                .seal(&k.label, Nonce::Random, &label_ad(id, rev)?, json)
         })
     }
 
-    /// The plaintext of a `label` of profile `id`: `Aead` when it does not open.
-    pub fn open_label(&self, id: &str, sealed: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
+    /// The plaintext of a `label` of profile `id` in its envelope at `rev`: `Aead` when it does not open (another id, or an
+    /// older envelope's label under a raised `rev`).
+    pub fn open_label(&self, id: &str, rev: u64, sealed: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
         self.with(|k| {
             self.keys
-                .open(&k.label, Nonce::Random, &label_ad(id)?, sealed)
+                .open(&k.label, Nonce::Random, &label_ad(id, rev)?, sealed)
         })
     }
 
@@ -458,11 +467,17 @@ impl ProfileKeys {
     }
 
     /// [`ProfileKeys::seal_label`] with a fixed nonce.
-    pub fn vectors_seal_label(&self, id: &str, json: &[u8], nonce: &[u8; 12]) -> Result<Vec<u8>> {
+    pub fn vectors_seal_label(
+        &self,
+        id: &str,
+        rev: u64,
+        json: &[u8],
+        nonce: &[u8; 12],
+    ) -> Result<Vec<u8>> {
         self.with(|k| {
             let ct = self
                 .keys
-                .vectors_seal(&k.label, nonce, &label_ad(id)?, json)?;
+                .vectors_seal(&k.label, nonce, &label_ad(id, rev)?, json)?;
             Ok([&nonce[..], &ct].concat())
         })
     }

@@ -159,16 +159,18 @@ export function openWrap(kek, wrap, domain, pub) {
   if (wrap.length !== 60) throw new ProfileError("Argument");
   return open(kek, wrap, wrapAd(domain, pub));
 }
-export const labelAd = (id) => concatBytes(lp("scaas.profile.label"), be(1, 2), lp(id));
+/** The label's AD: `lp("scaas.profile.label") ‖ be16(1) ‖ lp(id) ‖ be64(rev)`, `rev` the envelope's that holds it (owner
+ * 2026-11-28, review F-2: an older envelope written back with its rev raised fails its label). */
+export const labelAd = (id, rev) => concatBytes(lp("scaas.profile.label"), be(1, 2), lp(id), be(rev, 8));
 /** The label plaintext `{"name":"<NFC>","hidden":bool}` (pinned format 5). */
 export function labelJson(name, hidden) {
   if (typeof hidden !== "boolean") throw new ProfileError("ProfileFormat");
   return JSON.stringify({ name: checkName(name), hidden });
 }
-export const sealLabel = (kLabel, nonce, id, name, hidden) =>
-  seal(kLabel, nonce, labelAd(id), utf8ToBytes(labelJson(name, hidden)));
-export function openLabel(kLabel, sealed, id) {
-  return parseLabel(open(kLabel, sealed, labelAd(id)));
+export const sealLabel = (kLabel, nonce, id, rev, name, hidden) =>
+  seal(kLabel, nonce, labelAd(id, rev), utf8ToBytes(labelJson(name, hidden)));
+export function openLabel(kLabel, sealed, id, rev) {
+  return parseLabel(open(kLabel, sealed, labelAd(id, rev)));
 }
 function parseLabel(pt) {
   try {

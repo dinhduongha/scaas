@@ -314,8 +314,9 @@ fn name_hint() {
     assert!(p.drain_events().is_empty());
     eve.lock();
 
-    // a hint changed on disk: at the anchored rev another hash is a rollback (pinned format 8); with the rev raised it
-    // opens, the label wins
+    // a hint changed on disk: at the anchored rev another hash is a rollback (pinned format 8); with the rev raised the
+    // label does not open at that rev, a rollback too (owner 2026-11-28, review F-2: it opened before); with the file
+    // anchor removed as well (an anchor file and what it covers put back together, spec §14) it opens, the label wins
     let f = root.join("p").join(&id).join("profile.envelope");
     let s = std::fs::read_to_string(&f).unwrap();
     let rev = serde_json::from_str::<Value>(&s).unwrap()["rev"]
@@ -326,6 +327,10 @@ fn name_hint() {
     assert_eq!(code(p.open(&id, Some(PASS))), "ProfileRollback");
     let raised = format!(r#""rev":{},"#, rev + 1);
     std::fs::write(&f, s.replace(&format!(r#""rev":{rev},"#), &raised)).unwrap();
+    assert_eq!(code(p.open(&id, Some(PASS))), "ProfileRollback");
+    std::fs::write(&f, &s).unwrap();
+    std::fs::remove_file(f.with_file_name("profile.head")).unwrap();
+    p.drain_events();
     let eve = p.open(&id, Some(PASS)).unwrap();
     assert_eq!(eve.info().name, "Eve2");
     assert_eq!(p.drain_events(), [ProfileEvent::ProfileIndexMismatch]);

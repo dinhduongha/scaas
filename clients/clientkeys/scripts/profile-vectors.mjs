@@ -223,24 +223,26 @@ const SUB = PROFILES.map((r) => {
   const k = p.subKeys(fromHex(r.dek));
   return { case: r.case, dek: r.dek, k_label: hex(k.label), k_item: hex(k.item), k_name: hex(k.name) };
 });
+// each label at the rev of the envelope file that holds it (ENV_VISIBLE 3, ENV_DEFAULT 2, ENV_HIDDEN 5): owner 2026-11-28
 const LABELS = [
-  ["visible", ASCII, "Alice", false],
-  ["visible, Vietnamese", PROFILES[0], "Gia đình", false],
-  ["hidden", NFD, "Work", true],
-].map(([c, prof, name, hidden]) => {
+  ["visible", ASCII, 3, "Alice", false],
+  ["visible, Vietnamese", PROFILES[0], 2, "Gia đình", false],
+  ["hidden", NFD, 5, "Work", true],
+].map(([c, prof, rev, name, hidden]) => {
   const kLabel = p.subKeys(fromHex(prof.dek)).label;
   const nonce = rnd(`label/${c}/nonce`, 12);
-  const sealed = p.sealLabel(kLabel, nonce, prof.id, name, hidden);
+  const sealed = p.sealLabel(kLabel, nonce, prof.id, rev, name, hidden);
   return {
     case: c,
     id: prof.id,
+    rev,
     other_id: idOf(`${c}/other`),
     k_label: hex(kLabel),
     label_name: name,
     hidden,
     plaintext: p.labelJson(name, hidden),
     nonce: hex(nonce),
-    ad: hex(p.labelAd(prof.id)),
+    ad: hex(p.labelAd(prof.id, rev)),
     sealed: hex(sealed),
     sealed_b64: p.b64(sealed),
   };
@@ -378,7 +380,7 @@ must(ENV_MIGRATION.includes('"gen":0,"migration":"pending","name":"default"'), "
       'lp("scaas.profile.wrap") ‖ public JSON, pass = nonce ‖ AES-256-GCM-SIV(KEK_pass, nonce, DEK_p, AD), 60 bytes); one ' +
       "row at the default set 64 MiB / 3 / 4, the others at the test set; the platform wrap (K_plat from the platform " +
       "secret, domain scaas.profile.platform); sub_keys K_label, K_item, K_name; labels (AD lp(scaas.profile.label) ‖ " +
-      "be16(1) ‖ lp(id)); whole envelope files (one protected at the default set; one with migration pending); " +
+      "be16(1) ‖ lp(id) ‖ be64(rev), rev the envelope's that holds it); whole envelope files (one protected at the default set; one with migration pending); " +
       "wrap_refusals (Aead, each beside its control); name_hint (opens). kdf_sets: the default and the test set.",
     {
       kdf_sets: { default: p.KDF_DEFAULT, test: p.KDF_TEST },

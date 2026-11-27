@@ -262,9 +262,11 @@ fn g2_hidden_flag_from_the_label() {
     assert!(index_text(&root).contains("Vis"), "control");
 }
 
-/// A-8: a visible protected profile whose hint was stripped (its rev raised, so the anchor follows) is refused by id (spec
-/// §6), opens through the hidden prompt, and there has its hint and row rewritten from its label with
-/// `ProfileIndexMismatch`: it is listed and opens by id again. Control: it opens by id before.
+/// A-8: a visible protected profile whose hint was stripped (at its rev, its file anchor removed, so nothing compares it:
+/// since F-2 a raised rev fails the label, below) is refused by id (spec §6), opens through the hidden prompt, and there has
+/// its hint and row rewritten from its label with `ProfileIndexMismatch`: it is listed and opens by id again. Control: it
+/// opens by id before. F-2 (owner 2026-11-28): the same strip with the rev raised is no match for the hidden prompt (its
+/// label does not open at that rev).
 #[test]
 fn a8_stripped_hint_rewritten_from_the_label() {
     let _k = kdf_lock();
@@ -272,10 +274,15 @@ fn a8_stripped_hint_rewritten_from_the_label() {
     let (p, o, id, dir) = protected(&root, None);
     o.lock();
     p.open(&id, Some(PASS)).unwrap().lock();
+    let live = std::fs::read(dir.join("profile.envelope")).unwrap();
     edit_envelope(&dir, |e| {
         e.name = None;
         e.rev += 1;
     });
+    assert_eq!(code(p.open_hidden(b"default", PASS)), "ProfileOpen");
+    std::fs::write(dir.join("profile.envelope"), &live).unwrap();
+    edit_envelope(&dir, |e| e.name = None);
+    std::fs::remove_file(dir.join("profile.head")).unwrap();
     assert_eq!(code(p.open(&id, Some(PASS))), "ProfileOpen");
     p.drain_events();
     let h = p.open_hidden(b"default", PASS).unwrap();
@@ -735,4 +742,36 @@ fn b3_profile_arena_locked() {
     let m = o.keys().unwrap().memory_protection();
     assert!(m.chunks > 0, "control");
     assert_eq!(m.locked, m.chunks);
+}
+
+/// F-2 (owner 2026-11-28): the label's AD binds the envelope's rev, so an older envelope written back with its rev raised above
+/// the anchor's fails its label at that rev: `ProfileRollback` with its event, and nothing written (the wrap opens, the label
+/// does not). Two forms: the pre-rename envelope and the pre-`hide()` one. Control: the live envelope opens (hidden).
+#[test]
+fn f2_older_envelope_with_raised_rev_is_rollback() {
+    let _k = kdf_lock();
+    let root = tmp();
+    let (p, o, id, dir) = protected(&root, None);
+    let env = dir.join("profile.envelope");
+    let before_rename = std::fs::read(&env).unwrap();
+    p.rename(&o, b"Renamed", None).unwrap();
+    let before_hide = std::fs::read(&env).unwrap();
+    p.hide(&o, PASS).unwrap();
+    let live = std::fs::read(&env).unwrap();
+    let rev = Envelope::parse(&live, &id).unwrap().rev;
+    o.lock();
+    for old in [&before_rename, &before_hide] {
+        std::fs::write(&env, old).unwrap();
+        edit_envelope(&dir, |e| e.rev = rev + 1);
+        let planted = std::fs::read(&env).unwrap();
+        p.drain_events();
+        assert_eq!(code(p.open(&id, Some(PASS))), "ProfileRollback");
+        assert!(p.drain_events().contains(&ProfileEvent::ProfileRollback));
+        assert_eq!(std::fs::read(&env).unwrap(), planted, "nothing written");
+    }
+    std::fs::write(&env, &live).unwrap();
+    assert!(
+        p.open_hidden(b"Renamed", PASS).unwrap().info().hidden,
+        "control"
+    );
 }

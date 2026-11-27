@@ -539,7 +539,7 @@ impl Profiles {
         let keys = Arc::new(ProfileKeys::new());
         let built = (|| {
             keys.create_dek().map_err(kdf_code)?;
-            env.label = Some(seal_label(&keys, &id, &name, hidden)?);
+            env.label = Some(seal_label(&keys, &id, env.rev, &name, hidden)?);
             let wrap = {
                 let _h = self.heavy.acquire();
                 keys.wrap_pass(passphrase, &salt, argon, &env.public_json()?)

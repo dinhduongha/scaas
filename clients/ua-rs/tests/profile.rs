@@ -200,8 +200,10 @@ fn label_rows() {
     for r in rows(&e, "labels") {
         let case = s(&r["case"]);
         let k = with_dek(&dek_of(&e, "k_label", &r["k_label"]));
+        // owner 2026-11-28 (review F-2): the envelope's rev in the AD
+        let rev = r["rev"].as_u64().unwrap();
         let sealed = k
-            .vectors_seal_label(s(&r["id"]), b(&r["plaintext"]), &a12(&r["nonce"]))
+            .vectors_seal_label(s(&r["id"]), rev, b(&r["plaintext"]), &a12(&r["nonce"]))
             .unwrap();
         assert_eq!(sealed, unhex(&r["sealed"]), "{case}");
         assert_eq!(
@@ -210,18 +212,23 @@ fn label_rows() {
             "{case}"
         );
         assert_eq!(
-            &k.open_label(s(&r["id"]), &sealed).unwrap()[..],
+            &k.open_label(s(&r["id"]), rev, &sealed).unwrap()[..],
             b(&r["plaintext"])
         );
         assert_eq!(
-            k.open_label(s(&r["other_id"]), &sealed),
+            k.open_label(s(&r["other_id"]), rev, &sealed),
             Err(Error::Aead),
             "{case}: a label moved to another id"
         );
-        let fresh = k.seal_label(s(&r["id"]), b(&r["plaintext"])).unwrap();
+        assert_eq!(
+            k.open_label(s(&r["id"]), rev + 1, &sealed),
+            Err(Error::Aead),
+            "{case}: an older envelope's label under a raised rev"
+        );
+        let fresh = k.seal_label(s(&r["id"]), rev, b(&r["plaintext"])).unwrap();
         assert_ne!(fresh, sealed);
         assert_eq!(
-            &k.open_label(s(&r["id"]), &fresh).unwrap()[..],
+            &k.open_label(s(&r["id"]), rev, &fresh).unwrap()[..],
             b(&r["plaintext"])
         );
     }
@@ -257,9 +264,11 @@ fn envelope_file_rows() {
         )
         .unwrap();
         assert_eq!(k.vectors_reveal().unwrap()[0], unhex(&r["dek"]));
-        let label: Value =
-            serde_json::from_slice(&k.open_label(s(&f["id"]), &unb64(&f["label"])).unwrap())
-                .unwrap();
+        let label: Value = serde_json::from_slice(
+            &k.open_label(s(&f["id"]), f["rev"].as_u64().unwrap(), &unb64(&f["label"]))
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(label["hidden"], f.get("name").is_none());
         if let Some(n) = f.get("name") {
             assert_eq!(label["name"], *n);
@@ -839,7 +848,7 @@ fn lock_wipes_the_arena() {
         "the arena holds the keys"
     );
     let sealed = k.seal_item("sdk", "settings", 1, b"x").unwrap();
-    let label = k.seal_label("id", b"{}").unwrap();
+    let label = k.seal_label("id", 1, b"{}").unwrap();
     let runs = ProfileKeys::kdf_runs();
     assert_eq!(k.create_dek(), Err(Error::Argument));
     assert_eq!(
@@ -865,8 +874,8 @@ fn lock_wipes_the_arena() {
         k.seal_item("sdk", "settings", 1, b"x").map(drop),
         k.open_item("sdk", "settings", 1, &sealed).map(drop),
         k.item_file("sdk", "settings").map(drop),
-        k.seal_label("id", b"{}").map(drop),
-        k.open_label("id", &label).map(drop),
+        k.seal_label("id", 1, b"{}").map(drop),
+        k.open_label("id", 1, &label).map(drop),
         k.wrap_pass(pass, &salt, p, pubj).map(drop),
         k.open_pass(pass, &salt, p, pubj, &wrap),
         k.check_pass(pass, &salt, p, pubj, &wrap),
