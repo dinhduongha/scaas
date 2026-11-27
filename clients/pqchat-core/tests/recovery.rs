@@ -277,6 +277,13 @@ async fn preview_fails_closed_when_the_hold_is_refused() {
         .store(false, std::sync::atomic::Ordering::SeqCst);
     assert!(bob.preview(&sr, &me(&w.bob)).await.is_ok());
     assert!(c.held.lock().unwrap().contains(&room));
+    // a room the account is already joined to (the user's own session seen from a fresh device) is not held: no refusal
+    let joined = server.ordinary(ALICE, &[BOB], false);
+    let s2 = found_one(&w, vec![room_entry(&joined), chain_entry(HOME)]).await;
+    c.refuse_hold
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    assert!(bob.preview(&sref(&s2.e), &me(&w.bob)).await.is_ok());
+    assert!(!c.calls_of("hold_invite").contains(&joined));
 }
 
 /// A pending session makes no store read, no join, no receipt and no write; its wrap is opened only on the user's look,

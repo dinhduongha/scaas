@@ -58,13 +58,14 @@ async fn login_as(
         .unwrap_or_else(|e| panic!("login {dirname}: {e}"))
 }
 
-/// Polls `f` up to 60 s (the sync loops run meanwhile).
+/// Polls `f` for at most 60 s of wall time (the sync loops run meanwhile), then fails by name.
 async fn until<F, Fut>(what: &str, mut f: F)
 where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = bool>,
 {
-    for _ in 0..600 {
+    let end = tokio::time::Instant::now() + Duration::from_secs(60);
+    while tokio::time::Instant::now() < end {
         if f().await {
             return;
         }
@@ -167,14 +168,22 @@ async fn scaas_matrix_against_synapse() {
         row.encrypted,
         "a direct room is encrypted from its first event"
     );
-    until("bob sees the invite", || async {
+    until("bob sees the room", || async {
         bob.sync_once(Duration::from_secs(1)).await.unwrap();
         bob.rooms(RoomFilter::Matrix)
             .await
             .iter()
-            .any(|r| r.room_id == room && r.invited)
+            .any(|r| r.room_id == room)
     })
     .await;
+    // the crate answers no invite by itself: the room is still an invite after the syncs that brought it
+    assert!(
+        bob.rooms(RoomFilter::Matrix)
+            .await
+            .iter()
+            .any(|r| r.room_id == room && r.invited),
+        "an invite is never answered by the crate"
+    );
     bob.accept_invite(&room).await.unwrap();
     bob.sync_once(Duration::ZERO).await.unwrap();
     alice.sync_once(Duration::ZERO).await.unwrap();
@@ -528,6 +537,24 @@ async fn scaas_matrix_against_synapse() {
         !s.seen_of(&held, &uid("alice")).joined,
         "a held invite is never answered by the crate"
     );
+    // J-1: a held room the account then joins from another client is a Matrix room again after the next sync
+    let tok = raw_token(&s, "alice").await;
+    let r = reqwest::Client::new()
+        .post(format!(
+            "{}/_matrix/client/v3/join/{}",
+            s.base,
+            held.replace('!', "%21").replace(':', "%3A")
+        ))
+        .bearer_auth(&tok)
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert!(r.status().is_success(), "{}", r.status());
+    until("the joined held room is a Matrix room again", || async {
+        alice.kind(&held) == RoomKind::Matrix
+    })
+    .await;
     // after the whole run: nothing ephemeral of alice or bob in any room the server holds
     for u in ["alice", "bob"] {
         let n = s.sql(
@@ -549,6 +576,10 @@ async fn scaas_matrix_against_synapse() {
 
     // ---- a second device of alice: refused to send encrypted until it recovers; a bound room marked on it
     let alice2 = login_as(&s, "alice-2", "alice", [0xa2; 32], SHOWN).await;
+    // R-1: before its first sync the new device's local view knows no room; the homeserver's answer still refuses a hold
+    // over the DM alice uses
+    assert!(alice2.transport().hold_invite(&room, true).await.is_err());
+    assert_eq!(alice2.kind(&room), RoomKind::Matrix);
     alice2.sync_once(Duration::ZERO).await.unwrap();
     assert!(!alice2.device_verified().await.unwrap());
     assert_eq!(

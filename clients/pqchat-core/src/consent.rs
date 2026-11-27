@@ -155,7 +155,10 @@ impl PqChat {
         if let (Some(room), Some(t)) = (room_of(&info.stores), self.matrix()) {
             // a room the transport refuses to hold (scaas-matrix: one the account already uses as a Matrix room) is not
             // this session's: the preview fails closed
-            t.hold_invite(room, true).await?;
+            // a room the account is already joined to (the user's own session on a fresh device) needs no hold
+            if !t.joined(room).await? {
+                t.hold_invite(room, true).await?;
+            }
         }
         let creator = match ep.epoch.epoch {
             0 => ep.epoch.author.clone(),

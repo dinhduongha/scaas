@@ -84,8 +84,10 @@ pub trait MatrixTransport: Send + Sync {
         before: Option<String>,
     ) -> Result<HistoryPage, TransportError>;
     /// An invite to `room` held unanswered (`hold`), or no longer held: a pending session's room (CLI-PQC-08). An
-    /// implementation may refuse to hold a room the account already uses for something else (`scaas-matrix`: a joined Matrix
-    /// room); the caller then treats the room as not usable.
+    /// implementation may refuse to hold a room the account already uses for something else (`scaas-matrix`: a room the
+    /// homeserver says the account is joined to, or no answer from it); the caller then treats the room as not usable.
+    /// `pqchat-core` holds only a room the account is not joined to. `scaas-matrix` releases a hold on `hold == false` and
+    /// when the account joins the room from elsewhere.
     async fn hold_invite(&self, room: &str, hold: bool) -> Result<(), TransportError>;
     /// `room` serves a session the crate has bound (CLI-PQC-05): from now on the implementation treats it as such (no Matrix
     /// receipt, read marker, typing notice or presence; its events go to the crate). Called on every use of a bound room, so a

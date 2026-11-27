@@ -387,3 +387,16 @@ with fixes for F-1, M2, M3; the record cipher checked out.
   connections on a background thread: the crate cannot cancel matrix-sdk's own tasks), R-11 (a deleted or rolled-back marks
   record opens as no marks: the store's own integrity, CLI-UPR-28's anchor is the profile's).
 
+### 15.2 Revision 4: Fable's re-check of R-1 at `961fb6eee` (2026-11-27)
+
+Report: `scratchpad/scaas-matrix-recheck2-20261127-2200/` (`fable-J.md`, `STATUS.md`). R-1 closed (the homeserver's answer, no answer
+no hold); approve with fixes:
+- **J-1 (P2):** a held room the account joins later from another client was still PqChat: the sync releases a held room that shows
+  up joined (and not in the user's own set), and a new hold of such a room releases it and is refused.
+- **J-2 (P2):** `pqchat-core`'s `preview` holds only a room the account is not joined to, so the user's own sessions seen from a
+  fresh device preview again.
+- **J-3 (P2):** the e2e holds over the DM from a second device before its first sync (local view empty); the mutant reads the local
+  view for real; a mutant takes "no answer" as "not joined".
+- **J-5 (P3):** the trait's and CLI-MTX-06's text say when a hold is refused and what releases it. **J-4 (P3):** one request per hold,
+  kept.
+

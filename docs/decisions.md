@@ -13897,6 +13897,8 @@ Change (controller 2026-11-27, Fable's review of `c414f6eaa` applied; owner: no,
 
 Change (controller 2026-11-27, Fable's re-check of `307474279` applied; owner: no, owner may override; status: BUILT on branch `scaas-matrix`, UNAUDITED): the held invites are a set of their own (at most 256, the oldest dropped, released by `hold_invite(room, false)`), apart from the user's own rooms (at most 4,096); a hold asks the homeserver whether the room is joined and fails closed without an answer; a marked id is printable ASCII; `pqchat-core`'s `tell_bound_rooms` names every bound room to a new login (R-1, R-2, R-3, R-5).
 
+Change (controller 2026-11-27, Fable's re-check of R-1 at `961fb6eee` applied; owner: no, owner may override; status: BUILT on branch `scaas-matrix`, UNAUDITED): a held room the account joins from another client is a Matrix room again (released at the next sync, and a new hold of it refused); `pqchat-core`'s `preview` holds only a room the account is not joined to (J-1, J-2).
+
 ### CLI-MTX-07 — `scaas-matrix` encryption: encrypted direct rooms, SAS, cross-signing, backup off
 - old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-07 · superseded-by: —
 

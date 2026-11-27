@@ -1664,6 +1664,24 @@ async fn sync_round(i: &Inner, timeout: Duration) -> R<()> {
         }
     };
     let mut changed = !res.rooms.invited.is_empty() || !res.rooms.left.is_empty();
+    // a held invite the account joined (from another client): a Matrix room again (J-1)
+    let held_joined: Vec<String> = {
+        let m = lk(&i.marks);
+        res.rooms
+            .joined
+            .keys()
+            .map(|r| r.to_string())
+            .filter(|r| !m.marked(r) && m.kind(r) == RoomKind::PqChat)
+            .collect()
+    };
+    for r in held_joined {
+        let _ = i
+            .marks_update(|m| {
+                m.release_joined(&r);
+                Ok(())
+            })
+            .await;
+    }
     for (room, up) in &res.rooms.joined {
         let id = room.to_string();
         let kind = i.kind(&id);

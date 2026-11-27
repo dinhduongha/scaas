@@ -117,17 +117,33 @@ impl Marks {
             self.held.retain(|h| h != room);
             return Ok(());
         }
-        if self.pqchat.contains(room) || self.held.iter().any(|h| h == room) {
+        if self.pqchat.contains(room) {
             return Ok(());
         }
         if joined_matrix {
+            // a room joined meanwhile (from another client) is the user's Matrix room again: its hold dropped (J-1)
+            self.held.retain(|h| h != room);
             return Err(MatrixError::MatrixRoomKind);
+        }
+        if self.held.iter().any(|h| h == room) {
+            return Ok(());
         }
         if self.held.len() >= HELD_MAX {
             self.held.remove(0);
         }
         self.held.push(room.to_string());
         Ok(())
+    }
+
+    /// A held room the account turned out to be joined to (the sync saw it joined, and the user's own session does not use
+    /// it): released, a Matrix room again (J-1). Whether it was held.
+    pub fn release_joined(&mut self, room: &str) -> bool {
+        if self.pqchat.contains(room) {
+            return false;
+        }
+        let n = self.held.len();
+        self.held.retain(|h| h != room);
+        self.held.len() != n
     }
 
     /// Whether a room belongs in the list `filter` asks for.
@@ -302,7 +318,20 @@ mod tests {
         // the controls: not joined, it is held; joined and marked already (a bound room), it stays
         m.hold("!inv:x", true, false).unwrap();
         assert_eq!(m.kind("!inv:x"), RoomKind::PqChat);
-        assert_eq!(m.hold("!inv:x", true, true), Ok(()));
+        // a held room the account then joins (from another client) is released and refused (J-1)
+        assert_eq!(
+            m.hold("!inv:x", true, true),
+            Err(MatrixError::MatrixRoomKind)
+        );
+        assert_eq!(m.kind("!inv:x"), RoomKind::Matrix);
+        m.hold("!inv2:x", true, false).unwrap();
+        assert!(m.release_joined("!inv2:x"));
+        assert_eq!(m.kind("!inv2:x"), RoomKind::Matrix);
+        // the user's own room is neither released nor refused
+        m.mark("!own:x").unwrap();
+        assert!(!m.release_joined("!own:x"));
+        assert_eq!(m.hold("!own:x", true, true), Ok(()));
+        assert_eq!(m.kind("!own:x"), RoomKind::PqChat);
         // only a room id is marked
         for bad in [
             "",
