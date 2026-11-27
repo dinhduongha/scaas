@@ -7,6 +7,6 @@ S5 dropping the AAD | killed | ae197bbd4 | ../../scripts/capped cargo test --loc
 the canonical check sorting by UTF-8 | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys canonical_json_rows | panicked at tests/pqchat_keys.rs:239:9:
 unpad accepting a non-zero fill | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys padding_rows_and_unpad_refusals | panicked at tests/pqchat_keys.rs:218:9:
 V2 without the members bound | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys bounded_decoders | panicked at tests/pqchat_keys.rs:523:5:
-the hint call accepting a chain position | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys refusals_one_change_at_a_time | panicked at tests/pqchat_keys.rs:368:5:
+the hint call accepting a chain position | killed | 3252b5b2b | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys refusals_one_change_at_a_time | panicked at tests/pqchat_keys.rs:368:5:
 the walk bound off by a factor | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys the_walk_bound | panicked at tests/pqchat_keys.rs:195:5:
 10 mutants, 10 killed, 0 survived, 0 not loaded, 0 other failure
