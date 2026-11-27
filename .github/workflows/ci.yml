@@ -275,7 +275,7 @@ jobs:
       keystore_vectors: ${{ steps.f.outputs.keystore_vectors }}
       test_features: ${{ steps.f.outputs.test_features }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: f
@@ -301,7 +301,7 @@ jobs:
       run:
         working-directory: smartcontracts/evm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # legacy_artifacts.py exports the pre-split src (d142b57c) with git archive
       - uses: foundry-rs/foundry-toolchain@v1
@@ -361,7 +361,7 @@ jobs:
     if: needs.changes.outputs.contract_soroban == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -381,7 +381,7 @@ jobs:
       AGAVE: v4.3.0
       AGAVE_SHA256: c97289a8abb1d0efb497d8b5cb285baabd9b7f8ea6647f5d145c5dc8ff3611e8 # GitHub release asset digest; binaries byte-identical to the local install
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }} # host tests; cargo build-sbf brings its own rustc
@@ -398,7 +398,7 @@ jobs:
           mv ~/.local/share/solana/install/solana-release ~/.local/share/solana/install/active_release
           ~/.local/share/solana/install/active_release/bin/cargo-build-sbf --version
       # cargo build-sbf downloads its platform tools (v1.57 for Agave 4.3.0) into ~/.cache/solana on first use
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/solana
           key: solana-platform-tools-${{ env.AGAVE }}
@@ -410,7 +410,7 @@ jobs:
     if: needs.changes.outputs.contract_near == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -433,8 +433,8 @@ jobs:
     if: needs.changes.outputs.contract_algorand == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: build (puyapy, artifacts.json --check)
@@ -452,7 +452,7 @@ jobs:
       APTOS: 9.6.0
       APTOS_SHA256: 4e28e71659a53e8eacff29d127685f2f282a8c008ff6e51047daedc72576bb8d # GitHub release asset digest; Linux-x86_64, byte-identical to the local binary
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: aptos CLI ${{ env.APTOS }} (official release zip)
         run: |
           curl -sSfL -o "$RUNNER_TEMP"/aptos.zip "https://github.com/aptos-labs/aptos-core/releases/download/aptos-cli-v$APTOS/aptos-cli-$APTOS-Linux-x86_64.zip"
@@ -472,10 +472,10 @@ jobs:
       SUI: testnet-v1.81.0 # sui 1.81.0-bf0c491c17b8, the local CLI
       SUI_SHA256: e0b38c877fd0c84d559ffa165a65af2fb47bd7b0e2a6413deac6f9e59ee6c31b # GitHub release asset digest; its `sui` is byte-identical to the local one
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # the release tarball is ~1.1 GB (every Sui binary): keep only `sui`, cached by version
       - id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/bin/sui
           key: sui-cli-${{ env.SUI }}-${{ env.SUI_SHA256 }}
@@ -498,7 +498,7 @@ jobs:
     if: needs.changes.outputs.contract_cosmos == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -513,8 +513,8 @@ jobs:
     if: needs.changes.outputs.contract_ton == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 26.8.1 # the local node; package-lock.json pins no engine above >= 20
           cache: npm
@@ -532,7 +532,7 @@ jobs:
       run:
         working-directory: clients/scaas-rpc
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -570,7 +570,7 @@ jobs:
       run:
         working-directory: scaas-node
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -593,7 +593,7 @@ jobs:
         run: |
           ../../scripts/vendor.sh install
           ../../scripts/vendor.sh check
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       # the Algorand adapter's unit tests read the compiled apps (git-ignored smartcontracts/algorand/out)
@@ -605,7 +605,7 @@ jobs:
       - name: unit + proptest
         run: cargo test
       # the e2e signs through clients/clientkeys (zetherPop and others): its node_modules
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: clientkeys dependencies for the e2e
@@ -624,7 +624,7 @@ jobs:
     if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: checker self-test
         run: python3 scripts/test_docs_check.py
       - name: register, links, lint, diagrams (C1-C11)
@@ -649,7 +649,7 @@ jobs:
   format:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }} # rustfmt of the root rust-toolchain.toml (1.97.1: rustfmt 1.9.0)
@@ -657,7 +657,7 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: v1.8.5
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 26.8.1
           cache: npm
@@ -670,7 +670,7 @@ jobs:
       - name: tact-fmt (@tact-lang/compiler 1.6.13, the devDependency of smartcontracts/ton)
         working-directory: smartcontracts/ton
         run: npm ci --ignore-scripts
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: ruff 0.16.4 and clang-format 19.1.7 (pinned wheels, hashes checked)
@@ -680,11 +680,11 @@ jobs:
             'clang-format==19.1.7 --hash=sha256:f4906fb463dd2033032978f56962caab268c9428a384126b9400543eb667f11c' \
             > "$RUNNER_TEMP/format-req.txt"
           pip install --require-hashes --only-binary :all: -r "$RUNNER_TEMP/format-req.txt"
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7.0.0 # v7.1.0 (2026-11-17) is under 14 days old: @v7 from 2026-12-01
         with:
           go-version: "1.25"
           cache: false
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
       - uses: dart-lang/setup-dart@v1
@@ -720,7 +720,7 @@ jobs:
     if: needs.changes.outputs.test_features == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -742,8 +742,8 @@ jobs:
       run:
         working-directory: clients/clientkeys
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: install (no lifecycle scripts)
@@ -779,7 +779,7 @@ jobs:
       run:
         working-directory: pqz-core
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -834,7 +834,7 @@ jobs:
       run:
         working-directory: clients/scaas-ct
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -857,7 +857,7 @@ jobs:
       run:
         working-directory: clients/zether-prover
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -869,7 +869,7 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: wasm-bindgen@0.2.129
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: clippy (default, hazmat)
@@ -961,7 +961,7 @@ jobs:
       run:
         working-directory: clients/ua-rs
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1006,7 +1006,7 @@ jobs:
       run:
         working-directory: clients/ua-rs
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1044,7 +1044,7 @@ jobs:
           - target: aarch64-apple-ios
             os: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1096,7 +1096,7 @@ jobs:
       run:
         working-directory: clients/ua-rs/tests/fndsa/wasm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh)
       - name: vendor/ at its pins
         working-directory: .
@@ -1120,7 +1120,7 @@ jobs:
         run: cargo test --release --locked --no-default-features --features vectors --test fndsa_vrfy -- --include-ignored
       - name: wasm-bindgen-cli 0.2.130
         run: cargo install wasm-bindgen-cli --version =0.2.130 --locked
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 26.8.1
       - name: clippy (wasm32)
@@ -1135,7 +1135,7 @@ jobs:
     if: needs.changes.outputs.ua_deps == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1178,7 +1178,7 @@ jobs:
       run:
         working-directory: clients/ua-cxx
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1210,7 +1210,7 @@ jobs:
       run:
         working-directory: clients/ua-c
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1246,7 +1246,7 @@ jobs:
     if: needs.changes.outputs.ua_qt == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1282,7 +1282,7 @@ jobs:
       run:
         working-directory: clients/ua-py
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1300,7 +1300,7 @@ jobs:
       - name: libscaas_ua_c
         working-directory: clients/ua-c
         run: cargo build --release --locked
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: install
@@ -1316,7 +1316,7 @@ jobs:
       run:
         working-directory: clients/ua-go
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1334,7 +1334,7 @@ jobs:
       - name: libscaas_ua_c
         working-directory: clients/ua-c
         run: cargo build --release --locked
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7.0.0 # v7.1.0 (2026-11-17) is under 14 days old: @v7 from 2026-12-01
         with:
           go-version: "1.25"
           cache-dependency-path: clients/ua-go/go.sum
@@ -1355,7 +1355,7 @@ jobs:
       run:
         working-directory: clients/ua-cs/Scaas.Ua.Tests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1373,7 +1373,7 @@ jobs:
       - name: libscaas_ua_c
         working-directory: clients/ua-c
         run: cargo build --release --locked
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
       - name: vectors
@@ -1387,7 +1387,7 @@ jobs:
       run:
         working-directory: clients/ua-dart-frb
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1421,7 +1421,7 @@ jobs:
       run:
         working-directory: clients/scaas-sdk
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1491,7 +1491,7 @@ jobs:
       run:
         working-directory: clients/scaas-sdk
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1518,7 +1518,7 @@ jobs:
       run:
         working-directory: clients/scaas-cli
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1549,7 +1549,7 @@ jobs:
       run:
         working-directory: clients/pqvault-core
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1583,7 +1583,7 @@ jobs:
       run:
         working-directory: clients/pqchat-core
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1631,7 +1631,7 @@ jobs:
       run:
         working-directory: clients/scaas-matrix
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1667,7 +1667,7 @@ jobs:
       matrix:
         lang: ${{ fromJSON(needs.changes.outputs.scaas_sdk_bind_langs) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
       # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
       - name: vendor/ at its pins
@@ -1721,16 +1721,16 @@ jobs:
         if: matrix.lang == 'dart'
         with:
           version: v1.8.5
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         if: matrix.lang == 'cs'
         with:
           dotnet-version: "10.0.x"
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6.2.0 # v6.3.0 (2026-11-14) is under 14 days old: @v6 from 2026-11-29; v6.3.0 makes the problem matcher opt-in
         if: matrix.lang == 'kotlin'
         with:
           distribution: temurin
           java-version: "17"
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6.2.0 # v6.3.0 (2026-11-14) is under 14 days old: @v6 from 2026-11-29; v6.3.0 makes the problem matcher opt-in
         if: matrix.lang == 'java'
         with:
           distribution: temurin
@@ -1750,11 +1750,11 @@ jobs:
           mkdir -p "$RUNNER_TEMP/swift"
           tar -xzf "$RUNNER_TEMP/swift.tar.gz" -C "$RUNNER_TEMP/swift" --strip-components=1
           echo "SWIFTC=$RUNNER_TEMP/swift/usr/bin/swiftc" >> "$GITHUB_ENV"
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7.0.0 # v7.1.0 (2026-11-17) is under 14 days old: @v7 from 2026-12-01
         if: matrix.lang == 'go'
         with:
           go-version: "1.22"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: matrix.lang == 'js'
         with:
           node-version: 26.8.1

@@ -2969,8 +2969,9 @@ impl AppKeys {
     /// A path-less Add (the path-less delta §4.1, §6.2, §6.3, §6.5). Its own `(ua, keyId)` first: reproduced only when a
     /// `try` of the seed gives its nonce, else the compromise warning (C47), with or without the epoch state. A joiner at its
     /// join opens its wrap (unanchored); a device holding the parent's `next` (`chain`) derives the joiner secret; the tag
-    /// then decides: good, followed; failing at an anchored device, [`State::AuthorDidNotHold`] with the chain's key kept
-    /// (C45); at an unanchored one "welcome may not match" (F-1); at the join "tag".
+    /// then decides: good, followed; failing on the device's own record, the compromise warning with no key and no chain
+    /// (F-1, owner 2026-11-28); failing at an anchored device, [`State::AuthorDidNotHold`] with the chain's key kept (C45);
+    /// at an unanchored one "welcome may not match"; at the join "tag".
     fn pathless_commit(
         &self,
         sc: &TreeScope,
@@ -3009,6 +3010,12 @@ impl AppKeys {
         let sch = schedule(sc, &joiner[..], &f)?;
         if sch.tag == tag {
             return Ok(taken(sc, a, &epoch_id, &sealed, sch, ch.anchored));
+        }
+        // F-1 (owner 2026-11-28): its own record, the nonce reproduced, a tag this device could not have written: someone
+        // holding its UA's key and the epoch signed it; the compromise warning, no key and no chain until a path commit
+        // (C-11 / G-4, fail closed)
+        if p.own {
+            return Ok(compromise());
         }
         if !ch.anchored {
             return Ok(not("welcome may not match"));

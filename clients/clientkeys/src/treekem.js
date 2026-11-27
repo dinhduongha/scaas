@@ -1357,8 +1357,9 @@ function finish(sc, a, c, p, dev, commitSecret) {
 /** A path-less Add (the delta §4.1, §6.2, §6.3, §6.5). Its own `(ua, keyId)` first: reproduced only when a `try` of the seed
  *  gives its nonce, else the compromise warning (C47), with or without the epoch state. A joiner at its join opens its wrap
  *  (unanchored); a device that holds the parent's `next` (`chain`) derives the joiner secret; the tag then decides: good,
- *  followed; failing at an anchored device, "author did not hold" with the chain's key kept (C45); at an unanchored one,
- *  "not followed" ("welcome may not match", F-1); at the join, "not followed" ("tag"). */
+ *  followed; failing on the device's own record, the compromise warning with no key and no chain (F-1, owner 2026-11-28);
+ *  failing at an anchored device, "author did not hold" with the chain's key kept (C45); at an unanchored one, "not
+ *  followed" ("welcome may not match"); at the join, "not followed" ("tag"). */
 function pathlessCommit(sc, a, dev, p, chain, joining) {
   const c = a.recs[p.n];
   const epochId = a.ids[p.n];
@@ -1379,6 +1380,9 @@ function pathlessCommit(sc, a, dev, p, chain, joining) {
     commitFields(c),
   );
   if (sameTag(sch, c.confirmTag)) return taken(sc, a, epochId, c.sealedInfo, sch, chain.anchored);
+  // F-1 (owner 2026-11-28): its own record, the nonce reproduced, a tag this device could not have written: someone holding
+  // its UA's key and the epoch signed it; the compromise warning, no key and no chain until a path commit (fail closed)
+  if (p.own) return { state: "compromise" };
   if (!chain.anchored) return { state: "not followed", reason: "welcome may not match" };
   return { state: "author did not hold", K: sch.K, chain: { next: sch.next, anchored: true } };
 }

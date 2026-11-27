@@ -45,7 +45,7 @@ STEPS=(
     "pqc-bind|.|bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh"
     "pqvault-test|clients/pqvault-core|$cap cargo test $C && $cap cargo test $C --features vectors --test vectors && $cap cargo clippy $C --all-targets -- -D warnings"
     "format|.|bash scripts/format.sh --check"
-    "docs|.|python3 scripts/docs_check.py check && python3 scripts/docs_check.py paths && python3 scripts/test_docs_check.py"
+    "docs|.|python3 scripts/test_docs_check.py && python3 scripts/docs_check.py check && python3 scripts/docs_check.py facts check && python3 scripts/docs_check.py paths && python3 scripts/docs_check.py consumer"
     "deploy-e2e|smartcontracts/evm|for t in script/test_*.py; do echo \"## \$t\"; python3 \"\$t\" || exit 1; done && T=\$(mktemp -d) && $cap forge build src/pqchat/PqChatStore.sol test/forkcheck --extra-output evm.legacyAssembly --out \"\$T\"/out --cache-path \"\$T\"/cache && python3 -I script/forkcheck.py exec cancun test/forkcheck/cases.json --out \"\$T\"/out && python3 -I script/forkcheck.py control cancun --out \"\$T\"/out && python3 -I script/deploy_pqchatstore.py local --out \"\$T\"/out; r=\$?; rm -rf \"\$T\"; exit \$r"
     "node-e2e|scaas-node|(cd ../clients/zether-prover && $cap cargo build $C --release --bin zether-cli --features hazmat) && $cap cargo test $C --test e2e -- --ignored --test-threads=1"
 )
