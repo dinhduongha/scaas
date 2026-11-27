@@ -28797,6 +28797,20 @@ sealed class Event {
         companion object
     }
     
+    /**
+     * user-profiles spec §6, §7.2, §11: an index row or name hint that differs from the profile's envelope; an item, a
+     * manifest, an envelope or a generation below its manifest or anchor; an item its manifest lists but whose file is
+     * missing. No field: no id, name or path.
+     */
+    object ProfileIndexMismatch : Event()
+    
+    
+    object ProfileRollback : Event()
+    
+    
+    object ProfileDamaged : Event()
+    
+    
 
     
 
@@ -28849,6 +28863,9 @@ public object FfiConverterTypeEvent : FfiConverterRustBuffer<Event>{
             11 -> Event.StateChanged(
                 FfiConverterULong.read(buf),
                 )
+            12 -> Event.ProfileIndexMismatch
+            13 -> Event.ProfileRollback
+            14 -> Event.ProfileDamaged
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -28935,6 +28952,24 @@ public object FfiConverterTypeEvent : FfiConverterRustBuffer<Event>{
                 + FfiConverterULong.allocationSize(value.`rev`)
             )
         }
+        is Event.ProfileIndexMismatch -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is Event.ProfileRollback -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is Event.ProfileDamaged -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: Event, buf: ByteBuffer) {
@@ -28996,6 +29031,18 @@ public object FfiConverterTypeEvent : FfiConverterRustBuffer<Event>{
             is Event.StateChanged -> {
                 buf.putInt(11)
                 FfiConverterULong.write(value.`rev`, buf)
+                Unit
+            }
+            is Event.ProfileIndexMismatch -> {
+                buf.putInt(12)
+                Unit
+            }
+            is Event.ProfileRollback -> {
+                buf.putInt(13)
+                Unit
+            }
+            is Event.ProfileDamaged -> {
+                buf.putInt(14)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -31021,6 +31068,61 @@ sealed class SdkException(message: String): kotlin.Exception(message) {
      */
         class Cancelled(message: String) : SdkException(message)
         
+        class ProfileInUse(message: String) : SdkException(message)
+        
+        class ProfileOpen(message: String) : SdkException(message)
+        
+    /**
+     * a `--profile` name or id with no visible profile
+     */
+        class ProfileUnknown(message: String) : SdkException(message)
+        
+        class ProfileNameTaken(message: String) : SdkException(message)
+        
+        class ProfileNameInvalid(message: String) : SdkException(message)
+        
+        class ProfileLimit(message: String) : SdkException(message)
+        
+        class ProfileHiddenLimit(message: String) : SdkException(message)
+        
+        class ProfilePartFull(message: String) : SdkException(message)
+        
+        class ProfileRootUnsafe(message: String) : SdkException(message)
+        
+        class ProfilePassphraseRequired(message: String) : SdkException(message)
+        
+        class ProfilePassphraseWeak(message: String) : SdkException(message)
+        
+        class ProfileFormat(message: String) : SdkException(message)
+        
+        class ProfileVersion(message: String) : SdkException(message)
+        
+        class ProfileKdfTooLarge(message: String) : SdkException(message)
+        
+        class ProfileKdfOutOfMemory(message: String) : SdkException(message)
+        
+        class ProfileSearchTooLarge(message: String) : SdkException(message)
+        
+        class ProfileImportOpen(message: String) : SdkException(message)
+        
+        class ProfileExportTooLarge(message: String) : SdkException(message)
+        
+        class ProfileLocked(message: String) : SdkException(message)
+        
+    /**
+     * a writer that waited 120 s on a re-seal
+     */
+        class ProfileBusy(message: String) : SdkException(message)
+        
+        class KeyLocked(message: String) : SdkException(message)
+        
+    /**
+     * user-profiles spec §7.2 "Errors": the store codes `StoreError::ProfileRollback` and `ProfileDamaged`, by name
+     */
+        class ProfileRollback(message: String) : SdkException(message)
+        
+        class ProfileDamaged(message: String) : SdkException(message)
+        
     /**
      * A `scaas-ua` wallet error, by its own code.
      */
@@ -31126,8 +31228,31 @@ public object FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException> {
             80 -> SdkException.FileTooLarge(FfiConverterString.read(buf))
             81 -> SdkException.FileHashMismatch(FfiConverterString.read(buf))
             82 -> SdkException.Cancelled(FfiConverterString.read(buf))
-            83 -> SdkException.Ua(FfiConverterString.read(buf))
-            84 -> SdkException.Rpc(FfiConverterString.read(buf))
+            83 -> SdkException.ProfileInUse(FfiConverterString.read(buf))
+            84 -> SdkException.ProfileOpen(FfiConverterString.read(buf))
+            85 -> SdkException.ProfileUnknown(FfiConverterString.read(buf))
+            86 -> SdkException.ProfileNameTaken(FfiConverterString.read(buf))
+            87 -> SdkException.ProfileNameInvalid(FfiConverterString.read(buf))
+            88 -> SdkException.ProfileLimit(FfiConverterString.read(buf))
+            89 -> SdkException.ProfileHiddenLimit(FfiConverterString.read(buf))
+            90 -> SdkException.ProfilePartFull(FfiConverterString.read(buf))
+            91 -> SdkException.ProfileRootUnsafe(FfiConverterString.read(buf))
+            92 -> SdkException.ProfilePassphraseRequired(FfiConverterString.read(buf))
+            93 -> SdkException.ProfilePassphraseWeak(FfiConverterString.read(buf))
+            94 -> SdkException.ProfileFormat(FfiConverterString.read(buf))
+            95 -> SdkException.ProfileVersion(FfiConverterString.read(buf))
+            96 -> SdkException.ProfileKdfTooLarge(FfiConverterString.read(buf))
+            97 -> SdkException.ProfileKdfOutOfMemory(FfiConverterString.read(buf))
+            98 -> SdkException.ProfileSearchTooLarge(FfiConverterString.read(buf))
+            99 -> SdkException.ProfileImportOpen(FfiConverterString.read(buf))
+            100 -> SdkException.ProfileExportTooLarge(FfiConverterString.read(buf))
+            101 -> SdkException.ProfileLocked(FfiConverterString.read(buf))
+            102 -> SdkException.ProfileBusy(FfiConverterString.read(buf))
+            103 -> SdkException.KeyLocked(FfiConverterString.read(buf))
+            104 -> SdkException.ProfileRollback(FfiConverterString.read(buf))
+            105 -> SdkException.ProfileDamaged(FfiConverterString.read(buf))
+            106 -> SdkException.Ua(FfiConverterString.read(buf))
+            107 -> SdkException.Rpc(FfiConverterString.read(buf))
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
         
@@ -31467,12 +31592,104 @@ public object FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException> {
                 buf.putInt(82)
                 Unit
             }
-            is SdkException.Ua -> {
+            is SdkException.ProfileInUse -> {
                 buf.putInt(83)
                 Unit
             }
-            is SdkException.Rpc -> {
+            is SdkException.ProfileOpen -> {
                 buf.putInt(84)
+                Unit
+            }
+            is SdkException.ProfileUnknown -> {
+                buf.putInt(85)
+                Unit
+            }
+            is SdkException.ProfileNameTaken -> {
+                buf.putInt(86)
+                Unit
+            }
+            is SdkException.ProfileNameInvalid -> {
+                buf.putInt(87)
+                Unit
+            }
+            is SdkException.ProfileLimit -> {
+                buf.putInt(88)
+                Unit
+            }
+            is SdkException.ProfileHiddenLimit -> {
+                buf.putInt(89)
+                Unit
+            }
+            is SdkException.ProfilePartFull -> {
+                buf.putInt(90)
+                Unit
+            }
+            is SdkException.ProfileRootUnsafe -> {
+                buf.putInt(91)
+                Unit
+            }
+            is SdkException.ProfilePassphraseRequired -> {
+                buf.putInt(92)
+                Unit
+            }
+            is SdkException.ProfilePassphraseWeak -> {
+                buf.putInt(93)
+                Unit
+            }
+            is SdkException.ProfileFormat -> {
+                buf.putInt(94)
+                Unit
+            }
+            is SdkException.ProfileVersion -> {
+                buf.putInt(95)
+                Unit
+            }
+            is SdkException.ProfileKdfTooLarge -> {
+                buf.putInt(96)
+                Unit
+            }
+            is SdkException.ProfileKdfOutOfMemory -> {
+                buf.putInt(97)
+                Unit
+            }
+            is SdkException.ProfileSearchTooLarge -> {
+                buf.putInt(98)
+                Unit
+            }
+            is SdkException.ProfileImportOpen -> {
+                buf.putInt(99)
+                Unit
+            }
+            is SdkException.ProfileExportTooLarge -> {
+                buf.putInt(100)
+                Unit
+            }
+            is SdkException.ProfileLocked -> {
+                buf.putInt(101)
+                Unit
+            }
+            is SdkException.ProfileBusy -> {
+                buf.putInt(102)
+                Unit
+            }
+            is SdkException.KeyLocked -> {
+                buf.putInt(103)
+                Unit
+            }
+            is SdkException.ProfileRollback -> {
+                buf.putInt(104)
+                Unit
+            }
+            is SdkException.ProfileDamaged -> {
+                buf.putInt(105)
+                Unit
+            }
+            is SdkException.Ua -> {
+                buf.putInt(106)
+                Unit
+            }
+            is SdkException.Rpc -> {
+                buf.putInt(107)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -31965,6 +32182,40 @@ sealed class StoreException: kotlin.Exception() {
             get() = ""
     }
     
+    /**
+     * user-profiles spec §7.2 "Errors" (each the `SdkError` of its name): a sealed item that does not open, or a plain item in
+     * a protected profile
+     */
+    class VaultFormat(
+        ) : StoreException() {
+        override val message
+            get() = ""
+    }
+    
+    class ProfileLocked(
+        ) : StoreException() {
+        override val message
+            get() = ""
+    }
+    
+    class ProfilePassphraseRequired(
+        ) : StoreException() {
+        override val message
+            get() = ""
+    }
+    
+    class ProfileRollback(
+        ) : StoreException() {
+        override val message
+            get() = ""
+    }
+    
+    class ProfileDamaged(
+        ) : StoreException() {
+        override val message
+            get() = ""
+    }
+    
 
     
 
@@ -31988,6 +32239,11 @@ public object FfiConverterTypeStoreError : FfiConverterRustBuffer<StoreException
             2 -> StoreException.Io()
             3 -> StoreException.Unavailable()
             4 -> StoreException.Unexpected()
+            5 -> StoreException.VaultFormat()
+            6 -> StoreException.ProfileLocked()
+            7 -> StoreException.ProfilePassphraseRequired()
+            8 -> StoreException.ProfileRollback()
+            9 -> StoreException.ProfileDamaged()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -32010,6 +32266,26 @@ public object FfiConverterTypeStoreError : FfiConverterRustBuffer<StoreException
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
+            is StoreException.VaultFormat -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is StoreException.ProfileLocked -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is StoreException.ProfilePassphraseRequired -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is StoreException.ProfileRollback -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is StoreException.ProfileDamaged -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -32029,6 +32305,26 @@ public object FfiConverterTypeStoreError : FfiConverterRustBuffer<StoreException
             }
             is StoreException.Unexpected -> {
                 buf.putInt(4)
+                Unit
+            }
+            is StoreException.VaultFormat -> {
+                buf.putInt(5)
+                Unit
+            }
+            is StoreException.ProfileLocked -> {
+                buf.putInt(6)
+                Unit
+            }
+            is StoreException.ProfilePassphraseRequired -> {
+                buf.putInt(7)
+                Unit
+            }
+            is StoreException.ProfileRollback -> {
+                buf.putInt(8)
+                Unit
+            }
+            is StoreException.ProfileDamaged -> {
+                buf.putInt(9)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

@@ -113,6 +113,35 @@ public sealed interface Event {
 
   }
   
+    /**
+     * user-profiles spec §6, §7.2, §11: an index row or name hint that differs from the profile's envelope; an item, a
+     * manifest, an envelope or a generation below its manifest or anchor; an item its manifest lists but whose file is
+     * missing. No field: no id, name or path.
+     */
+  record ProfileIndexMismatch() implements Event {
+    
+    
+    
+
+  }
+  
+  
+  record ProfileRollback() implements Event {
+    
+    
+    
+
+  }
+  
+  
+  record ProfileDamaged() implements Event {
+    
+    
+    
+
+  }
+  
+  
 
   
 }

@@ -33,6 +33,9 @@ public enum FfiConverterTypeEvent implements FfiConverterRustBuffer<Event> {
           );
         case 11 -> new Event.StateChanged(FfiConverterLong.INSTANCE.read(buf)
           );
+        case 12 -> new Event.ProfileIndexMismatch();
+        case 13 -> new Event.ProfileRollback();
+        case 14 -> new Event.ProfileDamaged();
         default ->
           throw new java.lang.RuntimeException("invalid enum value, something is very wrong!");
       };
@@ -78,6 +81,12 @@ public enum FfiConverterTypeEvent implements FfiConverterRustBuffer<Event> {
           case Event.StateChanged(var rev) ->
             (4L
             + FfiConverterLong.INSTANCE.allocationSize(rev));
+          case Event.ProfileIndexMismatch() ->
+            (4L);
+          case Event.ProfileRollback() ->
+            (4L);
+          case Event.ProfileDamaged() ->
+            (4L);
         };
     }
 
@@ -131,6 +140,15 @@ public enum FfiConverterTypeEvent implements FfiConverterRustBuffer<Event> {
         case Event.StateChanged(var rev) -> {
           buf.putInt(11);
           FfiConverterLong.INSTANCE.write(rev, buf);
+        }
+        case Event.ProfileIndexMismatch() -> {
+          buf.putInt(12);
+        }
+        case Event.ProfileRollback() -> {
+          buf.putInt(13);
+        }
+        case Event.ProfileDamaged() -> {
+          buf.putInt(14);
         }
       };
     }

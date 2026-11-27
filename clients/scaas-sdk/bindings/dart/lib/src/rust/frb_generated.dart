@@ -17484,6 +17484,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         );
       case 10:
         return Event_StateChanged(rev: dco_decode_u_64(raw[1]));
+      case 11:
+        return Event_ProfileIndexMismatch();
+      case 12:
+        return Event_ProfileRollback();
+      case 13:
+        return Event_ProfileDamaged();
       default:
         throw Exception("unreachable");
     }
@@ -24083,6 +24089,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       case 10:
         var var_rev = sse_decode_u_64(deserializer);
         return Event_StateChanged(rev: var_rev);
+      case 11:
+        return Event_ProfileIndexMismatch();
+      case 12:
+        return Event_ProfileRollback();
+      case 13:
+        return Event_ProfileDamaged();
       default:
         throw UnimplementedError('');
     }
@@ -32001,6 +32013,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       case Event_StateChanged(rev: final rev):
         sse_encode_i_32(10, serializer);
         sse_encode_u_64(rev, serializer);
+      case Event_ProfileIndexMismatch():
+        sse_encode_i_32(11, serializer);
+      case Event_ProfileRollback():
+        sse_encode_i_32(12, serializer);
+      case Event_ProfileDamaged():
+        sse_encode_i_32(13, serializer);
     }
   }
 
@@ -37881,7 +37899,8 @@ class VaultImpl extends RustOpaque implements Vault {
   Future<List<String>> lock({required String seed}) =>
       ScaasSdk.instance.api.scaasSdkVaultSeedsVaultLock(that: this, seed: seed);
 
-  /// Locks every seed.
+  /// Locks every seed: each seed with an open main set or a hidden set (one `lock` each), so a hidden set opened on a locked
+  /// seed is locked too.
   Future<List<String>> lockAll() =>
       ScaasSdk.instance.api.scaasSdkVaultSeedsVaultLockAll(that: this);
 

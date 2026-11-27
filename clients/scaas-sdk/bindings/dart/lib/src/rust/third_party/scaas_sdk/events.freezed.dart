@@ -55,7 +55,7 @@ extension EventPatterns on Event {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( Event_SeedUnlocked value)?  seedUnlocked,TResult Function( Event_SeedLocked value)?  seedLocked,TResult Function( Event_KeystoreChanged value)?  keystoreChanged,TResult Function( Event_KeystoreMismatch value)?  keystoreMismatch,TResult Function( Event_KeystoreRollback value)?  keystoreRollback,TResult Function( Event_HiddenOpsAbandoned value)?  hiddenOpsAbandoned,TResult Function( Event_Lagged value)?  lagged,TResult Function( Event_OpState value)?  opState,TResult Function( Event_BalanceChanged value)?  balanceChanged,TResult Function( Event_HistoryAdded value)?  historyAdded,TResult Function( Event_StateChanged value)?  stateChanged,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( Event_SeedUnlocked value)?  seedUnlocked,TResult Function( Event_SeedLocked value)?  seedLocked,TResult Function( Event_KeystoreChanged value)?  keystoreChanged,TResult Function( Event_KeystoreMismatch value)?  keystoreMismatch,TResult Function( Event_KeystoreRollback value)?  keystoreRollback,TResult Function( Event_HiddenOpsAbandoned value)?  hiddenOpsAbandoned,TResult Function( Event_Lagged value)?  lagged,TResult Function( Event_OpState value)?  opState,TResult Function( Event_BalanceChanged value)?  balanceChanged,TResult Function( Event_HistoryAdded value)?  historyAdded,TResult Function( Event_StateChanged value)?  stateChanged,TResult Function( Event_ProfileIndexMismatch value)?  profileIndexMismatch,TResult Function( Event_ProfileRollback value)?  profileRollback,TResult Function( Event_ProfileDamaged value)?  profileDamaged,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case Event_SeedUnlocked() when seedUnlocked != null:
@@ -69,7 +69,10 @@ return lagged(_that);case Event_OpState() when opState != null:
 return opState(_that);case Event_BalanceChanged() when balanceChanged != null:
 return balanceChanged(_that);case Event_HistoryAdded() when historyAdded != null:
 return historyAdded(_that);case Event_StateChanged() when stateChanged != null:
-return stateChanged(_that);case _:
+return stateChanged(_that);case Event_ProfileIndexMismatch() when profileIndexMismatch != null:
+return profileIndexMismatch(_that);case Event_ProfileRollback() when profileRollback != null:
+return profileRollback(_that);case Event_ProfileDamaged() when profileDamaged != null:
+return profileDamaged(_that);case _:
   return orElse();
 
 }
@@ -87,7 +90,7 @@ return stateChanged(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( Event_SeedUnlocked value)  seedUnlocked,required TResult Function( Event_SeedLocked value)  seedLocked,required TResult Function( Event_KeystoreChanged value)  keystoreChanged,required TResult Function( Event_KeystoreMismatch value)  keystoreMismatch,required TResult Function( Event_KeystoreRollback value)  keystoreRollback,required TResult Function( Event_HiddenOpsAbandoned value)  hiddenOpsAbandoned,required TResult Function( Event_Lagged value)  lagged,required TResult Function( Event_OpState value)  opState,required TResult Function( Event_BalanceChanged value)  balanceChanged,required TResult Function( Event_HistoryAdded value)  historyAdded,required TResult Function( Event_StateChanged value)  stateChanged,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( Event_SeedUnlocked value)  seedUnlocked,required TResult Function( Event_SeedLocked value)  seedLocked,required TResult Function( Event_KeystoreChanged value)  keystoreChanged,required TResult Function( Event_KeystoreMismatch value)  keystoreMismatch,required TResult Function( Event_KeystoreRollback value)  keystoreRollback,required TResult Function( Event_HiddenOpsAbandoned value)  hiddenOpsAbandoned,required TResult Function( Event_Lagged value)  lagged,required TResult Function( Event_OpState value)  opState,required TResult Function( Event_BalanceChanged value)  balanceChanged,required TResult Function( Event_HistoryAdded value)  historyAdded,required TResult Function( Event_StateChanged value)  stateChanged,required TResult Function( Event_ProfileIndexMismatch value)  profileIndexMismatch,required TResult Function( Event_ProfileRollback value)  profileRollback,required TResult Function( Event_ProfileDamaged value)  profileDamaged,}){
 final _that = this;
 switch (_that) {
 case Event_SeedUnlocked():
@@ -101,7 +104,10 @@ return lagged(_that);case Event_OpState():
 return opState(_that);case Event_BalanceChanged():
 return balanceChanged(_that);case Event_HistoryAdded():
 return historyAdded(_that);case Event_StateChanged():
-return stateChanged(_that);}
+return stateChanged(_that);case Event_ProfileIndexMismatch():
+return profileIndexMismatch(_that);case Event_ProfileRollback():
+return profileRollback(_that);case Event_ProfileDamaged():
+return profileDamaged(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -115,7 +121,7 @@ return stateChanged(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( Event_SeedUnlocked value)?  seedUnlocked,TResult? Function( Event_SeedLocked value)?  seedLocked,TResult? Function( Event_KeystoreChanged value)?  keystoreChanged,TResult? Function( Event_KeystoreMismatch value)?  keystoreMismatch,TResult? Function( Event_KeystoreRollback value)?  keystoreRollback,TResult? Function( Event_HiddenOpsAbandoned value)?  hiddenOpsAbandoned,TResult? Function( Event_Lagged value)?  lagged,TResult? Function( Event_OpState value)?  opState,TResult? Function( Event_BalanceChanged value)?  balanceChanged,TResult? Function( Event_HistoryAdded value)?  historyAdded,TResult? Function( Event_StateChanged value)?  stateChanged,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( Event_SeedUnlocked value)?  seedUnlocked,TResult? Function( Event_SeedLocked value)?  seedLocked,TResult? Function( Event_KeystoreChanged value)?  keystoreChanged,TResult? Function( Event_KeystoreMismatch value)?  keystoreMismatch,TResult? Function( Event_KeystoreRollback value)?  keystoreRollback,TResult? Function( Event_HiddenOpsAbandoned value)?  hiddenOpsAbandoned,TResult? Function( Event_Lagged value)?  lagged,TResult? Function( Event_OpState value)?  opState,TResult? Function( Event_BalanceChanged value)?  balanceChanged,TResult? Function( Event_HistoryAdded value)?  historyAdded,TResult? Function( Event_StateChanged value)?  stateChanged,TResult? Function( Event_ProfileIndexMismatch value)?  profileIndexMismatch,TResult? Function( Event_ProfileRollback value)?  profileRollback,TResult? Function( Event_ProfileDamaged value)?  profileDamaged,}){
 final _that = this;
 switch (_that) {
 case Event_SeedUnlocked() when seedUnlocked != null:
@@ -129,7 +135,10 @@ return lagged(_that);case Event_OpState() when opState != null:
 return opState(_that);case Event_BalanceChanged() when balanceChanged != null:
 return balanceChanged(_that);case Event_HistoryAdded() when historyAdded != null:
 return historyAdded(_that);case Event_StateChanged() when stateChanged != null:
-return stateChanged(_that);case _:
+return stateChanged(_that);case Event_ProfileIndexMismatch() when profileIndexMismatch != null:
+return profileIndexMismatch(_that);case Event_ProfileRollback() when profileRollback != null:
+return profileRollback(_that);case Event_ProfileDamaged() when profileDamaged != null:
+return profileDamaged(_that);case _:
   return null;
 
 }
@@ -146,7 +155,7 @@ return stateChanged(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String seed)?  seedUnlocked,TResult Function( String seed)?  seedLocked,TResult Function( BigInt rev)?  keystoreChanged,TResult Function( String seed)?  keystoreMismatch,TResult Function()?  keystoreRollback,TResult Function( int count)?  hiddenOpsAbandoned,TResult Function( BigInt missed)?  lagged,TResult Function( String op,  OpState state)?  opState,TResult Function( String account,  String chain,  String token)?  balanceChanged,TResult Function( String account,  String chain,  List<HistoryItem> items)?  historyAdded,TResult Function( BigInt rev)?  stateChanged,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String seed)?  seedUnlocked,TResult Function( String seed)?  seedLocked,TResult Function( BigInt rev)?  keystoreChanged,TResult Function( String seed)?  keystoreMismatch,TResult Function()?  keystoreRollback,TResult Function( int count)?  hiddenOpsAbandoned,TResult Function( BigInt missed)?  lagged,TResult Function( String op,  OpState state)?  opState,TResult Function( String account,  String chain,  String token)?  balanceChanged,TResult Function( String account,  String chain,  List<HistoryItem> items)?  historyAdded,TResult Function( BigInt rev)?  stateChanged,TResult Function()?  profileIndexMismatch,TResult Function()?  profileRollback,TResult Function()?  profileDamaged,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case Event_SeedUnlocked() when seedUnlocked != null:
 return seedUnlocked(_that.seed);case Event_SeedLocked() when seedLocked != null:
@@ -159,7 +168,10 @@ return lagged(_that.missed);case Event_OpState() when opState != null:
 return opState(_that.op,_that.state);case Event_BalanceChanged() when balanceChanged != null:
 return balanceChanged(_that.account,_that.chain,_that.token);case Event_HistoryAdded() when historyAdded != null:
 return historyAdded(_that.account,_that.chain,_that.items);case Event_StateChanged() when stateChanged != null:
-return stateChanged(_that.rev);case _:
+return stateChanged(_that.rev);case Event_ProfileIndexMismatch() when profileIndexMismatch != null:
+return profileIndexMismatch();case Event_ProfileRollback() when profileRollback != null:
+return profileRollback();case Event_ProfileDamaged() when profileDamaged != null:
+return profileDamaged();case _:
   return orElse();
 
 }
@@ -177,7 +189,7 @@ return stateChanged(_that.rev);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String seed)  seedUnlocked,required TResult Function( String seed)  seedLocked,required TResult Function( BigInt rev)  keystoreChanged,required TResult Function( String seed)  keystoreMismatch,required TResult Function()  keystoreRollback,required TResult Function( int count)  hiddenOpsAbandoned,required TResult Function( BigInt missed)  lagged,required TResult Function( String op,  OpState state)  opState,required TResult Function( String account,  String chain,  String token)  balanceChanged,required TResult Function( String account,  String chain,  List<HistoryItem> items)  historyAdded,required TResult Function( BigInt rev)  stateChanged,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String seed)  seedUnlocked,required TResult Function( String seed)  seedLocked,required TResult Function( BigInt rev)  keystoreChanged,required TResult Function( String seed)  keystoreMismatch,required TResult Function()  keystoreRollback,required TResult Function( int count)  hiddenOpsAbandoned,required TResult Function( BigInt missed)  lagged,required TResult Function( String op,  OpState state)  opState,required TResult Function( String account,  String chain,  String token)  balanceChanged,required TResult Function( String account,  String chain,  List<HistoryItem> items)  historyAdded,required TResult Function( BigInt rev)  stateChanged,required TResult Function()  profileIndexMismatch,required TResult Function()  profileRollback,required TResult Function()  profileDamaged,}) {final _that = this;
 switch (_that) {
 case Event_SeedUnlocked():
 return seedUnlocked(_that.seed);case Event_SeedLocked():
@@ -190,7 +202,10 @@ return lagged(_that.missed);case Event_OpState():
 return opState(_that.op,_that.state);case Event_BalanceChanged():
 return balanceChanged(_that.account,_that.chain,_that.token);case Event_HistoryAdded():
 return historyAdded(_that.account,_that.chain,_that.items);case Event_StateChanged():
-return stateChanged(_that.rev);}
+return stateChanged(_that.rev);case Event_ProfileIndexMismatch():
+return profileIndexMismatch();case Event_ProfileRollback():
+return profileRollback();case Event_ProfileDamaged():
+return profileDamaged();}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -204,7 +219,7 @@ return stateChanged(_that.rev);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String seed)?  seedUnlocked,TResult? Function( String seed)?  seedLocked,TResult? Function( BigInt rev)?  keystoreChanged,TResult? Function( String seed)?  keystoreMismatch,TResult? Function()?  keystoreRollback,TResult? Function( int count)?  hiddenOpsAbandoned,TResult? Function( BigInt missed)?  lagged,TResult? Function( String op,  OpState state)?  opState,TResult? Function( String account,  String chain,  String token)?  balanceChanged,TResult? Function( String account,  String chain,  List<HistoryItem> items)?  historyAdded,TResult? Function( BigInt rev)?  stateChanged,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String seed)?  seedUnlocked,TResult? Function( String seed)?  seedLocked,TResult? Function( BigInt rev)?  keystoreChanged,TResult? Function( String seed)?  keystoreMismatch,TResult? Function()?  keystoreRollback,TResult? Function( int count)?  hiddenOpsAbandoned,TResult? Function( BigInt missed)?  lagged,TResult? Function( String op,  OpState state)?  opState,TResult? Function( String account,  String chain,  String token)?  balanceChanged,TResult? Function( String account,  String chain,  List<HistoryItem> items)?  historyAdded,TResult? Function( BigInt rev)?  stateChanged,TResult? Function()?  profileIndexMismatch,TResult? Function()?  profileRollback,TResult? Function()?  profileDamaged,}) {final _that = this;
 switch (_that) {
 case Event_SeedUnlocked() when seedUnlocked != null:
 return seedUnlocked(_that.seed);case Event_SeedLocked() when seedLocked != null:
@@ -217,7 +232,10 @@ return lagged(_that.missed);case Event_OpState() when opState != null:
 return opState(_that.op,_that.state);case Event_BalanceChanged() when balanceChanged != null:
 return balanceChanged(_that.account,_that.chain,_that.token);case Event_HistoryAdded() when historyAdded != null:
 return historyAdded(_that.account,_that.chain,_that.items);case Event_StateChanged() when stateChanged != null:
-return stateChanged(_that.rev);case _:
+return stateChanged(_that.rev);case Event_ProfileIndexMismatch() when profileIndexMismatch != null:
+return profileIndexMismatch();case Event_ProfileRollback() when profileRollback != null:
+return profileRollback();case Event_ProfileDamaged() when profileDamaged != null:
+return profileDamaged();case _:
   return null;
 
 }
@@ -941,6 +959,102 @@ as BigInt,
 
 
 }
+
+/// @nodoc
+
+
+class Event_ProfileIndexMismatch extends Event {
+  const Event_ProfileIndexMismatch(): super._();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Event_ProfileIndexMismatch);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'Event.profileIndexMismatch()';
+}
+
+
+}
+
+
+
+
+/// @nodoc
+
+
+class Event_ProfileRollback extends Event {
+  const Event_ProfileRollback(): super._();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Event_ProfileRollback);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'Event.profileRollback()';
+}
+
+
+}
+
+
+
+
+/// @nodoc
+
+
+class Event_ProfileDamaged extends Event {
+  const Event_ProfileDamaged(): super._();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Event_ProfileDamaged);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'Event.profileDamaged()';
+}
+
+
+}
+
+
+
 
 /// @nodoc
 mixin _$OpState {

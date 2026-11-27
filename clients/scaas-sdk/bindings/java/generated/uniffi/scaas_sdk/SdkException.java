@@ -638,6 +638,153 @@ public class SdkException extends java.lang.Exception {
       }
     }
     
+    public static class ProfileInUse extends SdkException {
+      public ProfileInUse(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileOpen extends SdkException {
+      public ProfileOpen(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * a `--profile` name or id with no visible profile
+     */
+    public static class ProfileUnknown extends SdkException {
+      public ProfileUnknown(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileNameTaken extends SdkException {
+      public ProfileNameTaken(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileNameInvalid extends SdkException {
+      public ProfileNameInvalid(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileLimit extends SdkException {
+      public ProfileLimit(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileHiddenLimit extends SdkException {
+      public ProfileHiddenLimit(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfilePartFull extends SdkException {
+      public ProfilePartFull(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileRootUnsafe extends SdkException {
+      public ProfileRootUnsafe(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfilePassphraseRequired extends SdkException {
+      public ProfilePassphraseRequired(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfilePassphraseWeak extends SdkException {
+      public ProfilePassphraseWeak(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileFormat extends SdkException {
+      public ProfileFormat(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileVersion extends SdkException {
+      public ProfileVersion(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileKdfTooLarge extends SdkException {
+      public ProfileKdfTooLarge(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileKdfOutOfMemory extends SdkException {
+      public ProfileKdfOutOfMemory(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileSearchTooLarge extends SdkException {
+      public ProfileSearchTooLarge(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileImportOpen extends SdkException {
+      public ProfileImportOpen(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileExportTooLarge extends SdkException {
+      public ProfileExportTooLarge(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileLocked extends SdkException {
+      public ProfileLocked(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * a writer that waited 120 s on a re-seal
+     */
+    public static class ProfileBusy extends SdkException {
+      public ProfileBusy(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class KeyLocked extends SdkException {
+      public KeyLocked(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * user-profiles spec §7.2 "Errors": the store codes `StoreError::ProfileRollback` and `ProfileDamaged`, by name
+     */
+    public static class ProfileRollback extends SdkException {
+      public ProfileRollback(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    public static class ProfileDamaged extends SdkException {
+      public ProfileDamaged(java.lang.String message) {
+        super(message);
+      }
+    }
+    
     /**
      * A `scaas-ua` wallet error, by its own code.
      */

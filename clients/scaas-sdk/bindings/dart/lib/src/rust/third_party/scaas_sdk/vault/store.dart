@@ -12,7 +12,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `new`
 // These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`
 
-/// The revision of an item's bytes: its top-level JSON `rev`, else `u64::MAX`.
+/// The revision of an item's bytes: its top-level JSON `rev`, else `u64::MAX`. Read up to 16 MiB, or for a sealed item (bytes
+/// that begin `{"rev":<digits>,"sealed":"`) up to the base64 of 16 MiB plus 1 KiB.
 Future<BigInt> revOf({required List<int> bytes}) =>
     ScaasSdk.instance.api.scaasSdkVaultStoreRevOf(bytes: bytes);
 
@@ -32,6 +33,14 @@ enum StoreError {
   io,
   unavailable,
   unexpected,
+
+  /// user-profiles spec §7.2 "Errors" (each the `SdkError` of its name): a sealed item that does not open, or a plain item in
+  /// a protected profile
+  vaultFormat,
+  profileLocked,
+  profilePassphraseRequired,
+  profileRollback,
+  profileDamaged,
 }
 
 /// How an item is kept: on this device only, out of cloud backups, behind user presence.

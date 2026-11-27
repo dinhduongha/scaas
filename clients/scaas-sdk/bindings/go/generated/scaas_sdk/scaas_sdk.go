@@ -27496,6 +27496,27 @@ func (e EventStateChanged) Destroy() {
 	FfiDestroyerUint64{}.Destroy(e.Rev)
 }
 
+// user-profiles spec §6, §7.2, §11: an index row or name hint that differs from the profile's envelope; an item, a
+// manifest, an envelope or a generation below its manifest or anchor; an item its manifest lists but whose file is
+// missing. No field: no id, name or path.
+type EventProfileIndexMismatch struct {
+}
+
+func (e EventProfileIndexMismatch) Destroy() {
+}
+
+type EventProfileRollback struct {
+}
+
+func (e EventProfileRollback) Destroy() {
+}
+
+type EventProfileDamaged struct {
+}
+
+func (e EventProfileDamaged) Destroy() {
+}
+
 type FfiConverterEvent struct{}
 
 var FfiConverterEventINSTANCE = FfiConverterEvent{}
@@ -27561,6 +27582,12 @@ func (FfiConverterEvent) Read(reader io.Reader) Event {
 		return EventStateChanged{
 			FfiConverterUint64INSTANCE.Read(reader),
 		}
+	case 12:
+		return EventProfileIndexMismatch{}
+	case 13:
+		return EventProfileRollback{}
+	case 14:
+		return EventProfileDamaged{}
 	default:
 		panic(fmt.Sprintf("invalid enum value %v in FfiConverterEvent.Read()", id))
 	}
@@ -27605,6 +27632,12 @@ func (FfiConverterEvent) Write(writer io.Writer, value Event) {
 	case EventStateChanged:
 		writeInt32(writer, 11)
 		FfiConverterUint64INSTANCE.Write(writer, variant_value.Rev)
+	case EventProfileIndexMismatch:
+		writeInt32(writer, 12)
+	case EventProfileRollback:
+		writeInt32(writer, 13)
+	case EventProfileDamaged:
+		writeInt32(writer, 14)
 	default:
 		_ = variant_value
 		panic(fmt.Sprintf("invalid enum value `%v` in FfiConverterEvent.Write", value))
@@ -29075,6 +29108,29 @@ var ErrSdkErrorArweaveItem = fmt.Errorf("SdkErrorArweaveItem")
 var ErrSdkErrorFileTooLarge = fmt.Errorf("SdkErrorFileTooLarge")
 var ErrSdkErrorFileHashMismatch = fmt.Errorf("SdkErrorFileHashMismatch")
 var ErrSdkErrorCancelled = fmt.Errorf("SdkErrorCancelled")
+var ErrSdkErrorProfileInUse = fmt.Errorf("SdkErrorProfileInUse")
+var ErrSdkErrorProfileOpen = fmt.Errorf("SdkErrorProfileOpen")
+var ErrSdkErrorProfileUnknown = fmt.Errorf("SdkErrorProfileUnknown")
+var ErrSdkErrorProfileNameTaken = fmt.Errorf("SdkErrorProfileNameTaken")
+var ErrSdkErrorProfileNameInvalid = fmt.Errorf("SdkErrorProfileNameInvalid")
+var ErrSdkErrorProfileLimit = fmt.Errorf("SdkErrorProfileLimit")
+var ErrSdkErrorProfileHiddenLimit = fmt.Errorf("SdkErrorProfileHiddenLimit")
+var ErrSdkErrorProfilePartFull = fmt.Errorf("SdkErrorProfilePartFull")
+var ErrSdkErrorProfileRootUnsafe = fmt.Errorf("SdkErrorProfileRootUnsafe")
+var ErrSdkErrorProfilePassphraseRequired = fmt.Errorf("SdkErrorProfilePassphraseRequired")
+var ErrSdkErrorProfilePassphraseWeak = fmt.Errorf("SdkErrorProfilePassphraseWeak")
+var ErrSdkErrorProfileFormat = fmt.Errorf("SdkErrorProfileFormat")
+var ErrSdkErrorProfileVersion = fmt.Errorf("SdkErrorProfileVersion")
+var ErrSdkErrorProfileKdfTooLarge = fmt.Errorf("SdkErrorProfileKdfTooLarge")
+var ErrSdkErrorProfileKdfOutOfMemory = fmt.Errorf("SdkErrorProfileKdfOutOfMemory")
+var ErrSdkErrorProfileSearchTooLarge = fmt.Errorf("SdkErrorProfileSearchTooLarge")
+var ErrSdkErrorProfileImportOpen = fmt.Errorf("SdkErrorProfileImportOpen")
+var ErrSdkErrorProfileExportTooLarge = fmt.Errorf("SdkErrorProfileExportTooLarge")
+var ErrSdkErrorProfileLocked = fmt.Errorf("SdkErrorProfileLocked")
+var ErrSdkErrorProfileBusy = fmt.Errorf("SdkErrorProfileBusy")
+var ErrSdkErrorKeyLocked = fmt.Errorf("SdkErrorKeyLocked")
+var ErrSdkErrorProfileRollback = fmt.Errorf("SdkErrorProfileRollback")
+var ErrSdkErrorProfileDamaged = fmt.Errorf("SdkErrorProfileDamaged")
 var ErrSdkErrorUa = fmt.Errorf("SdkErrorUa")
 var ErrSdkErrorRpc = fmt.Errorf("SdkErrorRpc")
 
@@ -30751,6 +30807,449 @@ func (self SdkErrorCancelled) Is(target error) bool {
 	return target == ErrSdkErrorCancelled
 }
 
+type SdkErrorProfileInUse struct {
+	message string
+}
+
+func NewSdkErrorProfileInUse() *SdkError {
+	return &SdkError{err: &SdkErrorProfileInUse{}}
+}
+
+func (e SdkErrorProfileInUse) destroy() {
+}
+
+func (err SdkErrorProfileInUse) Error() string {
+	return fmt.Sprintf("ProfileInUse: %s", err.message)
+}
+
+func (self SdkErrorProfileInUse) Is(target error) bool {
+	return target == ErrSdkErrorProfileInUse
+}
+
+type SdkErrorProfileOpen struct {
+	message string
+}
+
+func NewSdkErrorProfileOpen() *SdkError {
+	return &SdkError{err: &SdkErrorProfileOpen{}}
+}
+
+func (e SdkErrorProfileOpen) destroy() {
+}
+
+func (err SdkErrorProfileOpen) Error() string {
+	return fmt.Sprintf("ProfileOpen: %s", err.message)
+}
+
+func (self SdkErrorProfileOpen) Is(target error) bool {
+	return target == ErrSdkErrorProfileOpen
+}
+
+// a `--profile` name or id with no visible profile
+type SdkErrorProfileUnknown struct {
+	message string
+}
+
+// a `--profile` name or id with no visible profile
+func NewSdkErrorProfileUnknown() *SdkError {
+	return &SdkError{err: &SdkErrorProfileUnknown{}}
+}
+
+func (e SdkErrorProfileUnknown) destroy() {
+}
+
+func (err SdkErrorProfileUnknown) Error() string {
+	return fmt.Sprintf("ProfileUnknown: %s", err.message)
+}
+
+func (self SdkErrorProfileUnknown) Is(target error) bool {
+	return target == ErrSdkErrorProfileUnknown
+}
+
+type SdkErrorProfileNameTaken struct {
+	message string
+}
+
+func NewSdkErrorProfileNameTaken() *SdkError {
+	return &SdkError{err: &SdkErrorProfileNameTaken{}}
+}
+
+func (e SdkErrorProfileNameTaken) destroy() {
+}
+
+func (err SdkErrorProfileNameTaken) Error() string {
+	return fmt.Sprintf("ProfileNameTaken: %s", err.message)
+}
+
+func (self SdkErrorProfileNameTaken) Is(target error) bool {
+	return target == ErrSdkErrorProfileNameTaken
+}
+
+type SdkErrorProfileNameInvalid struct {
+	message string
+}
+
+func NewSdkErrorProfileNameInvalid() *SdkError {
+	return &SdkError{err: &SdkErrorProfileNameInvalid{}}
+}
+
+func (e SdkErrorProfileNameInvalid) destroy() {
+}
+
+func (err SdkErrorProfileNameInvalid) Error() string {
+	return fmt.Sprintf("ProfileNameInvalid: %s", err.message)
+}
+
+func (self SdkErrorProfileNameInvalid) Is(target error) bool {
+	return target == ErrSdkErrorProfileNameInvalid
+}
+
+type SdkErrorProfileLimit struct {
+	message string
+}
+
+func NewSdkErrorProfileLimit() *SdkError {
+	return &SdkError{err: &SdkErrorProfileLimit{}}
+}
+
+func (e SdkErrorProfileLimit) destroy() {
+}
+
+func (err SdkErrorProfileLimit) Error() string {
+	return fmt.Sprintf("ProfileLimit: %s", err.message)
+}
+
+func (self SdkErrorProfileLimit) Is(target error) bool {
+	return target == ErrSdkErrorProfileLimit
+}
+
+type SdkErrorProfileHiddenLimit struct {
+	message string
+}
+
+func NewSdkErrorProfileHiddenLimit() *SdkError {
+	return &SdkError{err: &SdkErrorProfileHiddenLimit{}}
+}
+
+func (e SdkErrorProfileHiddenLimit) destroy() {
+}
+
+func (err SdkErrorProfileHiddenLimit) Error() string {
+	return fmt.Sprintf("ProfileHiddenLimit: %s", err.message)
+}
+
+func (self SdkErrorProfileHiddenLimit) Is(target error) bool {
+	return target == ErrSdkErrorProfileHiddenLimit
+}
+
+type SdkErrorProfilePartFull struct {
+	message string
+}
+
+func NewSdkErrorProfilePartFull() *SdkError {
+	return &SdkError{err: &SdkErrorProfilePartFull{}}
+}
+
+func (e SdkErrorProfilePartFull) destroy() {
+}
+
+func (err SdkErrorProfilePartFull) Error() string {
+	return fmt.Sprintf("ProfilePartFull: %s", err.message)
+}
+
+func (self SdkErrorProfilePartFull) Is(target error) bool {
+	return target == ErrSdkErrorProfilePartFull
+}
+
+type SdkErrorProfileRootUnsafe struct {
+	message string
+}
+
+func NewSdkErrorProfileRootUnsafe() *SdkError {
+	return &SdkError{err: &SdkErrorProfileRootUnsafe{}}
+}
+
+func (e SdkErrorProfileRootUnsafe) destroy() {
+}
+
+func (err SdkErrorProfileRootUnsafe) Error() string {
+	return fmt.Sprintf("ProfileRootUnsafe: %s", err.message)
+}
+
+func (self SdkErrorProfileRootUnsafe) Is(target error) bool {
+	return target == ErrSdkErrorProfileRootUnsafe
+}
+
+type SdkErrorProfilePassphraseRequired struct {
+	message string
+}
+
+func NewSdkErrorProfilePassphraseRequired() *SdkError {
+	return &SdkError{err: &SdkErrorProfilePassphraseRequired{}}
+}
+
+func (e SdkErrorProfilePassphraseRequired) destroy() {
+}
+
+func (err SdkErrorProfilePassphraseRequired) Error() string {
+	return fmt.Sprintf("ProfilePassphraseRequired: %s", err.message)
+}
+
+func (self SdkErrorProfilePassphraseRequired) Is(target error) bool {
+	return target == ErrSdkErrorProfilePassphraseRequired
+}
+
+type SdkErrorProfilePassphraseWeak struct {
+	message string
+}
+
+func NewSdkErrorProfilePassphraseWeak() *SdkError {
+	return &SdkError{err: &SdkErrorProfilePassphraseWeak{}}
+}
+
+func (e SdkErrorProfilePassphraseWeak) destroy() {
+}
+
+func (err SdkErrorProfilePassphraseWeak) Error() string {
+	return fmt.Sprintf("ProfilePassphraseWeak: %s", err.message)
+}
+
+func (self SdkErrorProfilePassphraseWeak) Is(target error) bool {
+	return target == ErrSdkErrorProfilePassphraseWeak
+}
+
+type SdkErrorProfileFormat struct {
+	message string
+}
+
+func NewSdkErrorProfileFormat() *SdkError {
+	return &SdkError{err: &SdkErrorProfileFormat{}}
+}
+
+func (e SdkErrorProfileFormat) destroy() {
+}
+
+func (err SdkErrorProfileFormat) Error() string {
+	return fmt.Sprintf("ProfileFormat: %s", err.message)
+}
+
+func (self SdkErrorProfileFormat) Is(target error) bool {
+	return target == ErrSdkErrorProfileFormat
+}
+
+type SdkErrorProfileVersion struct {
+	message string
+}
+
+func NewSdkErrorProfileVersion() *SdkError {
+	return &SdkError{err: &SdkErrorProfileVersion{}}
+}
+
+func (e SdkErrorProfileVersion) destroy() {
+}
+
+func (err SdkErrorProfileVersion) Error() string {
+	return fmt.Sprintf("ProfileVersion: %s", err.message)
+}
+
+func (self SdkErrorProfileVersion) Is(target error) bool {
+	return target == ErrSdkErrorProfileVersion
+}
+
+type SdkErrorProfileKdfTooLarge struct {
+	message string
+}
+
+func NewSdkErrorProfileKdfTooLarge() *SdkError {
+	return &SdkError{err: &SdkErrorProfileKdfTooLarge{}}
+}
+
+func (e SdkErrorProfileKdfTooLarge) destroy() {
+}
+
+func (err SdkErrorProfileKdfTooLarge) Error() string {
+	return fmt.Sprintf("ProfileKdfTooLarge: %s", err.message)
+}
+
+func (self SdkErrorProfileKdfTooLarge) Is(target error) bool {
+	return target == ErrSdkErrorProfileKdfTooLarge
+}
+
+type SdkErrorProfileKdfOutOfMemory struct {
+	message string
+}
+
+func NewSdkErrorProfileKdfOutOfMemory() *SdkError {
+	return &SdkError{err: &SdkErrorProfileKdfOutOfMemory{}}
+}
+
+func (e SdkErrorProfileKdfOutOfMemory) destroy() {
+}
+
+func (err SdkErrorProfileKdfOutOfMemory) Error() string {
+	return fmt.Sprintf("ProfileKdfOutOfMemory: %s", err.message)
+}
+
+func (self SdkErrorProfileKdfOutOfMemory) Is(target error) bool {
+	return target == ErrSdkErrorProfileKdfOutOfMemory
+}
+
+type SdkErrorProfileSearchTooLarge struct {
+	message string
+}
+
+func NewSdkErrorProfileSearchTooLarge() *SdkError {
+	return &SdkError{err: &SdkErrorProfileSearchTooLarge{}}
+}
+
+func (e SdkErrorProfileSearchTooLarge) destroy() {
+}
+
+func (err SdkErrorProfileSearchTooLarge) Error() string {
+	return fmt.Sprintf("ProfileSearchTooLarge: %s", err.message)
+}
+
+func (self SdkErrorProfileSearchTooLarge) Is(target error) bool {
+	return target == ErrSdkErrorProfileSearchTooLarge
+}
+
+type SdkErrorProfileImportOpen struct {
+	message string
+}
+
+func NewSdkErrorProfileImportOpen() *SdkError {
+	return &SdkError{err: &SdkErrorProfileImportOpen{}}
+}
+
+func (e SdkErrorProfileImportOpen) destroy() {
+}
+
+func (err SdkErrorProfileImportOpen) Error() string {
+	return fmt.Sprintf("ProfileImportOpen: %s", err.message)
+}
+
+func (self SdkErrorProfileImportOpen) Is(target error) bool {
+	return target == ErrSdkErrorProfileImportOpen
+}
+
+type SdkErrorProfileExportTooLarge struct {
+	message string
+}
+
+func NewSdkErrorProfileExportTooLarge() *SdkError {
+	return &SdkError{err: &SdkErrorProfileExportTooLarge{}}
+}
+
+func (e SdkErrorProfileExportTooLarge) destroy() {
+}
+
+func (err SdkErrorProfileExportTooLarge) Error() string {
+	return fmt.Sprintf("ProfileExportTooLarge: %s", err.message)
+}
+
+func (self SdkErrorProfileExportTooLarge) Is(target error) bool {
+	return target == ErrSdkErrorProfileExportTooLarge
+}
+
+type SdkErrorProfileLocked struct {
+	message string
+}
+
+func NewSdkErrorProfileLocked() *SdkError {
+	return &SdkError{err: &SdkErrorProfileLocked{}}
+}
+
+func (e SdkErrorProfileLocked) destroy() {
+}
+
+func (err SdkErrorProfileLocked) Error() string {
+	return fmt.Sprintf("ProfileLocked: %s", err.message)
+}
+
+func (self SdkErrorProfileLocked) Is(target error) bool {
+	return target == ErrSdkErrorProfileLocked
+}
+
+// a writer that waited 120 s on a re-seal
+type SdkErrorProfileBusy struct {
+	message string
+}
+
+// a writer that waited 120 s on a re-seal
+func NewSdkErrorProfileBusy() *SdkError {
+	return &SdkError{err: &SdkErrorProfileBusy{}}
+}
+
+func (e SdkErrorProfileBusy) destroy() {
+}
+
+func (err SdkErrorProfileBusy) Error() string {
+	return fmt.Sprintf("ProfileBusy: %s", err.message)
+}
+
+func (self SdkErrorProfileBusy) Is(target error) bool {
+	return target == ErrSdkErrorProfileBusy
+}
+
+type SdkErrorKeyLocked struct {
+	message string
+}
+
+func NewSdkErrorKeyLocked() *SdkError {
+	return &SdkError{err: &SdkErrorKeyLocked{}}
+}
+
+func (e SdkErrorKeyLocked) destroy() {
+}
+
+func (err SdkErrorKeyLocked) Error() string {
+	return fmt.Sprintf("KeyLocked: %s", err.message)
+}
+
+func (self SdkErrorKeyLocked) Is(target error) bool {
+	return target == ErrSdkErrorKeyLocked
+}
+
+// user-profiles spec §7.2 "Errors": the store codes `StoreError::ProfileRollback` and `ProfileDamaged`, by name
+type SdkErrorProfileRollback struct {
+	message string
+}
+
+// user-profiles spec §7.2 "Errors": the store codes `StoreError::ProfileRollback` and `ProfileDamaged`, by name
+func NewSdkErrorProfileRollback() *SdkError {
+	return &SdkError{err: &SdkErrorProfileRollback{}}
+}
+
+func (e SdkErrorProfileRollback) destroy() {
+}
+
+func (err SdkErrorProfileRollback) Error() string {
+	return fmt.Sprintf("ProfileRollback: %s", err.message)
+}
+
+func (self SdkErrorProfileRollback) Is(target error) bool {
+	return target == ErrSdkErrorProfileRollback
+}
+
+type SdkErrorProfileDamaged struct {
+	message string
+}
+
+func NewSdkErrorProfileDamaged() *SdkError {
+	return &SdkError{err: &SdkErrorProfileDamaged{}}
+}
+
+func (e SdkErrorProfileDamaged) destroy() {
+}
+
+func (err SdkErrorProfileDamaged) Error() string {
+	return fmt.Sprintf("ProfileDamaged: %s", err.message)
+}
+
+func (self SdkErrorProfileDamaged) Is(target error) bool {
+	return target == ErrSdkErrorProfileDamaged
+}
+
 // A `scaas-ua` wallet error, by its own code.
 type SdkErrorUa struct {
 	message string
@@ -30979,8 +31478,54 @@ func (c FfiConverterSdkError) Read(reader io.Reader) *SdkError {
 	case 82:
 		return &SdkError{&SdkErrorCancelled{message}}
 	case 83:
-		return &SdkError{&SdkErrorUa{message}}
+		return &SdkError{&SdkErrorProfileInUse{message}}
 	case 84:
+		return &SdkError{&SdkErrorProfileOpen{message}}
+	case 85:
+		return &SdkError{&SdkErrorProfileUnknown{message}}
+	case 86:
+		return &SdkError{&SdkErrorProfileNameTaken{message}}
+	case 87:
+		return &SdkError{&SdkErrorProfileNameInvalid{message}}
+	case 88:
+		return &SdkError{&SdkErrorProfileLimit{message}}
+	case 89:
+		return &SdkError{&SdkErrorProfileHiddenLimit{message}}
+	case 90:
+		return &SdkError{&SdkErrorProfilePartFull{message}}
+	case 91:
+		return &SdkError{&SdkErrorProfileRootUnsafe{message}}
+	case 92:
+		return &SdkError{&SdkErrorProfilePassphraseRequired{message}}
+	case 93:
+		return &SdkError{&SdkErrorProfilePassphraseWeak{message}}
+	case 94:
+		return &SdkError{&SdkErrorProfileFormat{message}}
+	case 95:
+		return &SdkError{&SdkErrorProfileVersion{message}}
+	case 96:
+		return &SdkError{&SdkErrorProfileKdfTooLarge{message}}
+	case 97:
+		return &SdkError{&SdkErrorProfileKdfOutOfMemory{message}}
+	case 98:
+		return &SdkError{&SdkErrorProfileSearchTooLarge{message}}
+	case 99:
+		return &SdkError{&SdkErrorProfileImportOpen{message}}
+	case 100:
+		return &SdkError{&SdkErrorProfileExportTooLarge{message}}
+	case 101:
+		return &SdkError{&SdkErrorProfileLocked{message}}
+	case 102:
+		return &SdkError{&SdkErrorProfileBusy{message}}
+	case 103:
+		return &SdkError{&SdkErrorKeyLocked{message}}
+	case 104:
+		return &SdkError{&SdkErrorProfileRollback{message}}
+	case 105:
+		return &SdkError{&SdkErrorProfileDamaged{message}}
+	case 106:
+		return &SdkError{&SdkErrorUa{message}}
+	case 107:
 		return &SdkError{&SdkErrorRpc{message}}
 	default:
 		panic(fmt.Sprintf("Unknown error code %d in FfiConverterSdkError.Read()", errorID))
@@ -31154,10 +31699,56 @@ func (c FfiConverterSdkError) Write(writer io.Writer, value *SdkError) {
 		writeInt32(writer, 81)
 	case *SdkErrorCancelled:
 		writeInt32(writer, 82)
-	case *SdkErrorUa:
+	case *SdkErrorProfileInUse:
 		writeInt32(writer, 83)
-	case *SdkErrorRpc:
+	case *SdkErrorProfileOpen:
 		writeInt32(writer, 84)
+	case *SdkErrorProfileUnknown:
+		writeInt32(writer, 85)
+	case *SdkErrorProfileNameTaken:
+		writeInt32(writer, 86)
+	case *SdkErrorProfileNameInvalid:
+		writeInt32(writer, 87)
+	case *SdkErrorProfileLimit:
+		writeInt32(writer, 88)
+	case *SdkErrorProfileHiddenLimit:
+		writeInt32(writer, 89)
+	case *SdkErrorProfilePartFull:
+		writeInt32(writer, 90)
+	case *SdkErrorProfileRootUnsafe:
+		writeInt32(writer, 91)
+	case *SdkErrorProfilePassphraseRequired:
+		writeInt32(writer, 92)
+	case *SdkErrorProfilePassphraseWeak:
+		writeInt32(writer, 93)
+	case *SdkErrorProfileFormat:
+		writeInt32(writer, 94)
+	case *SdkErrorProfileVersion:
+		writeInt32(writer, 95)
+	case *SdkErrorProfileKdfTooLarge:
+		writeInt32(writer, 96)
+	case *SdkErrorProfileKdfOutOfMemory:
+		writeInt32(writer, 97)
+	case *SdkErrorProfileSearchTooLarge:
+		writeInt32(writer, 98)
+	case *SdkErrorProfileImportOpen:
+		writeInt32(writer, 99)
+	case *SdkErrorProfileExportTooLarge:
+		writeInt32(writer, 100)
+	case *SdkErrorProfileLocked:
+		writeInt32(writer, 101)
+	case *SdkErrorProfileBusy:
+		writeInt32(writer, 102)
+	case *SdkErrorKeyLocked:
+		writeInt32(writer, 103)
+	case *SdkErrorProfileRollback:
+		writeInt32(writer, 104)
+	case *SdkErrorProfileDamaged:
+		writeInt32(writer, 105)
+	case *SdkErrorUa:
+		writeInt32(writer, 106)
+	case *SdkErrorRpc:
+		writeInt32(writer, 107)
 	default:
 		_ = variantValue
 		panic(fmt.Sprintf("invalid error value `%v` in FfiConverterSdkError.Write", value))
@@ -31331,6 +31922,52 @@ func (_ FfiDestroyerSdkError) Destroy(value *SdkError) {
 	case SdkErrorFileHashMismatch:
 		variantValue.destroy()
 	case SdkErrorCancelled:
+		variantValue.destroy()
+	case SdkErrorProfileInUse:
+		variantValue.destroy()
+	case SdkErrorProfileOpen:
+		variantValue.destroy()
+	case SdkErrorProfileUnknown:
+		variantValue.destroy()
+	case SdkErrorProfileNameTaken:
+		variantValue.destroy()
+	case SdkErrorProfileNameInvalid:
+		variantValue.destroy()
+	case SdkErrorProfileLimit:
+		variantValue.destroy()
+	case SdkErrorProfileHiddenLimit:
+		variantValue.destroy()
+	case SdkErrorProfilePartFull:
+		variantValue.destroy()
+	case SdkErrorProfileRootUnsafe:
+		variantValue.destroy()
+	case SdkErrorProfilePassphraseRequired:
+		variantValue.destroy()
+	case SdkErrorProfilePassphraseWeak:
+		variantValue.destroy()
+	case SdkErrorProfileFormat:
+		variantValue.destroy()
+	case SdkErrorProfileVersion:
+		variantValue.destroy()
+	case SdkErrorProfileKdfTooLarge:
+		variantValue.destroy()
+	case SdkErrorProfileKdfOutOfMemory:
+		variantValue.destroy()
+	case SdkErrorProfileSearchTooLarge:
+		variantValue.destroy()
+	case SdkErrorProfileImportOpen:
+		variantValue.destroy()
+	case SdkErrorProfileExportTooLarge:
+		variantValue.destroy()
+	case SdkErrorProfileLocked:
+		variantValue.destroy()
+	case SdkErrorProfileBusy:
+		variantValue.destroy()
+	case SdkErrorKeyLocked:
+		variantValue.destroy()
+	case SdkErrorProfileRollback:
+		variantValue.destroy()
+	case SdkErrorProfileDamaged:
 		variantValue.destroy()
 	case SdkErrorUa:
 		variantValue.destroy()
@@ -31718,6 +32355,11 @@ var ErrStoreErrorConflict = fmt.Errorf("StoreErrorConflict")
 var ErrStoreErrorIo = fmt.Errorf("StoreErrorIo")
 var ErrStoreErrorUnavailable = fmt.Errorf("StoreErrorUnavailable")
 var ErrStoreErrorUnexpected = fmt.Errorf("StoreErrorUnexpected")
+var ErrStoreErrorVaultFormat = fmt.Errorf("StoreErrorVaultFormat")
+var ErrStoreErrorProfileLocked = fmt.Errorf("StoreErrorProfileLocked")
+var ErrStoreErrorProfilePassphraseRequired = fmt.Errorf("StoreErrorProfilePassphraseRequired")
+var ErrStoreErrorProfileRollback = fmt.Errorf("StoreErrorProfileRollback")
+var ErrStoreErrorProfileDamaged = fmt.Errorf("StoreErrorProfileDamaged")
 
 // Variant structs
 // `put_if`: the stored revision is not the expected one
@@ -31794,6 +32436,100 @@ func (self StoreErrorUnexpected) Is(target error) bool {
 	return target == ErrStoreErrorUnexpected
 }
 
+// user-profiles spec §7.2 "Errors" (each the `SdkError` of its name): a sealed item that does not open, or a plain item in
+// a protected profile
+type StoreErrorVaultFormat struct {
+}
+
+// user-profiles spec §7.2 "Errors" (each the `SdkError` of its name): a sealed item that does not open, or a plain item in
+// a protected profile
+func NewStoreErrorVaultFormat() *StoreError {
+	return &StoreError{err: &StoreErrorVaultFormat{}}
+}
+
+func (e StoreErrorVaultFormat) destroy() {
+}
+
+func (err StoreErrorVaultFormat) Error() string {
+	return fmt.Sprint("VaultFormat")
+}
+
+func (self StoreErrorVaultFormat) Is(target error) bool {
+	return target == ErrStoreErrorVaultFormat
+}
+
+type StoreErrorProfileLocked struct {
+}
+
+func NewStoreErrorProfileLocked() *StoreError {
+	return &StoreError{err: &StoreErrorProfileLocked{}}
+}
+
+func (e StoreErrorProfileLocked) destroy() {
+}
+
+func (err StoreErrorProfileLocked) Error() string {
+	return fmt.Sprint("ProfileLocked")
+}
+
+func (self StoreErrorProfileLocked) Is(target error) bool {
+	return target == ErrStoreErrorProfileLocked
+}
+
+type StoreErrorProfilePassphraseRequired struct {
+}
+
+func NewStoreErrorProfilePassphraseRequired() *StoreError {
+	return &StoreError{err: &StoreErrorProfilePassphraseRequired{}}
+}
+
+func (e StoreErrorProfilePassphraseRequired) destroy() {
+}
+
+func (err StoreErrorProfilePassphraseRequired) Error() string {
+	return fmt.Sprint("ProfilePassphraseRequired")
+}
+
+func (self StoreErrorProfilePassphraseRequired) Is(target error) bool {
+	return target == ErrStoreErrorProfilePassphraseRequired
+}
+
+type StoreErrorProfileRollback struct {
+}
+
+func NewStoreErrorProfileRollback() *StoreError {
+	return &StoreError{err: &StoreErrorProfileRollback{}}
+}
+
+func (e StoreErrorProfileRollback) destroy() {
+}
+
+func (err StoreErrorProfileRollback) Error() string {
+	return fmt.Sprint("ProfileRollback")
+}
+
+func (self StoreErrorProfileRollback) Is(target error) bool {
+	return target == ErrStoreErrorProfileRollback
+}
+
+type StoreErrorProfileDamaged struct {
+}
+
+func NewStoreErrorProfileDamaged() *StoreError {
+	return &StoreError{err: &StoreErrorProfileDamaged{}}
+}
+
+func (e StoreErrorProfileDamaged) destroy() {
+}
+
+func (err StoreErrorProfileDamaged) Error() string {
+	return fmt.Sprint("ProfileDamaged")
+}
+
+func (self StoreErrorProfileDamaged) Is(target error) bool {
+	return target == ErrStoreErrorProfileDamaged
+}
+
 type FfiConverterStoreError struct{}
 
 var FfiConverterStoreErrorINSTANCE = FfiConverterStoreError{}
@@ -31822,6 +32558,16 @@ func (c FfiConverterStoreError) Read(reader io.Reader) *StoreError {
 		return &StoreError{&StoreErrorUnavailable{}}
 	case 4:
 		return &StoreError{&StoreErrorUnexpected{}}
+	case 5:
+		return &StoreError{&StoreErrorVaultFormat{}}
+	case 6:
+		return &StoreError{&StoreErrorProfileLocked{}}
+	case 7:
+		return &StoreError{&StoreErrorProfilePassphraseRequired{}}
+	case 8:
+		return &StoreError{&StoreErrorProfileRollback{}}
+	case 9:
+		return &StoreError{&StoreErrorProfileDamaged{}}
 	default:
 		panic(fmt.Sprintf("Unknown error code %d in FfiConverterStoreError.Read()", errorID))
 	}
@@ -31837,6 +32583,16 @@ func (c FfiConverterStoreError) Write(writer io.Writer, value *StoreError) {
 		writeInt32(writer, 3)
 	case *StoreErrorUnexpected:
 		writeInt32(writer, 4)
+	case *StoreErrorVaultFormat:
+		writeInt32(writer, 5)
+	case *StoreErrorProfileLocked:
+		writeInt32(writer, 6)
+	case *StoreErrorProfilePassphraseRequired:
+		writeInt32(writer, 7)
+	case *StoreErrorProfileRollback:
+		writeInt32(writer, 8)
+	case *StoreErrorProfileDamaged:
+		writeInt32(writer, 9)
 	default:
 		_ = variantValue
 		panic(fmt.Sprintf("invalid error value `%v` in FfiConverterStoreError.Write", value))
@@ -31854,6 +32610,16 @@ func (_ FfiDestroyerStoreError) Destroy(value *StoreError) {
 	case StoreErrorUnavailable:
 		variantValue.destroy()
 	case StoreErrorUnexpected:
+		variantValue.destroy()
+	case StoreErrorVaultFormat:
+		variantValue.destroy()
+	case StoreErrorProfileLocked:
+		variantValue.destroy()
+	case StoreErrorProfilePassphraseRequired:
+		variantValue.destroy()
+	case StoreErrorProfileRollback:
+		variantValue.destroy()
+	case StoreErrorProfileDamaged:
 		variantValue.destroy()
 	default:
 		_ = variantValue

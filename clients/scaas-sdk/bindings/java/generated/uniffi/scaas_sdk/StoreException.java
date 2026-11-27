@@ -57,6 +57,65 @@ public class StoreException extends java.lang.Exception {
       
       
     }
+    
+    /**
+     * user-profiles spec §7.2 "Errors" (each the `SdkError` of its name): a sealed item that does not open, or a plain item in
+     * a protected profile
+     */
+    public static class VaultFormat extends StoreException {
+      public VaultFormat() {
+        super(new StringBuilder()
+        .toString());
+        }
+
+      
+      
+      
+    }
+    
+    public static class ProfileLocked extends StoreException {
+      public ProfileLocked() {
+        super(new StringBuilder()
+        .toString());
+        }
+
+      
+      
+      
+    }
+    
+    public static class ProfilePassphraseRequired extends StoreException {
+      public ProfilePassphraseRequired() {
+        super(new StringBuilder()
+        .toString());
+        }
+
+      
+      
+      
+    }
+    
+    public static class ProfileRollback extends StoreException {
+      public ProfileRollback() {
+        super(new StringBuilder()
+        .toString());
+        }
+
+      
+      
+      
+    }
+    
+    public static class ProfileDamaged extends StoreException {
+      public ProfileDamaged() {
+        super(new StringBuilder()
+        .toString());
+        }
+
+      
+      
+      
+    }
      
 }
 

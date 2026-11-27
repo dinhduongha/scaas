@@ -18189,6 +18189,9 @@ const _: fn() = || {
         scaas_sdk::events::Event::StateChanged { rev } => {
             let _: u64 = rev;
         }
+        scaas_sdk::events::Event::ProfileIndexMismatch => {}
+        scaas_sdk::events::Event::ProfileRollback => {}
+        scaas_sdk::events::Event::ProfileDamaged => {}
     }
     {
         let Execute = None::<scaas_sdk::wallet::Execute>.unwrap();
@@ -21775,6 +21778,15 @@ impl SseDecode for scaas_sdk::events::Event {
                 let mut var_rev = <u64>::sse_decode(deserializer);
                 return scaas_sdk::events::Event::StateChanged { rev: var_rev };
             }
+            11 => {
+                return scaas_sdk::events::Event::ProfileIndexMismatch;
+            }
+            12 => {
+                return scaas_sdk::events::Event::ProfileRollback;
+            }
+            13 => {
+                return scaas_sdk::events::Event::ProfileDamaged;
+            }
             _ => {
                 unimplemented!("");
             }
@@ -24670,6 +24682,11 @@ impl SseDecode for scaas_sdk::vault::store::StoreError {
             1 => scaas_sdk::vault::store::StoreError::Io,
             2 => scaas_sdk::vault::store::StoreError::Unavailable,
             3 => scaas_sdk::vault::store::StoreError::Unexpected,
+            4 => scaas_sdk::vault::store::StoreError::VaultFormat,
+            5 => scaas_sdk::vault::store::StoreError::ProfileLocked,
+            6 => scaas_sdk::vault::store::StoreError::ProfilePassphraseRequired,
+            7 => scaas_sdk::vault::store::StoreError::ProfileRollback,
+            8 => scaas_sdk::vault::store::StoreError::ProfileDamaged,
             _ => unreachable!("Invalid variant for StoreError: {}", inner),
         };
     }
@@ -29724,6 +29741,9 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::events::Event> {
             scaas_sdk::events::Event::StateChanged { rev } => {
                 [10.into_dart(), rev.into_into_dart().into_dart()].into_dart()
             }
+            scaas_sdk::events::Event::ProfileIndexMismatch => [11.into_dart()].into_dart(),
+            scaas_sdk::events::Event::ProfileRollback => [12.into_dart()].into_dart(),
+            scaas_sdk::events::Event::ProfileDamaged => [13.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -32473,6 +32493,11 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::vault::store::Store
             scaas_sdk::vault::store::StoreError::Io => 1.into_dart(),
             scaas_sdk::vault::store::StoreError::Unavailable => 2.into_dart(),
             scaas_sdk::vault::store::StoreError::Unexpected => 3.into_dart(),
+            scaas_sdk::vault::store::StoreError::VaultFormat => 4.into_dart(),
+            scaas_sdk::vault::store::StoreError::ProfileLocked => 5.into_dart(),
+            scaas_sdk::vault::store::StoreError::ProfilePassphraseRequired => 6.into_dart(),
+            scaas_sdk::vault::store::StoreError::ProfileRollback => 7.into_dart(),
+            scaas_sdk::vault::store::StoreError::ProfileDamaged => 8.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -36082,6 +36107,15 @@ impl SseEncode for scaas_sdk::events::Event {
                 <i32>::sse_encode(10, serializer);
                 <u64>::sse_encode(rev, serializer);
             }
+            scaas_sdk::events::Event::ProfileIndexMismatch => {
+                <i32>::sse_encode(11, serializer);
+            }
+            scaas_sdk::events::Event::ProfileRollback => {
+                <i32>::sse_encode(12, serializer);
+            }
+            scaas_sdk::events::Event::ProfileDamaged => {
+                <i32>::sse_encode(13, serializer);
+            }
             _ => {
                 unimplemented!("");
             }
@@ -38209,6 +38243,11 @@ impl SseEncode for scaas_sdk::vault::store::StoreError {
                 scaas_sdk::vault::store::StoreError::Io => 1,
                 scaas_sdk::vault::store::StoreError::Unavailable => 2,
                 scaas_sdk::vault::store::StoreError::Unexpected => 3,
+                scaas_sdk::vault::store::StoreError::VaultFormat => 4,
+                scaas_sdk::vault::store::StoreError::ProfileLocked => 5,
+                scaas_sdk::vault::store::StoreError::ProfilePassphraseRequired => 6,
+                scaas_sdk::vault::store::StoreError::ProfileRollback => 7,
+                scaas_sdk::vault::store::StoreError::ProfileDamaged => 8,
                 _ => {
                     unimplemented!("");
                 }

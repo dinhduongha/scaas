@@ -16577,6 +16577,18 @@ Event FfiConverterEvent::read(RustStream &stream) {
             .rev = FfiConverterUInt64::read(stream),
         };
         
+    case 12:
+        return Event::kProfileIndexMismatch {
+        };
+        
+    case 13:
+        return Event::kProfileRollback {
+        };
+        
+    case 14:
+        return Event::kProfileDamaged {
+        };
+        
     default:
         throw std::runtime_error("No matching Event variant");
     }
@@ -16625,6 +16637,12 @@ void FfiConverterEvent::write(RustStream &stream, const Event &val) {
         }
         else if constexpr (std::is_same_v<T, Event::kStateChanged>) {
             FfiConverterUInt64::write(stream, arg.rev);
+        }
+        else if constexpr (std::is_same_v<T, Event::kProfileIndexMismatch>) {
+        }
+        else if constexpr (std::is_same_v<T, Event::kProfileRollback>) {
+        }
+        else if constexpr (std::is_same_v<T, Event::kProfileDamaged>) {
         }
         else {
             static_assert(always_false_v<T>, "non-exhaustive Event visitor");
@@ -16694,6 +16712,18 @@ uint64_t FfiConverterEvent::allocation_size(const Event &val) {
         else if constexpr (std::is_same_v<T, Event::kStateChanged>) {
             uint64_t size = 0;
             size += FfiConverterUInt64::allocation_size(arg.rev);
+            return size;
+        }
+        else if constexpr (std::is_same_v<T, Event::kProfileIndexMismatch>) {
+            uint64_t size = 0;
+            return size;
+        }
+        else if constexpr (std::is_same_v<T, Event::kProfileRollback>) {
+            uint64_t size = 0;
+            return size;
+        }
+        else if constexpr (std::is_same_v<T, Event::kProfileDamaged>) {
+            uint64_t size = 0;
             return size;
         }
         else {
@@ -18501,9 +18531,78 @@ std::shared_ptr<SdkError> FfiConverterSdkError::read(RustStream &stream) {
         return std::make_shared<sdk_error::Cancelled>(FfiConverterString::read(stream));
     
     case 83:
-        return std::make_shared<sdk_error::Ua>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::ProfileInUse>(FfiConverterString::read(stream));
     
     case 84:
+        return std::make_shared<sdk_error::ProfileOpen>(FfiConverterString::read(stream));
+    
+    case 85:
+        return std::make_shared<sdk_error::ProfileUnknown>(FfiConverterString::read(stream));
+    
+    case 86:
+        return std::make_shared<sdk_error::ProfileNameTaken>(FfiConverterString::read(stream));
+    
+    case 87:
+        return std::make_shared<sdk_error::ProfileNameInvalid>(FfiConverterString::read(stream));
+    
+    case 88:
+        return std::make_shared<sdk_error::ProfileLimit>(FfiConverterString::read(stream));
+    
+    case 89:
+        return std::make_shared<sdk_error::ProfileHiddenLimit>(FfiConverterString::read(stream));
+    
+    case 90:
+        return std::make_shared<sdk_error::ProfilePartFull>(FfiConverterString::read(stream));
+    
+    case 91:
+        return std::make_shared<sdk_error::ProfileRootUnsafe>(FfiConverterString::read(stream));
+    
+    case 92:
+        return std::make_shared<sdk_error::ProfilePassphraseRequired>(FfiConverterString::read(stream));
+    
+    case 93:
+        return std::make_shared<sdk_error::ProfilePassphraseWeak>(FfiConverterString::read(stream));
+    
+    case 94:
+        return std::make_shared<sdk_error::ProfileFormat>(FfiConverterString::read(stream));
+    
+    case 95:
+        return std::make_shared<sdk_error::ProfileVersion>(FfiConverterString::read(stream));
+    
+    case 96:
+        return std::make_shared<sdk_error::ProfileKdfTooLarge>(FfiConverterString::read(stream));
+    
+    case 97:
+        return std::make_shared<sdk_error::ProfileKdfOutOfMemory>(FfiConverterString::read(stream));
+    
+    case 98:
+        return std::make_shared<sdk_error::ProfileSearchTooLarge>(FfiConverterString::read(stream));
+    
+    case 99:
+        return std::make_shared<sdk_error::ProfileImportOpen>(FfiConverterString::read(stream));
+    
+    case 100:
+        return std::make_shared<sdk_error::ProfileExportTooLarge>(FfiConverterString::read(stream));
+    
+    case 101:
+        return std::make_shared<sdk_error::ProfileLocked>(FfiConverterString::read(stream));
+    
+    case 102:
+        return std::make_shared<sdk_error::ProfileBusy>(FfiConverterString::read(stream));
+    
+    case 103:
+        return std::make_shared<sdk_error::KeyLocked>(FfiConverterString::read(stream));
+    
+    case 104:
+        return std::make_shared<sdk_error::ProfileRollback>(FfiConverterString::read(stream));
+    
+    case 105:
+        return std::make_shared<sdk_error::ProfileDamaged>(FfiConverterString::read(stream));
+    
+    case 106:
+        return std::make_shared<sdk_error::Ua>(FfiConverterString::read(stream));
+    
+    case 107:
         return std::make_shared<sdk_error::Rpc>(FfiConverterString::read(stream));
     
     default:
@@ -18920,6 +19019,31 @@ std::shared_ptr<StoreError> FfiConverterStoreError::read(RustStream &stream) {
         store_error::Unexpected var;
         return std::make_shared<store_error::Unexpected>(var);
     }
+    case 5:
+    {
+        store_error::VaultFormat var;
+        return std::make_shared<store_error::VaultFormat>(var);
+    }
+    case 6:
+    {
+        store_error::ProfileLocked var;
+        return std::make_shared<store_error::ProfileLocked>(var);
+    }
+    case 7:
+    {
+        store_error::ProfilePassphraseRequired var;
+        return std::make_shared<store_error::ProfilePassphraseRequired>(var);
+    }
+    case 8:
+    {
+        store_error::ProfileRollback var;
+        return std::make_shared<store_error::ProfileRollback>(var);
+    }
+    case 9:
+    {
+        store_error::ProfileDamaged var;
+        return std::make_shared<store_error::ProfileDamaged>(var);
+    }
     default:
         throw std::runtime_error("Unexpected error variant");
     }
@@ -18948,6 +19072,31 @@ void FfiConverterStoreError::write(RustStream &stream, const StoreError &val) {
         auto var = static_cast<const store_error::Unexpected&>(val);
         break;
     }
+    case 5:
+    {
+        auto var = static_cast<const store_error::VaultFormat&>(val);
+        break;
+    }
+    case 6:
+    {
+        auto var = static_cast<const store_error::ProfileLocked&>(val);
+        break;
+    }
+    case 7:
+    {
+        auto var = static_cast<const store_error::ProfilePassphraseRequired&>(val);
+        break;
+    }
+    case 8:
+    {
+        auto var = static_cast<const store_error::ProfileRollback&>(val);
+        break;
+    }
+    case 9:
+    {
+        auto var = static_cast<const store_error::ProfileDamaged&>(val);
+        break;
+    }
     }
 }
 
@@ -18971,6 +19120,31 @@ uint64_t FfiConverterStoreError::allocation_size(const StoreError &val) {
     case 4:
     {
         auto var = static_cast<const store_error::Unexpected&>(val);
+        return static_cast<uint64_t>(sizeof(int32_t));
+    }
+    case 5:
+    {
+        auto var = static_cast<const store_error::VaultFormat&>(val);
+        return static_cast<uint64_t>(sizeof(int32_t));
+    }
+    case 6:
+    {
+        auto var = static_cast<const store_error::ProfileLocked&>(val);
+        return static_cast<uint64_t>(sizeof(int32_t));
+    }
+    case 7:
+    {
+        auto var = static_cast<const store_error::ProfilePassphraseRequired&>(val);
+        return static_cast<uint64_t>(sizeof(int32_t));
+    }
+    case 8:
+    {
+        auto var = static_cast<const store_error::ProfileRollback&>(val);
+        return static_cast<uint64_t>(sizeof(int32_t));
+    }
+    case 9:
+    {
+        auto var = static_cast<const store_error::ProfileDamaged&>(val);
         return static_cast<uint64_t>(sizeof(int32_t));
     }
     default:

@@ -26087,6 +26087,14 @@ public enum Event: Equatable, Hashable {
      */
     case stateChanged(rev: UInt64
     )
+    /**
+     * user-profiles spec §6, §7.2, §11: an index row or name hint that differs from the profile's envelope; an item, a
+     * manifest, an envelope or a generation below its manifest or anchor; an item its manifest lists but whose file is
+     * missing. No field: no id, name or path.
+     */
+    case profileIndexMismatch
+    case profileRollback
+    case profileDamaged
 
 
 
@@ -26139,6 +26147,12 @@ public struct FfiConverterTypeEvent: FfiConverterRustBuffer {
         
         case 11: return .stateChanged(rev: try FfiConverterUInt64.read(from: &buf)
         )
+        
+        case 12: return .profileIndexMismatch
+        
+        case 13: return .profileRollback
+        
+        case 14: return .profileDamaged
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -26206,6 +26220,18 @@ public struct FfiConverterTypeEvent: FfiConverterRustBuffer {
             writeInt(&buf, Int32(11))
             FfiConverterUInt64.write(rev, into: &buf)
             
+        
+        case .profileIndexMismatch:
+            writeInt(&buf, Int32(12))
+        
+        
+        case .profileRollback:
+            writeInt(&buf, Int32(13))
+        
+        
+        case .profileDamaged:
+            writeInt(&buf, Int32(14))
+        
         }
     }
 }
@@ -28111,6 +28137,61 @@ public enum SdkError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
      */
     case Cancelled(message: String)
     
+    case ProfileInUse(message: String)
+    
+    case ProfileOpen(message: String)
+    
+    /**
+     * a `--profile` name or id with no visible profile
+     */
+    case ProfileUnknown(message: String)
+    
+    case ProfileNameTaken(message: String)
+    
+    case ProfileNameInvalid(message: String)
+    
+    case ProfileLimit(message: String)
+    
+    case ProfileHiddenLimit(message: String)
+    
+    case ProfilePartFull(message: String)
+    
+    case ProfileRootUnsafe(message: String)
+    
+    case ProfilePassphraseRequired(message: String)
+    
+    case ProfilePassphraseWeak(message: String)
+    
+    case ProfileFormat(message: String)
+    
+    case ProfileVersion(message: String)
+    
+    case ProfileKdfTooLarge(message: String)
+    
+    case ProfileKdfOutOfMemory(message: String)
+    
+    case ProfileSearchTooLarge(message: String)
+    
+    case ProfileImportOpen(message: String)
+    
+    case ProfileExportTooLarge(message: String)
+    
+    case ProfileLocked(message: String)
+    
+    /**
+     * a writer that waited 120 s on a re-seal
+     */
+    case ProfileBusy(message: String)
+    
+    case KeyLocked(message: String)
+    
+    /**
+     * user-profiles spec §7.2 "Errors": the store codes `StoreError::ProfileRollback` and `ProfileDamaged`, by name
+     */
+    case ProfileRollback(message: String)
+    
+    case ProfileDamaged(message: String)
+    
     /**
      * A `scaas-ua` wallet error, by its own code.
      */
@@ -28478,11 +28559,103 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 83: return .Ua(
+        case 83: return .ProfileInUse(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 84: return .Rpc(
+        case 84: return .ProfileOpen(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 85: return .ProfileUnknown(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 86: return .ProfileNameTaken(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 87: return .ProfileNameInvalid(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 88: return .ProfileLimit(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 89: return .ProfileHiddenLimit(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 90: return .ProfilePartFull(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 91: return .ProfileRootUnsafe(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 92: return .ProfilePassphraseRequired(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 93: return .ProfilePassphraseWeak(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 94: return .ProfileFormat(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 95: return .ProfileVersion(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 96: return .ProfileKdfTooLarge(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 97: return .ProfileKdfOutOfMemory(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 98: return .ProfileSearchTooLarge(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 99: return .ProfileImportOpen(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 100: return .ProfileExportTooLarge(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 101: return .ProfileLocked(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 102: return .ProfileBusy(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 103: return .KeyLocked(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 104: return .ProfileRollback(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 105: return .ProfileDamaged(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 106: return .Ua(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 107: return .Rpc(
             message: try FfiConverterString.read(from: &buf)
         )
         
@@ -28661,10 +28834,56 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(81))
         case .Cancelled(_ /* message is ignored*/):
             writeInt(&buf, Int32(82))
-        case .Ua(_ /* message is ignored*/):
+        case .ProfileInUse(_ /* message is ignored*/):
             writeInt(&buf, Int32(83))
-        case .Rpc(_ /* message is ignored*/):
+        case .ProfileOpen(_ /* message is ignored*/):
             writeInt(&buf, Int32(84))
+        case .ProfileUnknown(_ /* message is ignored*/):
+            writeInt(&buf, Int32(85))
+        case .ProfileNameTaken(_ /* message is ignored*/):
+            writeInt(&buf, Int32(86))
+        case .ProfileNameInvalid(_ /* message is ignored*/):
+            writeInt(&buf, Int32(87))
+        case .ProfileLimit(_ /* message is ignored*/):
+            writeInt(&buf, Int32(88))
+        case .ProfileHiddenLimit(_ /* message is ignored*/):
+            writeInt(&buf, Int32(89))
+        case .ProfilePartFull(_ /* message is ignored*/):
+            writeInt(&buf, Int32(90))
+        case .ProfileRootUnsafe(_ /* message is ignored*/):
+            writeInt(&buf, Int32(91))
+        case .ProfilePassphraseRequired(_ /* message is ignored*/):
+            writeInt(&buf, Int32(92))
+        case .ProfilePassphraseWeak(_ /* message is ignored*/):
+            writeInt(&buf, Int32(93))
+        case .ProfileFormat(_ /* message is ignored*/):
+            writeInt(&buf, Int32(94))
+        case .ProfileVersion(_ /* message is ignored*/):
+            writeInt(&buf, Int32(95))
+        case .ProfileKdfTooLarge(_ /* message is ignored*/):
+            writeInt(&buf, Int32(96))
+        case .ProfileKdfOutOfMemory(_ /* message is ignored*/):
+            writeInt(&buf, Int32(97))
+        case .ProfileSearchTooLarge(_ /* message is ignored*/):
+            writeInt(&buf, Int32(98))
+        case .ProfileImportOpen(_ /* message is ignored*/):
+            writeInt(&buf, Int32(99))
+        case .ProfileExportTooLarge(_ /* message is ignored*/):
+            writeInt(&buf, Int32(100))
+        case .ProfileLocked(_ /* message is ignored*/):
+            writeInt(&buf, Int32(101))
+        case .ProfileBusy(_ /* message is ignored*/):
+            writeInt(&buf, Int32(102))
+        case .KeyLocked(_ /* message is ignored*/):
+            writeInt(&buf, Int32(103))
+        case .ProfileRollback(_ /* message is ignored*/):
+            writeInt(&buf, Int32(104))
+        case .ProfileDamaged(_ /* message is ignored*/):
+            writeInt(&buf, Int32(105))
+        case .Ua(_ /* message is ignored*/):
+            writeInt(&buf, Int32(106))
+        case .Rpc(_ /* message is ignored*/):
+            writeInt(&buf, Int32(107))
 
         
         }
@@ -29034,6 +29253,15 @@ public enum StoreError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     case Io
     case Unavailable
     case Unexpected
+    /**
+     * user-profiles spec §7.2 "Errors" (each the `SdkError` of its name): a sealed item that does not open, or a plain item in
+     * a protected profile
+     */
+    case VaultFormat
+    case ProfileLocked
+    case ProfilePassphraseRequired
+    case ProfileRollback
+    case ProfileDamaged
 
     
 
@@ -29067,6 +29295,11 @@ public struct FfiConverterTypeStoreError: FfiConverterRustBuffer {
         case 2: return .Io
         case 3: return .Unavailable
         case 4: return .Unexpected
+        case 5: return .VaultFormat
+        case 6: return .ProfileLocked
+        case 7: return .ProfilePassphraseRequired
+        case 8: return .ProfileRollback
+        case 9: return .ProfileDamaged
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -29093,6 +29326,26 @@ public struct FfiConverterTypeStoreError: FfiConverterRustBuffer {
         
         case .Unexpected:
             writeInt(&buf, Int32(4))
+        
+        
+        case .VaultFormat:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .ProfileLocked:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .ProfilePassphraseRequired:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .ProfileRollback:
+            writeInt(&buf, Int32(8))
+        
+        
+        case .ProfileDamaged:
+            writeInt(&buf, Int32(9))
         
         }
     }

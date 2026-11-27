@@ -12899,6 +12899,107 @@ class SdkError:  # type: ignore
         def __repr__(self):
             return "SdkError.Cancelled({})".format(repr(str(self)))
     _UniffiTempSdkError.Cancelled = Cancelled # type: ignore
+    class ProfileInUse(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileInUse({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileInUse = ProfileInUse # type: ignore
+    class ProfileOpen(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileOpen({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileOpen = ProfileOpen # type: ignore
+    class ProfileUnknown(_UniffiTempSdkError):
+        """
+        a `--profile` name or id with no visible profile
+"""
+        def __repr__(self):
+            return "SdkError.ProfileUnknown({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileUnknown = ProfileUnknown # type: ignore
+    class ProfileNameTaken(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileNameTaken({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileNameTaken = ProfileNameTaken # type: ignore
+    class ProfileNameInvalid(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileNameInvalid({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileNameInvalid = ProfileNameInvalid # type: ignore
+    class ProfileLimit(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileLimit({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileLimit = ProfileLimit # type: ignore
+    class ProfileHiddenLimit(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileHiddenLimit({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileHiddenLimit = ProfileHiddenLimit # type: ignore
+    class ProfilePartFull(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfilePartFull({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfilePartFull = ProfilePartFull # type: ignore
+    class ProfileRootUnsafe(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileRootUnsafe({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileRootUnsafe = ProfileRootUnsafe # type: ignore
+    class ProfilePassphraseRequired(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfilePassphraseRequired({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfilePassphraseRequired = ProfilePassphraseRequired # type: ignore
+    class ProfilePassphraseWeak(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfilePassphraseWeak({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfilePassphraseWeak = ProfilePassphraseWeak # type: ignore
+    class ProfileFormat(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileFormat({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileFormat = ProfileFormat # type: ignore
+    class ProfileVersion(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileVersion({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileVersion = ProfileVersion # type: ignore
+    class ProfileKdfTooLarge(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileKdfTooLarge({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileKdfTooLarge = ProfileKdfTooLarge # type: ignore
+    class ProfileKdfOutOfMemory(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileKdfOutOfMemory({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileKdfOutOfMemory = ProfileKdfOutOfMemory # type: ignore
+    class ProfileSearchTooLarge(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileSearchTooLarge({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileSearchTooLarge = ProfileSearchTooLarge # type: ignore
+    class ProfileImportOpen(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileImportOpen({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileImportOpen = ProfileImportOpen # type: ignore
+    class ProfileExportTooLarge(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileExportTooLarge({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileExportTooLarge = ProfileExportTooLarge # type: ignore
+    class ProfileLocked(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileLocked({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileLocked = ProfileLocked # type: ignore
+    class ProfileBusy(_UniffiTempSdkError):
+        """
+        a writer that waited 120 s on a re-seal
+"""
+        def __repr__(self):
+            return "SdkError.ProfileBusy({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileBusy = ProfileBusy # type: ignore
+    class KeyLocked(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.KeyLocked({})".format(repr(str(self)))
+    _UniffiTempSdkError.KeyLocked = KeyLocked # type: ignore
+    class ProfileRollback(_UniffiTempSdkError):
+        """
+        user-profiles spec §7.2 "Errors": the store codes `StoreError::ProfileRollback` and `ProfileDamaged`, by name
+"""
+        def __repr__(self):
+            return "SdkError.ProfileRollback({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileRollback = ProfileRollback # type: ignore
+    class ProfileDamaged(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.ProfileDamaged({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileDamaged = ProfileDamaged # type: ignore
     class Ua(_UniffiTempSdkError):
         """
         A `scaas-ua` wallet error, by its own code.
@@ -13251,10 +13352,102 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 83:
-            return SdkError.Ua(
+            return SdkError.ProfileInUse(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 84:
+            return SdkError.ProfileOpen(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 85:
+            return SdkError.ProfileUnknown(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 86:
+            return SdkError.ProfileNameTaken(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 87:
+            return SdkError.ProfileNameInvalid(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 88:
+            return SdkError.ProfileLimit(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 89:
+            return SdkError.ProfileHiddenLimit(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 90:
+            return SdkError.ProfilePartFull(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 91:
+            return SdkError.ProfileRootUnsafe(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 92:
+            return SdkError.ProfilePassphraseRequired(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 93:
+            return SdkError.ProfilePassphraseWeak(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 94:
+            return SdkError.ProfileFormat(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 95:
+            return SdkError.ProfileVersion(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 96:
+            return SdkError.ProfileKdfTooLarge(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 97:
+            return SdkError.ProfileKdfOutOfMemory(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 98:
+            return SdkError.ProfileSearchTooLarge(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 99:
+            return SdkError.ProfileImportOpen(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 100:
+            return SdkError.ProfileExportTooLarge(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 101:
+            return SdkError.ProfileLocked(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 102:
+            return SdkError.ProfileBusy(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 103:
+            return SdkError.KeyLocked(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 104:
+            return SdkError.ProfileRollback(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 105:
+            return SdkError.ProfileDamaged(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 106:
+            return SdkError.Ua(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 107:
             return SdkError.Rpc(
                 _UniffiFfiConverterString.read(buf),
             )
@@ -13425,6 +13618,52 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
         if isinstance(value, SdkError.FileHashMismatch):
             return
         if isinstance(value, SdkError.Cancelled):
+            return
+        if isinstance(value, SdkError.ProfileInUse):
+            return
+        if isinstance(value, SdkError.ProfileOpen):
+            return
+        if isinstance(value, SdkError.ProfileUnknown):
+            return
+        if isinstance(value, SdkError.ProfileNameTaken):
+            return
+        if isinstance(value, SdkError.ProfileNameInvalid):
+            return
+        if isinstance(value, SdkError.ProfileLimit):
+            return
+        if isinstance(value, SdkError.ProfileHiddenLimit):
+            return
+        if isinstance(value, SdkError.ProfilePartFull):
+            return
+        if isinstance(value, SdkError.ProfileRootUnsafe):
+            return
+        if isinstance(value, SdkError.ProfilePassphraseRequired):
+            return
+        if isinstance(value, SdkError.ProfilePassphraseWeak):
+            return
+        if isinstance(value, SdkError.ProfileFormat):
+            return
+        if isinstance(value, SdkError.ProfileVersion):
+            return
+        if isinstance(value, SdkError.ProfileKdfTooLarge):
+            return
+        if isinstance(value, SdkError.ProfileKdfOutOfMemory):
+            return
+        if isinstance(value, SdkError.ProfileSearchTooLarge):
+            return
+        if isinstance(value, SdkError.ProfileImportOpen):
+            return
+        if isinstance(value, SdkError.ProfileExportTooLarge):
+            return
+        if isinstance(value, SdkError.ProfileLocked):
+            return
+        if isinstance(value, SdkError.ProfileBusy):
+            return
+        if isinstance(value, SdkError.KeyLocked):
+            return
+        if isinstance(value, SdkError.ProfileRollback):
+            return
+        if isinstance(value, SdkError.ProfileDamaged):
             return
         if isinstance(value, SdkError.Ua):
             return
@@ -13597,10 +13836,56 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
             buf.write_i32(81)
         if isinstance(value, SdkError.Cancelled):
             buf.write_i32(82)
-        if isinstance(value, SdkError.Ua):
+        if isinstance(value, SdkError.ProfileInUse):
             buf.write_i32(83)
-        if isinstance(value, SdkError.Rpc):
+        if isinstance(value, SdkError.ProfileOpen):
             buf.write_i32(84)
+        if isinstance(value, SdkError.ProfileUnknown):
+            buf.write_i32(85)
+        if isinstance(value, SdkError.ProfileNameTaken):
+            buf.write_i32(86)
+        if isinstance(value, SdkError.ProfileNameInvalid):
+            buf.write_i32(87)
+        if isinstance(value, SdkError.ProfileLimit):
+            buf.write_i32(88)
+        if isinstance(value, SdkError.ProfileHiddenLimit):
+            buf.write_i32(89)
+        if isinstance(value, SdkError.ProfilePartFull):
+            buf.write_i32(90)
+        if isinstance(value, SdkError.ProfileRootUnsafe):
+            buf.write_i32(91)
+        if isinstance(value, SdkError.ProfilePassphraseRequired):
+            buf.write_i32(92)
+        if isinstance(value, SdkError.ProfilePassphraseWeak):
+            buf.write_i32(93)
+        if isinstance(value, SdkError.ProfileFormat):
+            buf.write_i32(94)
+        if isinstance(value, SdkError.ProfileVersion):
+            buf.write_i32(95)
+        if isinstance(value, SdkError.ProfileKdfTooLarge):
+            buf.write_i32(96)
+        if isinstance(value, SdkError.ProfileKdfOutOfMemory):
+            buf.write_i32(97)
+        if isinstance(value, SdkError.ProfileSearchTooLarge):
+            buf.write_i32(98)
+        if isinstance(value, SdkError.ProfileImportOpen):
+            buf.write_i32(99)
+        if isinstance(value, SdkError.ProfileExportTooLarge):
+            buf.write_i32(100)
+        if isinstance(value, SdkError.ProfileLocked):
+            buf.write_i32(101)
+        if isinstance(value, SdkError.ProfileBusy):
+            buf.write_i32(102)
+        if isinstance(value, SdkError.KeyLocked):
+            buf.write_i32(103)
+        if isinstance(value, SdkError.ProfileRollback):
+            buf.write_i32(104)
+        if isinstance(value, SdkError.ProfileDamaged):
+            buf.write_i32(105)
+        if isinstance(value, SdkError.Ua):
+            buf.write_i32(106)
+        if isinstance(value, SdkError.Rpc):
+            buf.write_i32(107)
 
 
 class SeedBackupProtocol(typing.Protocol):
@@ -25271,6 +25556,68 @@ class Event:
                 return False
             return True
 
+    @dataclass
+    class PROFILE_INDEX_MISMATCH:
+        """
+        user-profiles spec §6, §7.2, §11: an index row or name hint that differs from the profile's envelope; an item, a
+        manifest, an envelope or a generation below its manifest or anchor; an item its manifest lists but whose file is
+        missing. No field: no id, name or path.
+"""
+        
+        def __init__(self, ):
+            pass
+
+    
+            
+            
+    
+        def __str__(self):
+            return "Event.PROFILE_INDEX_MISMATCH()".format()
+        def __eq__(self, other):
+            if not isinstance(other, Event):
+                return NotImplemented
+            if not other.is_PROFILE_INDEX_MISMATCH():
+                return False
+            return True
+
+    @dataclass
+    class PROFILE_ROLLBACK:
+        
+        def __init__(self, ):
+            pass
+
+    
+            
+            
+    
+        def __str__(self):
+            return "Event.PROFILE_ROLLBACK()".format()
+        def __eq__(self, other):
+            if not isinstance(other, Event):
+                return NotImplemented
+            if not other.is_PROFILE_ROLLBACK():
+                return False
+            return True
+
+    @dataclass
+    class PROFILE_DAMAGED:
+        
+        def __init__(self, ):
+            pass
+
+    
+            
+            
+    
+        def __str__(self):
+            return "Event.PROFILE_DAMAGED()".format()
+        def __eq__(self, other):
+            if not isinstance(other, Event):
+                return NotImplemented
+            if not other.is_PROFILE_DAMAGED():
+                return False
+            return True
+
     
 
     # For each variant, we have `is_NAME` and `is_name` methods for easily checking
@@ -25319,6 +25666,18 @@ class Event:
         return isinstance(self, Event.STATE_CHANGED)
     def is_state_changed(self) -> bool:
         return isinstance(self, Event.STATE_CHANGED)
+    def is_PROFILE_INDEX_MISMATCH(self) -> bool:
+        return isinstance(self, Event.PROFILE_INDEX_MISMATCH)
+    def is_profile_index_mismatch(self) -> bool:
+        return isinstance(self, Event.PROFILE_INDEX_MISMATCH)
+    def is_PROFILE_ROLLBACK(self) -> bool:
+        return isinstance(self, Event.PROFILE_ROLLBACK)
+    def is_profile_rollback(self) -> bool:
+        return isinstance(self, Event.PROFILE_ROLLBACK)
+    def is_PROFILE_DAMAGED(self) -> bool:
+        return isinstance(self, Event.PROFILE_DAMAGED)
+    def is_profile_damaged(self) -> bool:
+        return isinstance(self, Event.PROFILE_DAMAGED)
     
 
 # Now, a little trick - we make each nested variant class be a subclass of the main
@@ -25335,6 +25694,9 @@ Event.OP_STATE = type("Event.OP_STATE", (Event.OP_STATE, Event,), {})  # type: i
 Event.BALANCE_CHANGED = type("Event.BALANCE_CHANGED", (Event.BALANCE_CHANGED, Event,), {})  # type: ignore
 Event.HISTORY_ADDED = type("Event.HISTORY_ADDED", (Event.HISTORY_ADDED, Event,), {})  # type: ignore
 Event.STATE_CHANGED = type("Event.STATE_CHANGED", (Event.STATE_CHANGED, Event,), {})  # type: ignore
+Event.PROFILE_INDEX_MISMATCH = type("Event.PROFILE_INDEX_MISMATCH", (Event.PROFILE_INDEX_MISMATCH, Event,), {})  # type: ignore
+Event.PROFILE_ROLLBACK = type("Event.PROFILE_ROLLBACK", (Event.PROFILE_ROLLBACK, Event,), {})  # type: ignore
+Event.PROFILE_DAMAGED = type("Event.PROFILE_DAMAGED", (Event.PROFILE_DAMAGED, Event,), {})  # type: ignore
 
 
 
@@ -25391,6 +25753,15 @@ class _UniffiFfiConverterTypeEvent(_UniffiConverterRustBuffer):
             return Event.STATE_CHANGED(
                 _UniffiFfiConverterUInt64.read(buf),
             )
+        if variant == 12:
+            return Event.PROFILE_INDEX_MISMATCH(
+            )
+        if variant == 13:
+            return Event.PROFILE_ROLLBACK(
+            )
+        if variant == 14:
+            return Event.PROFILE_DAMAGED(
+            )
         raise InternalError("Raw enum value doesn't match any cases")
 
     @staticmethod
@@ -25431,6 +25802,12 @@ class _UniffiFfiConverterTypeEvent(_UniffiConverterRustBuffer):
             return
         if value.is_STATE_CHANGED():
             _UniffiFfiConverterUInt64.check_lower(value.rev)
+            return
+        if value.is_PROFILE_INDEX_MISMATCH():
+            return
+        if value.is_PROFILE_ROLLBACK():
+            return
+        if value.is_PROFILE_DAMAGED():
             return
         raise ValueError(value)
 
@@ -25473,6 +25850,12 @@ class _UniffiFfiConverterTypeEvent(_UniffiConverterRustBuffer):
         if value.is_STATE_CHANGED():
             buf.write_i32(11)
             _UniffiFfiConverterUInt64.write(value.rev, buf)
+        if value.is_PROFILE_INDEX_MISMATCH():
+            buf.write_i32(12)
+        if value.is_PROFILE_ROLLBACK():
+            buf.write_i32(13)
+        if value.is_PROFILE_DAMAGED():
+            buf.write_i32(14)
 
 
 
@@ -25807,6 +26190,50 @@ class StoreError:  # type: ignore
         def __repr__(self):
             return "StoreError.Unexpected({})".format(str(self))
     _UniffiTempStoreError.Unexpected = Unexpected # type: ignore
+    class VaultFormat(_UniffiTempStoreError):
+        """
+        user-profiles spec §7.2 "Errors" (each the `SdkError` of its name): a sealed item that does not open, or a plain item in
+        a protected profile
+"""
+        
+        def __init__(self):
+            pass
+
+        def __repr__(self):
+            return "StoreError.VaultFormat({})".format(str(self))
+    _UniffiTempStoreError.VaultFormat = VaultFormat # type: ignore
+    class ProfileLocked(_UniffiTempStoreError):
+        
+        def __init__(self):
+            pass
+
+        def __repr__(self):
+            return "StoreError.ProfileLocked({})".format(str(self))
+    _UniffiTempStoreError.ProfileLocked = ProfileLocked # type: ignore
+    class ProfilePassphraseRequired(_UniffiTempStoreError):
+        
+        def __init__(self):
+            pass
+
+        def __repr__(self):
+            return "StoreError.ProfilePassphraseRequired({})".format(str(self))
+    _UniffiTempStoreError.ProfilePassphraseRequired = ProfilePassphraseRequired # type: ignore
+    class ProfileRollback(_UniffiTempStoreError):
+        
+        def __init__(self):
+            pass
+
+        def __repr__(self):
+            return "StoreError.ProfileRollback({})".format(str(self))
+    _UniffiTempStoreError.ProfileRollback = ProfileRollback # type: ignore
+    class ProfileDamaged(_UniffiTempStoreError):
+        
+        def __init__(self):
+            pass
+
+        def __repr__(self):
+            return "StoreError.ProfileDamaged({})".format(str(self))
+    _UniffiTempStoreError.ProfileDamaged = ProfileDamaged # type: ignore
 
 StoreError = _UniffiTempStoreError # type: ignore
 del _UniffiTempStoreError
@@ -25828,6 +26255,21 @@ class _UniffiFfiConverterTypeStoreError(_UniffiConverterRustBuffer):
         if variant == 4:
             return StoreError.Unexpected(
             )
+        if variant == 5:
+            return StoreError.VaultFormat(
+            )
+        if variant == 6:
+            return StoreError.ProfileLocked(
+            )
+        if variant == 7:
+            return StoreError.ProfilePassphraseRequired(
+            )
+        if variant == 8:
+            return StoreError.ProfileRollback(
+            )
+        if variant == 9:
+            return StoreError.ProfileDamaged(
+            )
         raise InternalError("Raw enum value doesn't match any cases")
 
     @staticmethod
@@ -25840,6 +26282,16 @@ class _UniffiFfiConverterTypeStoreError(_UniffiConverterRustBuffer):
             return
         if isinstance(value, StoreError.Unexpected):
             return
+        if isinstance(value, StoreError.VaultFormat):
+            return
+        if isinstance(value, StoreError.ProfileLocked):
+            return
+        if isinstance(value, StoreError.ProfilePassphraseRequired):
+            return
+        if isinstance(value, StoreError.ProfileRollback):
+            return
+        if isinstance(value, StoreError.ProfileDamaged):
+            return
 
     @staticmethod
     def write(value, buf):
@@ -25851,6 +26303,16 @@ class _UniffiFfiConverterTypeStoreError(_UniffiConverterRustBuffer):
             buf.write_i32(3)
         if isinstance(value, StoreError.Unexpected):
             buf.write_i32(4)
+        if isinstance(value, StoreError.VaultFormat):
+            buf.write_i32(5)
+        if isinstance(value, StoreError.ProfileLocked):
+            buf.write_i32(6)
+        if isinstance(value, StoreError.ProfilePassphraseRequired):
+            buf.write_i32(7)
+        if isinstance(value, StoreError.ProfileRollback):
+            buf.write_i32(8)
+        if isinstance(value, StoreError.ProfileDamaged):
+            buf.write_i32(9)
 
 
 

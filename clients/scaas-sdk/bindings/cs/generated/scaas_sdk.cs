@@ -32696,6 +32696,20 @@ internal record Event {
         ulong Rev
     ) : Event {}
     
+    /// <summary>
+    /// user-profiles spec §6, §7.2, §11: an index row or name hint that differs from the profile's envelope; an item, a
+    /// manifest, an envelope or a generation below its manifest or anchor; an item its manifest lists but whose file is
+    /// missing. No field: no id, name or path.
+    /// </summary>
+    public record ProfileIndexMismatch: Event {}
+    
+    
+    public record ProfileRollback: Event {}
+    
+    
+    public record ProfileDamaged: Event {}
+    
+    
 
     
 }
@@ -32754,6 +32768,15 @@ class FfiConverterTypeEvent : FfiConverterRustBuffer<Event>{
                 return new Event.StateChanged(
                     FfiConverterUInt64.INSTANCE.Read(stream)
                 );
+            case 12:
+                return new Event.ProfileIndexMismatch(
+                );
+            case 13:
+                return new Event.ProfileRollback(
+                );
+            case 14:
+                return new Event.ProfileDamaged(
+                );
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeEvent.Read()", value));
         }
@@ -32798,6 +32821,12 @@ class FfiConverterTypeEvent : FfiConverterRustBuffer<Event>{
             case Event.StateChanged variant_value:
                 return 4
                     + FfiConverterUInt64.INSTANCE.AllocationSize(variant_value.Rev);
+            case Event.ProfileIndexMismatch variant_value:
+                return 4;
+            case Event.ProfileRollback variant_value:
+                return 4;
+            case Event.ProfileDamaged variant_value:
+                return 4;
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeEvent.AllocationSize()", value));
         }
@@ -32852,6 +32881,15 @@ class FfiConverterTypeEvent : FfiConverterRustBuffer<Event>{
             case Event.StateChanged variant_value:
                 stream.WriteInt(11);
                 FfiConverterUInt64.INSTANCE.Write(variant_value.Rev, stream);
+                break;
+            case Event.ProfileIndexMismatch variant_value:
+                stream.WriteInt(12);
+                break;
+            case Event.ProfileRollback variant_value:
+                stream.WriteInt(13);
+                break;
+            case Event.ProfileDamaged variant_value:
+                stream.WriteInt(14);
                 break;
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeEvent.Write()", value));
@@ -34817,6 +34855,107 @@ internal class SdkException: UniffiException {
         public Cancelled(string message): base(message) {}
     }
     
+    public class ProfileInUse: SdkException {
+        public ProfileInUse(string message): base(message) {}
+    }
+    
+    public class ProfileOpen: SdkException {
+        public ProfileOpen(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// a `--profile` name or id with no visible profile
+    /// </summary>
+    public class ProfileUnknown: SdkException {
+        public ProfileUnknown(string message): base(message) {}
+    }
+    
+    public class ProfileNameTaken: SdkException {
+        public ProfileNameTaken(string message): base(message) {}
+    }
+    
+    public class ProfileNameInvalid: SdkException {
+        public ProfileNameInvalid(string message): base(message) {}
+    }
+    
+    public class ProfileLimit: SdkException {
+        public ProfileLimit(string message): base(message) {}
+    }
+    
+    public class ProfileHiddenLimit: SdkException {
+        public ProfileHiddenLimit(string message): base(message) {}
+    }
+    
+    public class ProfilePartFull: SdkException {
+        public ProfilePartFull(string message): base(message) {}
+    }
+    
+    public class ProfileRootUnsafe: SdkException {
+        public ProfileRootUnsafe(string message): base(message) {}
+    }
+    
+    public class ProfilePassphraseRequired: SdkException {
+        public ProfilePassphraseRequired(string message): base(message) {}
+    }
+    
+    public class ProfilePassphraseWeak: SdkException {
+        public ProfilePassphraseWeak(string message): base(message) {}
+    }
+    
+    public class ProfileFormat: SdkException {
+        public ProfileFormat(string message): base(message) {}
+    }
+    
+    public class ProfileVersion: SdkException {
+        public ProfileVersion(string message): base(message) {}
+    }
+    
+    public class ProfileKdfTooLarge: SdkException {
+        public ProfileKdfTooLarge(string message): base(message) {}
+    }
+    
+    public class ProfileKdfOutOfMemory: SdkException {
+        public ProfileKdfOutOfMemory(string message): base(message) {}
+    }
+    
+    public class ProfileSearchTooLarge: SdkException {
+        public ProfileSearchTooLarge(string message): base(message) {}
+    }
+    
+    public class ProfileImportOpen: SdkException {
+        public ProfileImportOpen(string message): base(message) {}
+    }
+    
+    public class ProfileExportTooLarge: SdkException {
+        public ProfileExportTooLarge(string message): base(message) {}
+    }
+    
+    public class ProfileLocked: SdkException {
+        public ProfileLocked(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// a writer that waited 120 s on a re-seal
+    /// </summary>
+    public class ProfileBusy: SdkException {
+        public ProfileBusy(string message): base(message) {}
+    }
+    
+    public class KeyLocked: SdkException {
+        public KeyLocked(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// user-profiles spec §7.2 "Errors": the store codes `StoreError::ProfileRollback` and `ProfileDamaged`, by name
+    /// </summary>
+    public class ProfileRollback: SdkException {
+        public ProfileRollback(string message): base(message) {}
+    }
+    
+    public class ProfileDamaged: SdkException {
+        public ProfileDamaged(string message): base(message) {}
+    }
+    
     /// <summary>
     /// A `scaas-ua` wallet error, by its own code.
     /// </summary>
@@ -34921,8 +35060,31 @@ class FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException>, CallStatu
             case 80: return new SdkException.FileTooLarge(FfiConverterString.INSTANCE.Read(stream));
             case 81: return new SdkException.FileHashMismatch(FfiConverterString.INSTANCE.Read(stream));
             case 82: return new SdkException.Cancelled(FfiConverterString.INSTANCE.Read(stream));
-            case 83: return new SdkException.Ua(FfiConverterString.INSTANCE.Read(stream));
-            case 84: return new SdkException.Rpc(FfiConverterString.INSTANCE.Read(stream));
+            case 83: return new SdkException.ProfileInUse(FfiConverterString.INSTANCE.Read(stream));
+            case 84: return new SdkException.ProfileOpen(FfiConverterString.INSTANCE.Read(stream));
+            case 85: return new SdkException.ProfileUnknown(FfiConverterString.INSTANCE.Read(stream));
+            case 86: return new SdkException.ProfileNameTaken(FfiConverterString.INSTANCE.Read(stream));
+            case 87: return new SdkException.ProfileNameInvalid(FfiConverterString.INSTANCE.Read(stream));
+            case 88: return new SdkException.ProfileLimit(FfiConverterString.INSTANCE.Read(stream));
+            case 89: return new SdkException.ProfileHiddenLimit(FfiConverterString.INSTANCE.Read(stream));
+            case 90: return new SdkException.ProfilePartFull(FfiConverterString.INSTANCE.Read(stream));
+            case 91: return new SdkException.ProfileRootUnsafe(FfiConverterString.INSTANCE.Read(stream));
+            case 92: return new SdkException.ProfilePassphraseRequired(FfiConverterString.INSTANCE.Read(stream));
+            case 93: return new SdkException.ProfilePassphraseWeak(FfiConverterString.INSTANCE.Read(stream));
+            case 94: return new SdkException.ProfileFormat(FfiConverterString.INSTANCE.Read(stream));
+            case 95: return new SdkException.ProfileVersion(FfiConverterString.INSTANCE.Read(stream));
+            case 96: return new SdkException.ProfileKdfTooLarge(FfiConverterString.INSTANCE.Read(stream));
+            case 97: return new SdkException.ProfileKdfOutOfMemory(FfiConverterString.INSTANCE.Read(stream));
+            case 98: return new SdkException.ProfileSearchTooLarge(FfiConverterString.INSTANCE.Read(stream));
+            case 99: return new SdkException.ProfileImportOpen(FfiConverterString.INSTANCE.Read(stream));
+            case 100: return new SdkException.ProfileExportTooLarge(FfiConverterString.INSTANCE.Read(stream));
+            case 101: return new SdkException.ProfileLocked(FfiConverterString.INSTANCE.Read(stream));
+            case 102: return new SdkException.ProfileBusy(FfiConverterString.INSTANCE.Read(stream));
+            case 103: return new SdkException.KeyLocked(FfiConverterString.INSTANCE.Read(stream));
+            case 104: return new SdkException.ProfileRollback(FfiConverterString.INSTANCE.Read(stream));
+            case 105: return new SdkException.ProfileDamaged(FfiConverterString.INSTANCE.Read(stream));
+            case 106: return new SdkException.Ua(FfiConverterString.INSTANCE.Read(stream));
+            case 107: return new SdkException.Rpc(FfiConverterString.INSTANCE.Read(stream));
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeSdkError.Read()", value));
         }
@@ -35180,11 +35342,80 @@ class FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException>, CallStatu
             case SdkException.Cancelled:
                 stream.WriteInt(82);
                 break;
-            case SdkException.Ua:
+            case SdkException.ProfileInUse:
                 stream.WriteInt(83);
                 break;
-            case SdkException.Rpc:
+            case SdkException.ProfileOpen:
                 stream.WriteInt(84);
+                break;
+            case SdkException.ProfileUnknown:
+                stream.WriteInt(85);
+                break;
+            case SdkException.ProfileNameTaken:
+                stream.WriteInt(86);
+                break;
+            case SdkException.ProfileNameInvalid:
+                stream.WriteInt(87);
+                break;
+            case SdkException.ProfileLimit:
+                stream.WriteInt(88);
+                break;
+            case SdkException.ProfileHiddenLimit:
+                stream.WriteInt(89);
+                break;
+            case SdkException.ProfilePartFull:
+                stream.WriteInt(90);
+                break;
+            case SdkException.ProfileRootUnsafe:
+                stream.WriteInt(91);
+                break;
+            case SdkException.ProfilePassphraseRequired:
+                stream.WriteInt(92);
+                break;
+            case SdkException.ProfilePassphraseWeak:
+                stream.WriteInt(93);
+                break;
+            case SdkException.ProfileFormat:
+                stream.WriteInt(94);
+                break;
+            case SdkException.ProfileVersion:
+                stream.WriteInt(95);
+                break;
+            case SdkException.ProfileKdfTooLarge:
+                stream.WriteInt(96);
+                break;
+            case SdkException.ProfileKdfOutOfMemory:
+                stream.WriteInt(97);
+                break;
+            case SdkException.ProfileSearchTooLarge:
+                stream.WriteInt(98);
+                break;
+            case SdkException.ProfileImportOpen:
+                stream.WriteInt(99);
+                break;
+            case SdkException.ProfileExportTooLarge:
+                stream.WriteInt(100);
+                break;
+            case SdkException.ProfileLocked:
+                stream.WriteInt(101);
+                break;
+            case SdkException.ProfileBusy:
+                stream.WriteInt(102);
+                break;
+            case SdkException.KeyLocked:
+                stream.WriteInt(103);
+                break;
+            case SdkException.ProfileRollback:
+                stream.WriteInt(104);
+                break;
+            case SdkException.ProfileDamaged:
+                stream.WriteInt(105);
+                break;
+            case SdkException.Ua:
+                stream.WriteInt(106);
+                break;
+            case SdkException.Rpc:
+                stream.WriteInt(107);
                 break;
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeSdkError.Write()", value));
@@ -35597,6 +35828,35 @@ internal class StoreException: UniffiException {
     }
     
     
+    /// <summary>
+    /// user-profiles spec §7.2 "Errors" (each the `SdkError` of its name): a sealed item that does not open, or a plain item in
+    /// a protected profile
+    /// </summary>
+    public class VaultFormat : StoreException {
+        public VaultFormat() : base() {}
+    }
+    
+    
+    public class ProfileLocked : StoreException {
+        public ProfileLocked() : base() {}
+    }
+    
+    
+    public class ProfilePassphraseRequired : StoreException {
+        public ProfilePassphraseRequired() : base() {}
+    }
+    
+    
+    public class ProfileRollback : StoreException {
+        public ProfileRollback() : base() {}
+    }
+    
+    
+    public class ProfileDamaged : StoreException {
+        public ProfileDamaged() : base() {}
+    }
+    
+    
 
     
 }
@@ -35615,6 +35875,16 @@ class FfiConverterTypeStoreError : FfiConverterRustBuffer<StoreException>, CallS
                 return new StoreException.Unavailable();
             case 4:
                 return new StoreException.Unexpected();
+            case 5:
+                return new StoreException.VaultFormat();
+            case 6:
+                return new StoreException.ProfileLocked();
+            case 7:
+                return new StoreException.ProfilePassphraseRequired();
+            case 8:
+                return new StoreException.ProfileRollback();
+            case 9:
+                return new StoreException.ProfileDamaged();
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeStoreError.Read()", value));
         }
@@ -35634,6 +35904,21 @@ class FfiConverterTypeStoreError : FfiConverterRustBuffer<StoreException>, CallS
 
             case StoreException.Unexpected variant_value:
                 return 4;
+
+            case StoreException.VaultFormat variant_value:
+                return 4;
+
+            case StoreException.ProfileLocked variant_value:
+                return 4;
+
+            case StoreException.ProfilePassphraseRequired variant_value:
+                return 4;
+
+            case StoreException.ProfileRollback variant_value:
+                return 4;
+
+            case StoreException.ProfileDamaged variant_value:
+                return 4;
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeStoreError.AllocationSize()", value));
         }
@@ -35652,6 +35937,21 @@ class FfiConverterTypeStoreError : FfiConverterRustBuffer<StoreException>, CallS
                 break;
             case StoreException.Unexpected variant_value:
                 stream.WriteInt(4);
+                break;
+            case StoreException.VaultFormat variant_value:
+                stream.WriteInt(5);
+                break;
+            case StoreException.ProfileLocked variant_value:
+                stream.WriteInt(6);
+                break;
+            case StoreException.ProfilePassphraseRequired variant_value:
+                stream.WriteInt(7);
+                break;
+            case StoreException.ProfileRollback variant_value:
+                stream.WriteInt(8);
+                break;
+            case StoreException.ProfileDamaged variant_value:
+                stream.WriteInt(9);
                 break;
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeStoreError.Write()", value));

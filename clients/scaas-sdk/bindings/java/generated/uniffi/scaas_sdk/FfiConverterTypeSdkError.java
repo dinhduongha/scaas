@@ -89,8 +89,31 @@ public enum FfiConverterTypeSdkError implements FfiConverterRustBuffer<SdkExcept
             case 80 -> new SdkException.FileTooLarge(FfiConverterString.INSTANCE.read(buf));
             case 81 -> new SdkException.FileHashMismatch(FfiConverterString.INSTANCE.read(buf));
             case 82 -> new SdkException.Cancelled(FfiConverterString.INSTANCE.read(buf));
-            case 83 -> new SdkException.Ua(FfiConverterString.INSTANCE.read(buf));
-            case 84 -> new SdkException.Rpc(FfiConverterString.INSTANCE.read(buf));
+            case 83 -> new SdkException.ProfileInUse(FfiConverterString.INSTANCE.read(buf));
+            case 84 -> new SdkException.ProfileOpen(FfiConverterString.INSTANCE.read(buf));
+            case 85 -> new SdkException.ProfileUnknown(FfiConverterString.INSTANCE.read(buf));
+            case 86 -> new SdkException.ProfileNameTaken(FfiConverterString.INSTANCE.read(buf));
+            case 87 -> new SdkException.ProfileNameInvalid(FfiConverterString.INSTANCE.read(buf));
+            case 88 -> new SdkException.ProfileLimit(FfiConverterString.INSTANCE.read(buf));
+            case 89 -> new SdkException.ProfileHiddenLimit(FfiConverterString.INSTANCE.read(buf));
+            case 90 -> new SdkException.ProfilePartFull(FfiConverterString.INSTANCE.read(buf));
+            case 91 -> new SdkException.ProfileRootUnsafe(FfiConverterString.INSTANCE.read(buf));
+            case 92 -> new SdkException.ProfilePassphraseRequired(FfiConverterString.INSTANCE.read(buf));
+            case 93 -> new SdkException.ProfilePassphraseWeak(FfiConverterString.INSTANCE.read(buf));
+            case 94 -> new SdkException.ProfileFormat(FfiConverterString.INSTANCE.read(buf));
+            case 95 -> new SdkException.ProfileVersion(FfiConverterString.INSTANCE.read(buf));
+            case 96 -> new SdkException.ProfileKdfTooLarge(FfiConverterString.INSTANCE.read(buf));
+            case 97 -> new SdkException.ProfileKdfOutOfMemory(FfiConverterString.INSTANCE.read(buf));
+            case 98 -> new SdkException.ProfileSearchTooLarge(FfiConverterString.INSTANCE.read(buf));
+            case 99 -> new SdkException.ProfileImportOpen(FfiConverterString.INSTANCE.read(buf));
+            case 100 -> new SdkException.ProfileExportTooLarge(FfiConverterString.INSTANCE.read(buf));
+            case 101 -> new SdkException.ProfileLocked(FfiConverterString.INSTANCE.read(buf));
+            case 102 -> new SdkException.ProfileBusy(FfiConverterString.INSTANCE.read(buf));
+            case 103 -> new SdkException.KeyLocked(FfiConverterString.INSTANCE.read(buf));
+            case 104 -> new SdkException.ProfileRollback(FfiConverterString.INSTANCE.read(buf));
+            case 105 -> new SdkException.ProfileDamaged(FfiConverterString.INSTANCE.read(buf));
+            case 106 -> new SdkException.Ua(FfiConverterString.INSTANCE.read(buf));
+            case 107 -> new SdkException.Rpc(FfiConverterString.INSTANCE.read(buf));
             default -> throw new java.lang.RuntimeException("invalid error enum value, something is very wrong!!");
         };
     }
@@ -349,11 +372,80 @@ public enum FfiConverterTypeSdkError implements FfiConverterRustBuffer<SdkExcept
             case SdkException.Cancelled x -> {
                 buf.putInt(82);
             }
-            case SdkException.Ua x -> {
+            case SdkException.ProfileInUse x -> {
                 buf.putInt(83);
             }
-            case SdkException.Rpc x -> {
+            case SdkException.ProfileOpen x -> {
                 buf.putInt(84);
+            }
+            case SdkException.ProfileUnknown x -> {
+                buf.putInt(85);
+            }
+            case SdkException.ProfileNameTaken x -> {
+                buf.putInt(86);
+            }
+            case SdkException.ProfileNameInvalid x -> {
+                buf.putInt(87);
+            }
+            case SdkException.ProfileLimit x -> {
+                buf.putInt(88);
+            }
+            case SdkException.ProfileHiddenLimit x -> {
+                buf.putInt(89);
+            }
+            case SdkException.ProfilePartFull x -> {
+                buf.putInt(90);
+            }
+            case SdkException.ProfileRootUnsafe x -> {
+                buf.putInt(91);
+            }
+            case SdkException.ProfilePassphraseRequired x -> {
+                buf.putInt(92);
+            }
+            case SdkException.ProfilePassphraseWeak x -> {
+                buf.putInt(93);
+            }
+            case SdkException.ProfileFormat x -> {
+                buf.putInt(94);
+            }
+            case SdkException.ProfileVersion x -> {
+                buf.putInt(95);
+            }
+            case SdkException.ProfileKdfTooLarge x -> {
+                buf.putInt(96);
+            }
+            case SdkException.ProfileKdfOutOfMemory x -> {
+                buf.putInt(97);
+            }
+            case SdkException.ProfileSearchTooLarge x -> {
+                buf.putInt(98);
+            }
+            case SdkException.ProfileImportOpen x -> {
+                buf.putInt(99);
+            }
+            case SdkException.ProfileExportTooLarge x -> {
+                buf.putInt(100);
+            }
+            case SdkException.ProfileLocked x -> {
+                buf.putInt(101);
+            }
+            case SdkException.ProfileBusy x -> {
+                buf.putInt(102);
+            }
+            case SdkException.KeyLocked x -> {
+                buf.putInt(103);
+            }
+            case SdkException.ProfileRollback x -> {
+                buf.putInt(104);
+            }
+            case SdkException.ProfileDamaged x -> {
+                buf.putInt(105);
+            }
+            case SdkException.Ua x -> {
+                buf.putInt(106);
+            }
+            case SdkException.Rpc x -> {
+                buf.putInt(107);
             }
             default -> throw new java.lang.RuntimeException("invalid error enum value, something is very wrong!!");
         };
