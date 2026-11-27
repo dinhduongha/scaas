@@ -1,6 +1,7 @@
 # `scaas-matrix`: the Matrix client crate, one client per open user profile — design
 
-**Status:** SPECIFIED (2026-11-27), nothing built when written. UNAUDITED. Rules:
+**Status:** SPECIFIED (2026-11-27); BUILT the same day on branch `scaas-matrix` (plan T0 to T9), except §11 (wasm32, PLANNED)
+and §10's answer-size bound (O3, open). UNAUDITED. Rules:
 [`docs/clients/scaas-matrix.md`](../../clients/scaas-matrix.md) (CLI-MTX-01 to CLI-MTX-12), register entries of the same ids in
 [decisions.md](../../decisions.md) (controller calls, `owner: no`, the owner may override any) under the owner rulings
 [CLI-PQC-19](../../decisions.md#CLI-PQC-19), [CLI-PQC-20](../../decisions.md#CLI-PQC-20) and
@@ -87,6 +88,15 @@ is built with `rustls-no-provider`; the crate installs ring as the process's def
 crate comes through these. `tests/deps.rs` proves from `cargo tree` that the normal graph holds no `scaas-sdk`, `pqchat-core`,
 `scaas-ua` or `scaas-rpc` (with a positive control), and the crate has its own `deny.toml` and `.cargo/audit.toml`.
 
+**Exceptions in `deny.toml`, each named** (controller calls, owner may override): MPL-2.0 for seven crates only, each a hard
+dependency of matrix-sdk 0.19.1 with no feature that drops it (`as_variant`, `eyeball`, `eyeball-im`, `imbl`, `imbl-sized-chunks`,
+`readlock`, `readlock-tokio`): file-level copyleft, used unmodified, the source available as published (the terms of the Status QML
+files in scaas-app); MPL-2.0 is not on the allow list, so a new MPL crate fails until named. Advisories: RUSTSEC-2026-0459 (the
+bundled SQLite 3.53.2 of libsqlite3-sys 0.38.2: stale page-cache bytes when a crafted `-wal` file of another page size sits beside the
+database; local only, and the files are the profile's own store in its private directory; the fix needs matrix-sdk 0.20, O5);
+RUSTSEC-2026-0319 (`anymap2`) and RUSTSEC-2026-0543 (`chrono` through `oauth2`), unmaintained, no vulnerability. Banned outright:
+`aws-lc-sys`, `aws-lc-rs`, `openssl-sys`, `native-tls`.
+
 ## 4. Profiles, the store key and the session
 
 **One client per profile directory** (CLI-MTX-02). `MatrixClient::open(dir, key, opts)` takes the profile's Matrix directory (the
@@ -98,7 +108,8 @@ profile's client, then opens the next; two profiles' clients in one process (the
 
 **The store key** (CLI-MTX-03, CLI-UPR-29). The caller passes `StoreKey`, 32 bytes from the profile's sealed item. The crate gives
 it to matrix-sdk's SQLite stores as their raw key (`SqliteStoreConfig::key`, no KDF: the key is random) for every store matrix-sdk
-opens (state, crypto, event cache, media), holds it in `Zeroizing` memory until `close`, and never writes it anywhere: no file, no OS
+opens (state, crypto, event cache, media) and drops its own copy (`Zeroizing`) once they are open; the stores hold their cipher
+until `close`. It never writes the key anywhere: no file, no OS
 secret storage, no log, no error, no `Debug` output (`StoreKey`'s `Debug` prints `StoreKey(..)`). The crate makes no key. A wrong key
 opens nothing (`MatrixStore`). `StoreKey` absent (`None`): the client runs on matrix-sdk's memory stores and persists nothing; the
 session cannot be restored and the user logs in again at each start (contract §11.4).
@@ -214,8 +225,17 @@ the rest are new, appended to that contract by scaas-app (its item).
 Matrix event is at most 65,536 bytes). A timeline or history page at most 100 events. A `net.scaas.pqchat.v1` event handed to
 `pqchat-core` whose content is above `EVENT_MAX` (65,536 B) is dropped at the transport (`pqchat-core` would drop it as `decode`).
 The update queue holds 1,024 entries. Server JSON is decoded by `ruma` over `serde_json`, whose recursion limit (128) bounds depth.
-**Known gap:** the size of a homeserver's HTTP answer is not bounded by the crate (matrix-sdk sets no body limit); a hostile homeserver
-can make the client allocate. Recorded; a bound needs matrix-sdk's HTTP layer (open point O3).
+Every request has a 90 s timeout (`RequestConfig`), and each sync asks the server for a short answer: at most 20 timeline events per
+room and lazy-loaded members (`FilterDefinition`), presence off.
+
+**Known gap (O3, kept open after the controller's request to close it, 2026-11-27):** the size of a homeserver's HTTP answer is not
+bounded. matrix-sdk 0.19.1 reads every answer whole (`http_client/mod.rs`: `response.bytes().await`) before ruma decodes it, and
+has no body limit of its own. A caller-supplied `reqwest::Client` (`ClientBuilder::http_client`) does not help: reqwest 0.13 has no
+body-size option, and its only lower hook, `ClientBuilder::connector_layer`, must return reqwest's sealed `Conn` type
+(`reqwest::connect::sealed`), so no byte-counting stream can be put under the TLS layer. The residual: the homeserver the user
+chose (or a party in its TLS path, with a certificate the platform trusts) can make the client allocate an answer of any size, up to
+memory exhaustion of the app; the timeouts bound how long it takes, not how large it is. Closing it needs an upstream hook (a body
+limit in matrix-sdk's `HttpClient`, or an unsealed connector type in reqwest).
 
 ## 11. wasm32
 
@@ -232,7 +252,7 @@ exists.
 | the homeserver | every Matrix room's metadata; never Megolm plaintext; PqChat rooms' event types, sizes and timing (CLI-PQC-05) | presence off, receipts private, typing off by default; no pusher by default; room keys only to cross-signed devices |
 | another user profile on the same device | nothing of this profile's Matrix: no shared login, store, key or device | one directory and one sealed store key per profile; the lock refuses a second client |
 | someone with the disk while the profile is locked | encrypted stores; the homeserver's name hidden too | the store key only in memory while open, never on disk |
-| a hostile homeserver answer | memory pressure (§10's gap); malformed JSON | ruma's typed decode, depth limit; no own parser of server bytes beyond §10's bounds |
+| a hostile homeserver answer | malformed JSON; **an answer of any size: memory exhaustion of the app (§10, O3, open)** | ruma's typed decode, depth limit 128; 90 s request timeout; short sync answers (20 events per room, lazy members); no own parser of server bytes beyond §10's bounds |
 | a log reader | nothing secret | no token, key, password, body, room id or Matrix id in an error; matrix-sdk's own `tracing` output is the app's to filter (it may log room ids at debug level) |
 
 ## 13. Test strategy
@@ -256,5 +276,8 @@ exists.
   contract §7 with numbers, and replace its §11.6 room-list fields with this crate's `RoomRow`.
 - **O2**: `pqchat-core`'s own e2e moves from its test-only HTTP transport to `scaas-matrix` (CLI-PQC-20: it uses `scaas-matrix` in
   its e2e only) — a dev-dependency of `pqchat-core` on `scaas-matrix`, outside its normal graph; next task after this crate.
-- **O3**: a body-size bound on homeserver answers (§10), through matrix-sdk's HTTP client settings or upstream.
+- **O3** (open, reason in §10): a body-size bound on homeserver answers needs a hook matrix-sdk 0.19.1 and reqwest 0.13 do not
+  offer; asked upstream when the crate next moves its matrix-sdk pin.
+- **O5**: matrix-sdk 0.20.0 (2026-11-25) fixes RUSTSEC-2026-0459 (bundled SQLite) through rusqlite 0.41; it reaches 14 days on
+  2026-12-09: move the pin then and drop the advisory exception (§3).
 - **O4**: single sign-on, QR verification, refresh tokens, sliding sync and the research note's §10 list, each its own task.

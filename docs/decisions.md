@@ -13807,7 +13807,7 @@ reachable from another profile.
 - old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-01 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-01).) `matrix-sdk =0.19.1` without default features (`e2e-encryption`, `sqlite`, `bundled-sqlite`), rustls with `ring`, and `clients/pqchat-transport` (the transport trait, its error and value types, the conformance test; deps `serde`, `serde_json`, `async-trait`), which `pqchat-core` re-exports; no `scaas-sdk`, `pqchat-core`, `scaas-ua` or `scaas-rpc` in its normal graph (`tests/deps.rs`); deny and audit cover the tree.
-**Status.** SPECIFIED. UNAUDITED.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED. Named exceptions (spec §3): MPL-2.0 for seven hard dependencies of matrix-sdk; RUSTSEC-2026-0459 (bundled SQLite, fixed in matrix-sdk 0.20, pin moves from 2026-12-09), RUSTSEC-2026-0319 and RUSTSEC-2026-0543 (unmaintained).
 **Why.** scaas-app's default build links `scaas-matrix` and no SDK (D32, D34, relayed by the coordinator), and `pqchat-core` pulls no Matrix crate (CLI-PQC-01); a trait-only crate is the one layout with both properties.
 **Cost if wrong.** The SDK in the default app build, or a Matrix crate in `pqchat-core`.
 **Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §3; the coordinator's constraint of 2026-11-27.
@@ -13816,7 +13816,7 @@ reachable from another profile.
 - old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-02 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-02).) A second open of a profile's Matrix directory is refused (`MatrixProfileBusy`) while one is open; `close` stops sync, drops the stores and releases the lock; the switch order is the profile layer's.
-**Status.** SPECIFIED. UNAUDITED.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
 **Why.** CLI-PQC-20: one client per open profile; two clients on one store would corrupt it and mix sessions.
 **Cost if wrong.** Two clients writing one profile's store, or a profile's Matrix reachable while another is open.
 **Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §4.
@@ -13825,7 +13825,7 @@ reachable from another profile.
 - old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-03 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-03).) The profile's 32-byte sealed key is the raw key of every SQLite store; held zeroized until `close`; never on disk, in the OS secret storage, a log, an error or `Debug`; the crate makes no key; no key means memory stores.
-**Status.** SPECIFIED. UNAUDITED.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
 **Why.** CLI-UPR-29: the key is a sealed item of the profile.
 **Cost if wrong.** A profile's chat readable without its passphrase.
 **Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §4.
@@ -13834,7 +13834,7 @@ reachable from another profile.
 - old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-04 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-04).) One session record (homeserver, user, device, access token) in the encrypted state store, read back by `restore`; no refresh token in this version; `logout` invalidates the token and deletes the stores; the password never stored; `http` only for a loopback IP literal.
-**Status.** SPECIFIED. UNAUDITED.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
 **Why.** Contract §11.3; nothing of a hidden profile in the clear; the local test homeserver runs on loopback.
 **Cost if wrong.** A token or homeserver name readable on disk, or a login over plain HTTP.
 **Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §4.
@@ -13843,7 +13843,7 @@ reachable from another profile.
 - old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-05 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-05).) `m.read.private` unless public receipts are turned on; no typing notice unless turned on; `set_presence=offline` on every sync; no `m.fully_read`; no invite answered by itself; none of these ever in a PqChat room.
-**Status.** SPECIFIED. UNAUDITED.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
 **Why.** CLI-PQC-19 G2, G4.
 **Cost if wrong.** Timing metadata to the homeserver and every member by a default the user never chose.
 **Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §6.
@@ -13852,7 +13852,7 @@ reachable from another profile.
 - old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-06 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-06).) A room the transport created, joined or holds an invite to is marked PqChat in the encrypted store; the Matrix list never shows it; Matrix actions in it are refused (`MatrixRoomKind`); a PqChat event in a Matrix room is "needs the SCaaS build".
-**Status.** SPECIFIED. UNAUDITED.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
 **Why.** CLI-PQC-19 G1; CLI-PQC-05.
 **Cost if wrong.** A PqChat room shown or used as an ordinary room.
 **Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §6.
@@ -13861,7 +13861,7 @@ reachable from another profile.
 - old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-07 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-07).) Direct rooms encrypted from the first event, never turned off; room keys only to cross-signed devices; undecryptable shown; cross-signing at first login; SAS with verified, unverified, changed; backup off until turned on; the recovery key returned once.
-**Status.** SPECIFIED. UNAUDITED.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
 **Why.** scaas-app contract §11.5.
 **Cost if wrong.** Messages to unverified devices, or keys on the server the user never chose.
 **Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §7.
@@ -13870,7 +13870,7 @@ reachable from another profile.
 - old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-08 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-08).) A pusher only on the caller's call, format `event_id_only`, refused for a hidden profile (`MatrixPushHidden`); a `net.scaas.pqchat.v1` push rule only on opt-in.
-**Status.** SPECIFIED. UNAUDITED.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
 **Why.** CLI-PQC-19 G3.
 **Cost if wrong.** Message text or a hidden profile revealed to a push service.
 **Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §7.
@@ -13879,7 +13879,7 @@ reachable from another profile.
 - old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-09 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-09).) Session record 8 KiB, settings 4 KiB, 4,096 PqChat marks, text 60,000 bytes, pages of 100 events, PqChat events above 65,536 bytes dropped, an update queue of 1,024 with `Lagged`; server JSON through ruma (depth 128); the answer size of a homeserver not yet bounded (spec O3).
-**Status.** SPECIFIED. UNAUDITED.
+**Status.** BUILT on branch `scaas-matrix`, the answer-size bound open (matrix-sdk 0.19.1 reads each answer whole; reqwest 0.13's connector hook returns a sealed type; spec §10) (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
 **Why.** AGENTS.md: bound every untrusted decode by length and depth.
 **Cost if wrong.** Memory or stack exhaustion from a hostile homeserver or a damaged store.
 **Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §10.
@@ -13888,7 +13888,7 @@ reachable from another profile.
 - old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-10 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-10).) `transport()` over the same `matrix_sdk::Client`, one client-server request per call, no second sync loop, rooms created without `m.room.encryption`; `conformance` passes against Synapse.
-**Status.** SPECIFIED. UNAUDITED.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
 **Why.** CLI-PQC-20, CLI-PQC-05: one login, one sync loop per profile.
 **Cost if wrong.** A second login or sync loop, or an encrypted PqChat room a fresh device cannot read.
 **Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §8.
@@ -13906,7 +13906,7 @@ reachable from another profile.
 - old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-12 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-12).) Twelve names, the app-core contract's six Matrix and endpoint names among them; `Display` is the name; no token, key, password, text, room id or Matrix id in an error.
-**Status.** SPECIFIED. UNAUDITED.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
 **Why.** Contract §7 and §11.3.
 **Cost if wrong.** A secret or an identifier in a log line.
 **Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §9.

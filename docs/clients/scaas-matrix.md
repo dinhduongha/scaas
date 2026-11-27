@@ -5,7 +5,9 @@ front-ends, `scaas-tui` and `pqchat-core`'s e2e ([CLI-PQC-20](../decisions.md#CL
 Matrix's own end-to-end encryption (Olm / Megolm, classical) with device verification and recovery, keeps the privacy defaults of
 [CLI-PQC-19](../decisions.md#CLI-PQC-19) and implements the PqChat transport trait. It signs nothing of SCaaS and is not part of
 `scaas-sdk`. Design: spec [`2026-11-27-scaas-matrix.md`](../superpowers/specs/2026-11-27-scaas-matrix.md), plan
-[`2026-11-27-scaas-matrix.md`](../superpowers/plans/2026-11-27-scaas-matrix.md). Status: **SPECIFIED**, nothing built. UNAUDITED.
+[`2026-11-27-scaas-matrix.md`](../superpowers/plans/2026-11-27-scaas-matrix.md). Status: **BUILT** in `clients/scaas-matrix` and `clients/pqchat-transport` (plan T0 to T9; gate rows
+`clients/scaas-matrix/runs/2026-11-27-scaas-matrix-summary.txt`), except the wasm32 build ([CLI-MTX-11](#CLI-MTX-11)), PLANNED,
+and the size bound on homeserver answers ([CLI-MTX-09](#CLI-MTX-09)), open. UNAUDITED.
 
 **Contents**
 
@@ -17,7 +19,7 @@ Matrix's own end-to-end encryption (Olm / Megolm, classical) with device verific
 
 ## 1. Place and dependencies
 
-Status: **SPECIFIED**.
+Status: **BUILT** (`tests/deps.rs`; `deny.toml`, `.cargo/audit.toml`; `pqchat-core` re-exports the trait crate).
 
 <a id="CLI-MTX-01"></a>**CLI-MTX-01** — **The crate depends on matrix-sdk and a trait-only crate, never on the SDK or
 `pqchat-core`** (controller call 2026-11-27 on the coordinator's constraint; owner may override). `clients/scaas-matrix` depends on
@@ -32,7 +34,7 @@ with its reason in the crate's `deny.toml` and `.cargo/audit.toml`.
 
 ## 2. Profiles, store key, session
 
-Status: **SPECIFIED**.
+Status: **BUILT** (`src/lib.rs`; tests `tests/profile.rs`, the e2e's restore step).
 
 <a id="CLI-MTX-02"></a>**CLI-MTX-02** — **One client per profile directory** (controller call 2026-11-27, under CLI-PQC-20). A client
 opens a profile's Matrix directory under an exclusive OS file lock (`<dir>/lock`); a second open of that directory, in any process,
@@ -42,7 +44,7 @@ allows clients of different profiles side by side.
 
 <a id="CLI-MTX-03"></a>**CLI-MTX-03** — **The store key comes from the caller and stays in memory** (controller call 2026-11-27,
 under CLI-UPR-29). The caller passes the 32-byte key from the profile's sealed item; the crate uses it as the raw key of every SQLite
-store matrix-sdk opens (state, crypto, event cache, media), holds it zeroized-on-drop until `close`, and never writes it to a file,
+store matrix-sdk opens (state, crypto, event cache, media), drops its own zeroized copy once they are open (the stores keep their cipher until `close`), and never writes it to a file,
 the OS secret storage, a log, an error or a `Debug` output. The crate makes no key. A wrong key opens nothing (`MatrixStore`); no key
 runs the client on memory stores, persisting nothing.
 
@@ -54,7 +56,7 @@ is never stored. A homeserver URL is `https`, `http` only for a loopback IP lite
 
 ## 3. Privacy and room kinds
 
-Status: **SPECIFIED**.
+Status: **BUILT** (`src/policy.rs` and its unit tests; the e2e's witness of what the server holds).
 
 <a id="CLI-MTX-05"></a>**CLI-MTX-05** — **Defaults: private receipts, no typing, no presence** (CLI-PQC-19 G2, G4; the means a
 controller call 2026-11-27). A read receipt is `m.read.private` unless the user turned public receipts on; a typing notice is not
@@ -70,7 +72,8 @@ Matrix room is shown as "needs the SCaaS build", never as a message.
 
 ## 4. Encryption, verification, push
 
-Status: **SPECIFIED**.
+Status: **BUILT** (`src/lib.rs`; the e2e: an E2EE direct message, SAS both ways, pusher, push rule and backup only on the
+caller's call); QR verification PLANNED.
 
 <a id="CLI-MTX-07"></a>**CLI-MTX-07** — **Encrypted direct rooms, SAS verification, backup off** (scaas-app contract §11.5; the means
 a controller call 2026-11-27). A direct room the crate creates is encrypted from its first event and the crate never turns encryption
@@ -86,13 +89,16 @@ after the user's opt-in.
 
 ## 5. Transport, bounds, errors, wasm
 
-Status: **SPECIFIED**.
+Status: **BUILT** for CLI-MTX-09 (except the answer-size bound, open), CLI-MTX-10 (`src/transport.rs`; `conformance` against
+Synapse in the e2e) and CLI-MTX-12; CLI-MTX-11 PLANNED.
 
 <a id="CLI-MTX-09"></a>**CLI-MTX-09** — **Bounded decodes and queues** (controller call 2026-11-27). The crate's own records are
 bounded by length before decoding (the session 8 KiB, the settings 4 KiB, at most 4,096 PqChat marks); a text to send at most 60,000
 bytes; a page at most 100 events; a PqChat event above 65,536 bytes is dropped at the transport; the update queue 1,024 entries, a
-full queue reported once as `Lagged`. Server JSON is decoded by ruma over serde_json (depth limit 128). The size of a homeserver
-answer is not bounded yet (spec §14 O3).
+full queue reported once as `Lagged`. Server JSON is decoded by ruma over serde_json (depth limit 128); every request has a 90 s
+timeout and a sync asks for at most 20 timeline events per room with lazy-loaded members. The size of a homeserver answer is
+**not bounded** (open): matrix-sdk 0.19.1 reads each answer whole and offers no body limit, and reqwest 0.13's connector hook
+returns a sealed type, so no byte-counting stream fits under TLS (spec §10, O3).
 
 <a id="CLI-MTX-10"></a>**CLI-MTX-10** — **The transport rides the same client** (CLI-PQC-20; the means a controller call 2026-11-27).
 `transport()` implements `MatrixTransport` over the profile's one `matrix_sdk::Client`: the same login, token and HTTP client, no

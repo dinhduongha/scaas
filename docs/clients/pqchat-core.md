@@ -42,9 +42,12 @@ It owns the state machine: what to build, when, from which reads, and what to sh
 of the one library `app-core-rust` (implying `scaas`), so the SDK, `app-matrix`, `pqchat-core` and `ua-rs` share one process, one
 tokio runtime and one Matrix login ([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12)'s one library per app).
 
-**The Matrix client moves into this repository** (owner 2026-11-27; PLANNED): scaas-app's planned `app-matrix` becomes the crate
-`clients/scaas-matrix` (working name), which implements `MatrixTransport` and is used by scaas-app's front-ends, `scaas-tui` and
-this crate's e2e; this crate's normal graph still holds no Matrix crate (`tests/deps.rs`). **Each user profile has its own Matrix**:
+**The Matrix client moves into this repository** (owner 2026-11-27; BUILT on branch `scaas-matrix`): scaas-app's planned
+`app-matrix` becomes the crate `clients/scaas-matrix` ([scaas-matrix.md](scaas-matrix.md)), which implements `MatrixTransport` and is
+used by scaas-app's front-ends, `scaas-tui` and this crate's e2e (PLANNED there: the e2e still runs its test-only HTTP client). The
+trait, its error `TransportError`, its value types and `conformance` live in the trait-only crate `clients/pqchat-transport`
+([CLI-MTX-01](scaas-matrix.md#CLI-MTX-01)), re-exported here at `pqchat_core::matrix`, so neither crate depends on the other; this
+crate's normal graph still holds no Matrix crate (`tests/deps.rs`). **Each user profile has its own Matrix**:
 its logins, session, store, crypto keys and device id are sealed in that profile and shared with no other; the app runs one
 `scaas-matrix` client per open profile, not per app, and a profile switch closes it before the other profile's opens. So "the app's
 live Matrix client" below is the open profile's: [CLI-PQC-20](../decisions.md#CLI-PQC-20).
@@ -106,7 +109,7 @@ its form (the send is the confirm): [CLI-SDK-36](../decisions.md#CLI-SDK-36).
 
 ## 3. The Matrix store
 
-Status: **BUILT** on the crate's side (`src/matrix.rs`, the conformance test `tests/matrix_conformance.rs`, the fake
+Status: **BUILT** on the crate's side (`src/matrix.rs` over `clients/pqchat-transport`'s trait, the conformance test `tests/matrix_conformance.rs`, the fake
 `tests/matrix_fake.rs`, the e2e over a local Synapse); scaas-app's contract, its section 11, is the app side, in its own
 repository, held to the trait by the same conformance test.
 
