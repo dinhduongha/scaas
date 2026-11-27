@@ -711,7 +711,11 @@ profile's name is a public field of its envelope, so a rebuilt index (never a fi
 profile; a row that points at a hidden envelope is refused and dropped. The generation of a protected profile accepts only HMAC
 names, their `.lock` files and FileStore's crash-left temporaries (removed at open); the unprotected `g0` holds plain items of part
 `sdk` only. The migration reads `--data-dir` or the default data directory on every OS, under the root lock and the legacy keystore
-lock, only when no profile directory exists; legacy items beside existing profiles are reported.
+lock, only when no profile directory exists; legacy items beside existing profiles are reported. **Change (owner 2026-11-28; BUILT,
+`scaas-profile` `migrated_default_sealed_after_commit`, the SDK's `migrated_default_refused_until_sealed`):** `set_passphrase` on a
+migrated "default" holding a keystore needs the user's confirm of the seeds moved: the SDK's `migrated_seeds()` shows their count
+and labels (the keystore's public fields), `set_passphrase` takes `ConfirmMigratedSeeds { seeds }` with that count (the crate
+`ConfirmMigratedKeystore`); without it, or with another count, `ConfirmationMissing`, before any KDF, nothing written.
 
 <a id="CLI-UPR-12"></a>**CLI-UPR-12** — **A profile's items are sealed under its own random data key, wrapped by Argon2id of its
 passphrase; every state refuses what does not belong to it** (controller call; BUILT: `vectors/profile/envelope.json`, `ua-rs`

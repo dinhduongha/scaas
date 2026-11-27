@@ -11,8 +11,8 @@
 )]
 
 use scaas_profile::{
-    keychain_name, uuid7, ConfirmDeleteUnreadable, ConfirmRebuildIndex, Error, ProfileEvent,
-    ProfileKeychain, ProfilePart, Profiles, ProfilesConfig,
+    keychain_name, uuid7, ConfirmDeleteUnreadable, ConfirmMigratedKeystore, ConfirmRebuildIndex,
+    Error, ProfileEvent, ProfileKeychain, ProfilePart, Profiles, ProfilesConfig,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -505,7 +505,9 @@ mod hooks {
     /// `set_passphrase` seals a migrated "default" (spec §7.3, §12): its legacy items sealed into part `sdk`, `migration`
     /// cleared by the commit, and the plain `g0/` removed only after the commit: a stop after the generation rolls back to the
     /// migrated profile whole; a stop after the commit leaves `g0/` until the next open; the store reads the keystore under the
-    /// passphrase; `keystore.head` stays beside the envelope.
+    /// passphrase; `keystore.head` stays beside the envelope. G-3 (owner 2026-11-28): without the caller's confirm of the
+    /// migrated keystore (`ConfirmMigratedKeystore`, the SDK's after the user confirmed its seeds) it is
+    /// `ConfirmationMissing`, before any KDF and with nothing written.
     #[test]
     fn migrated_default_sealed_after_commit() {
         let base = tmp();
@@ -517,8 +519,22 @@ mod hooks {
         let ks = LEGACY[2].1.as_bytes();
         for (stop, sealed) in [(Step::Generation, false), (Step::Committed, true)] {
             let o = p.open(&id, None).unwrap();
+            let runs = scaas_ua::wallet::ProfileKeys::kdf_runs();
+            assert_eq!(
+                code(o.set_passphrase(PASS, Some(TEST), None, None)),
+                "ConfirmationMissing"
+            );
+            assert_eq!(scaas_ua::wallet::ProfileKeys::kdf_runs(), runs, "no KDF");
+            assert!(
+                !dir.join("g1").exists() && !o.info().protected,
+                "nothing written"
+            );
             o.reseal_hook(Box::new(move |s| s == stop));
-            assert_eq!(code(o.set_passphrase(PASS, Some(TEST), None)), "VaultIo");
+            let confirmed = Some(ConfirmMigratedKeystore {});
+            assert_eq!(
+                code(o.set_passphrase(PASS, Some(TEST), None, confirmed)),
+                "VaultIo"
+            );
             assert!(
                 dir.join("g0").join("keystore").is_file(),
                 "{stop:?}: g0 kept"

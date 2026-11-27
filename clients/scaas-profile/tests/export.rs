@@ -403,7 +403,7 @@ mod hooks {
         let id = p.list().unwrap()[0].id.clone();
         let o = p.open(&id, None).unwrap();
         p.rename(&o, b"Alice", None).unwrap();
-        o.set_passphrase(PASS, Some(TEST), None).unwrap();
+        o.set_passphrase(PASS, Some(TEST), None, None).unwrap();
         let c = o.core();
         c.put_if(ProfilePart::Sdk, "keystore", None, KEYSTORE)
             .unwrap();

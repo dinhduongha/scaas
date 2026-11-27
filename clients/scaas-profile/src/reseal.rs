@@ -83,17 +83,31 @@ pub(crate) fn kdf_code(e: scaas_ua::wallet::Error) -> Error {
     }
 }
 
+/// The marker of [`OpenProfile::set_passphrase`] on a migrated "default" holding a keystore (owner 2026-11-28, review G-3):
+/// the caller showed the seeds being moved (the SDK: their labels and count from the keystore's public fields) and the user
+/// confirmed them.
+#[derive(Debug, Clone, Copy)]
+pub struct ConfirmMigratedKeystore {}
+
 impl OpenProfile {
     /// Protects an unprotected profile under `passphrase` (spec §7.3, §7.6): `kdf` (default 64 MiB / 3) within the bounds
     /// (`ProfileFormat`) and this device's maximum (`ProfileKdfTooLarge`) and the passphrase rule (`ProfilePassphraseWeak`),
     /// both before any KDF; `keep_settings` the `settings` item's bytes to seal (what the user kept of the shown settings; the
-    /// SDK computes them), `None` drops it. A protected profile is `Argument` (it never returns to unprotected).
+    /// SDK computes them), `None` drops it. A protected profile is `Argument` (it never returns to unprotected). A migrated
+    /// "default" (`migration: pending`) holding a `keystore` needs `migrated`, the caller's word that the user confirmed the
+    /// seeds being moved (owner 2026-11-28, review G-3), else `ConfirmationMissing`, before any KDF, nothing written.
     pub fn set_passphrase(
         &self,
         passphrase: &[u8],
         kdf: Option<KdfParams>,
         keep_settings: Option<&[u8]>,
+        migrated: Option<ConfirmMigratedKeystore>,
     ) -> Result<(), Error> {
+        // a keystore that does not read counts as one (fail closed)
+        let keystore = self.core.get(crate::ProfilePart::Sdk, "keystore");
+        if migrated.is_none() && self.core.migration_pending() && !matches!(keystore, Ok(None)) {
+            return Err(Error::ConfirmationMissing);
+        }
         // the settings kept must read back (review E-4): what `parse` refuses is `Argument`, before any KDF
         if let Some(b) = keep_settings {
             if b.len() > MAX_BYTES || rev_of(b) == u64::MAX || ProfileSettings::parse(b).is_err() {

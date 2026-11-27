@@ -46,6 +46,7 @@ ARCH-POS-15. Order of sources: AGENTS.md "Which source wins".
 | O15 | 2026-11-27 | scaas-app's default build links `ua-rs` only with the profile-crypto features; no signing code is compiled into it: `scaas-profile` takes `ua-rs`'s `user-profile` (the new feature `key-handles`: the arena, key handles, AEAD, HKDF, HMAC, Argon2id, `ProfileKeys`, `ExportKey`) and `json`, never `wallet`, `pq`, `signers`, `fam-*`, `zether` or `pqz` (§11). Source: "Owner ruling 2026-11-27 (chat): scaas-app's default build links ua-rs only with the profile-crypto features; no signing code is compiled into it." | CLI-UPR-32 |
 | O16 | 2026-11-28 | The label's associated data binds the envelope's revision: `lp("scaas.profile.label") ‖ be16(1) ‖ lp(id) ‖ be64(rev)` (§7.1), and the label is re-sealed at every envelope write. An older envelope written back with its `rev` raised opens its wrap and fails its label at that `rev`: `ProfileRollback` (review F-2). A pinned-format change: clientkeys and the vectors first, then `ua-rs`, `scaas-profile` and the SDK; no old-format reader (test-only chains). | CLI-UPR-12, CLI-UPR-19 |
 | O17 | 2026-11-28 | A deleted id keeps a permanent tombstone marker, `p/.tombstones/<id>` (an empty file), written by a delete before its rename and by start before it finishes a tombstone, kept until the user purges the markers (`purge_tombstones` with a confirm). A profile directory under a marked id is refused at start (`Event::ProfileRollback`) and at open (`ProfileRollback`): never listed, searched or opened, its keychain items never used. It closes the two-step put-back of review G-1 (the live directory renamed to its tombstone, start removes it with its keychain items, an old copy put back). | CLI-UPR-15, CLI-UPR-20 |
+| O18 | 2026-11-28 | `set_passphrase` on a migrated "default" (`migration: pending`, a keystore moved in) shows the seeds being moved and needs the user's confirm: the SDK's `migrated_seeds()` gives their count and labels from the keystore's public fields, and `set_passphrase(…, Some(ConfirmMigratedSeeds { seeds }))` requires that count; without it, or with another count, `ConfirmationMissing`, nothing written (the crate takes `ConfirmMigratedKeystore` for the same refusal). It answers review G-3: `migration: pending` is not authenticated, so a keystore a root writer planted is never sealed unseen. | CLI-UPR-11, CLI-UPR-12 |
 
 Standing rules applied: secrets never leave the SDK and every KDF, AEAD and MAC runs in `ua-rs` (CLI-SDK-01, CLI-SDK-02); fail closed
 with named errors; no decryption oracle (ARCH-POS-13); every RPC consumer takes a list of nodes (ARCH-POS-15); the node is open and
@@ -702,7 +703,9 @@ hidden profile's duplicate search; decisions CLI-UPR-13's Change); `set_passphra
 the settings bytes the user kept; `ImportChoices { confirm, kdf }` (the confirmed item ids and the new profile's KDF parameters);
 `ProfilesConfig` adds `kdf_max_kib`, `legacy` and `legacy_overlay` (the migration's sources, computed by the caller; the SDK reads
 no environment); `ProfileUnlock` has `Passphrase` only; `ProfileKeychain` is synchronous as sketched (decisions CLI-UPR-22's
-Change); `pqchat_store`, platform unlock and the `Vault` key-lock calls are wave 2. The built API:
+Change); `pqchat_store`, platform unlock and the `Vault` key-lock calls are wave 2. Added by the owner's rulings of
+2026-11-28 (§1 O16 to O23): `set_passphrase(…, migrated: Option<ConfirmMigratedSeeds>)` and `migrated_seeds()` (O18),
+`UserProfiles::purge_tombstones(ConfirmPurgeTombstones)` (O17). The built API:
 `clients/scaas-sdk/src/user_profile/mod.rs` and `clients/scaas-profile/src/lib.rs`.
 
 New codes (CLI-SDK-13's naming): `ProfileInUse`, `ProfileOpen`, `ProfileUnknown` (a `--profile` name or id with no visible
@@ -734,6 +737,10 @@ Every chain is test-only, so **a one-time move into "default" is enough**; no ol
   binary still running is held off by the legacy `keystore.lock`, and its later writes at the old path are reported at the next start.
 - A migrated "default" holds secrets while unprotected, the one case: every `vault` and `app_core` call on it is refused
   `ProfilePassphraseRequired` until `set_passphrase` seals it (§7.3: the plain `g0` is removed only after the commit).
+- **The seeds moved are confirmed** (owner O18, 2026-11-28): `migration: pending` is not authenticated, so before sealing the
+  client shows `migrated_seeds()` (the count and labels of the keystore's seeds, its public fields, no unlock) and
+  `set_passphrase` takes `ConfirmMigratedSeeds { seeds }` with that count; without it, or with another count,
+  `ConfirmationMissing`, nothing written.
 
 ## 13. Per-client notes (CLI-UPR-16; SPECIFIED)
 

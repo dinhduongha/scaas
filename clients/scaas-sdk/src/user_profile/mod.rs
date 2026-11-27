@@ -89,6 +89,20 @@ pub struct DeletePreview {
     pub unbacked: u32,
 }
 
+/// The seeds a migrated "default" moves into the profile at `set_passphrase` (owner 2026-11-28, review G-3), from the keystore's
+/// public fields: their count and labels, shown to the user before sealing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MigratedSeeds {
+    pub seeds: u32,
+    pub labels: Vec<String>,
+}
+
+/// `set_passphrase`'s confirm of a migrated "default"'s seeds: the count the user was shown ([`UserProfile::migrated_seeds`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConfirmMigratedSeeds {
+    pub seeds: u32,
+}
+
 /// `export`'s name typed again (spec §10.1), compared by `name_key`.
 pub struct ConfirmExportProfile {
     pub name: Arc<SecretBytes>,
@@ -386,20 +400,48 @@ impl UserProfile {
         Ok(s)
     }
 
+    /// The seeds a migrated "default" (`migration: pending`, a keystore moved in) would seal at `set_passphrase` (owner
+    /// 2026-11-28, review G-3): their count and labels from the keystore as stored (no unlock); `None` for any other profile.
+    pub async fn migrated_seeds(&self) -> Result<Option<MigratedSeeds>, SdkError> {
+        let core = self.open.core().clone();
+        if !core.migration_pending() || core.protected() {
+            return Ok(None);
+        }
+        let Some((pt, _)) = run(move || core.get(ProfilePart::Sdk, KEYSTORE)).await? else {
+            return Ok(None);
+        };
+        let ks = Keystore::parse(&pt)?;
+        Ok(Some(MigratedSeeds {
+            seeds: u32::try_from(ks.seeds.len()).unwrap_or(u32::MAX),
+            labels: ks.seeds.into_iter().map(|e| e.label).collect(),
+        }))
+    }
+
     /// Protects this unprotected profile under `passphrase` (spec §7.3, §7.6): `kdf` `None` the default (64 MiB / 3);
-    /// `keep_settings` the `settings` item's bytes to seal (what the user kept of the settings shown), `None` drops them. From
-    /// the commit on, this profile's `Sdk` creates secrets. `ProfilePassphraseWeak`, `ProfileFormat` / `ProfileKdfTooLarge`
-    /// (the parameters), `Argument` on a protected profile, `ProfileBusy`, `ProfileKdfOutOfMemory`.
+    /// `keep_settings` the `settings` item's bytes to seal (what the user kept of the settings shown), `None` drops them. A
+    /// migrated "default" with a keystore needs `migrated`, the seed count the user confirmed of [`UserProfile::migrated_seeds`]
+    /// (owner 2026-11-28, review G-3): `ConfirmationMissing` without it or for another count, nothing written. From the
+    /// commit on, this profile's `Sdk` creates secrets. `ProfilePassphraseWeak`, `ProfileFormat` / `ProfileKdfTooLarge` (the
+    /// parameters), `Argument` on a protected profile, `ProfileBusy`, `ProfileKdfOutOfMemory`.
     pub async fn set_passphrase(
         &self,
         passphrase: Arc<SecretBytes>,
         kdf: Option<KdfParams>,
         keep_settings: Option<Vec<u8>>,
+        migrated: Option<ConfirmMigratedSeeds>,
     ) -> Result<(), SdkError> {
+        let confirmed = match self.migrated_seeds().await? {
+            None => None,
+            Some(m) if migrated.is_some_and(|c| c.seeds == m.seeds) => {
+                Some(scaas_profile::ConfirmMigratedKeystore {})
+            }
+            Some(_) => return Err(SdkError::ConfirmationMissing),
+        };
         let open = self.open.clone();
         let keep = keep_settings.map(Zeroizing::new);
         run(move || {
-            passphrase.with(|p| open.set_passphrase(p, kdf, keep.as_deref().map(|k| &k[..])))
+            passphrase
+                .with(|p| open.set_passphrase(p, kdf, keep.as_deref().map(|k| &k[..]), confirmed))
         })
         .await
     }

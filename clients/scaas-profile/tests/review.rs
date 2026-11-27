@@ -102,7 +102,7 @@ fn protected(root: &Path, kc: Option<&Arc<Keychain>>) -> (Profiles, OpenProfile,
     let p = Profiles::new(cfg(root, kc)).unwrap();
     let id = p.list().unwrap()[0].id.clone();
     let o = p.open(&id, None).unwrap();
-    o.set_passphrase(PASS, Some(TEST), None).unwrap();
+    o.set_passphrase(PASS, Some(TEST), None, None).unwrap();
     let dir = o.core().dir().to_path_buf();
     (p, o, id, dir)
 }
@@ -454,7 +454,7 @@ fn e4_settings_written_only_when_readable() {
     assert_eq!(o.settings().unwrap().idle_lock_s, Some(60));
     let keep = br#"{"rev":1,"unknown":true}"#;
     assert_eq!(
-        code(o.set_passphrase(PASS, Some(TEST), Some(keep))),
+        code(o.set_passphrase(PASS, Some(TEST), Some(keep), None)),
         "Argument"
     );
     assert!(!o.info().protected);
@@ -497,7 +497,7 @@ fn a2_reseal_committed_reports_success() {
     let o = p.open(&id, None).unwrap();
     assert!(!o.info().protected, "control");
     kc.fail_put.store(true, SeqCst);
-    let r = o.set_passphrase(PASS, Some(TEST), None);
+    let r = o.set_passphrase(PASS, Some(TEST), None, None);
     kc.fail_put.store(false, SeqCst);
     r.unwrap();
     assert!(o.info().protected);

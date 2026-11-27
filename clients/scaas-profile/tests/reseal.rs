@@ -112,7 +112,7 @@ fn fresh() -> (Profiles, String, OpenProfile, PathBuf) {
 /// The same, protected under `PASS` (generation 1) and holding `a` in part `sdk` and `c` in part `pqchat`.
 fn protected() -> (Profiles, String, OpenProfile, PathBuf) {
     let (p, id, o, dir) = fresh();
-    o.set_passphrase(PASS, Some(TEST), Some(&settings(1, 1)))
+    o.set_passphrase(PASS, Some(TEST), Some(&settings(1, 1)), None)
         .unwrap();
     o.core().put_if(SDK, "a", None, &item(1, "a")).unwrap();
     o.core().put_if(PQCHAT, "c", None, &item(1, "c")).unwrap();
@@ -143,14 +143,14 @@ fn set_passphrase_seals_and_keeps() {
     // 7 characters; digits only; 4 characters in NFC though 8 code points as typed (NFD)
     for weak in ["abcdefg", "12345678", "e\u{301}e\u{301}e\u{301}e\u{301}"] {
         assert_eq!(
-            code(o.set_passphrase(weak.as_bytes(), Some(TEST), None)),
+            code(o.set_passphrase(weak.as_bytes(), Some(TEST), None, None)),
             "ProfilePassphraseWeak",
             "{weak:?}"
         );
     }
     let low = KdfParams { m_kib: 4096, t: 1 };
     assert_eq!(
-        code(o.set_passphrase(PASS, Some(low), None)),
+        code(o.set_passphrase(PASS, Some(low), None, None)),
         "ProfileFormat"
     );
     assert_eq!(ProfileKeys::kdf_runs(), runs, "refused before any KDF");
@@ -165,7 +165,7 @@ fn set_passphrase_seals_and_keeps() {
         "ProfilePassphraseRequired"
     );
     // the rule's positive twin: 8 characters of NFC
-    o.set_passphrase(PASS, Some(TEST), Some(&settings(2, 2)))
+    o.set_passphrase(PASS, Some(TEST), Some(&settings(2, 2)), None)
         .unwrap();
     assert!(o.info().protected);
     assert_eq!(get(&o, SDK, "settings"), Some(settings(2, 2)));
@@ -180,7 +180,7 @@ fn set_passphrase_seals_and_keeps() {
     let marker = format!("scaas.profile.{id}.protected");
     assert!(kc.get(&marker).unwrap().is_some(), "the protected marker");
     assert_eq!(
-        code(o.set_passphrase(PASS, Some(TEST), None)),
+        code(o.set_passphrase(PASS, Some(TEST), None, None)),
         "Argument",
         "never back"
     );
@@ -192,7 +192,7 @@ fn set_passphrase_seals_and_keeps() {
     assert_eq!(get(&o, SDK, "x"), Some(item(1, "x")));
     // the settings dropped
     let (_p, _id, o, _dir) = fresh();
-    o.set_passphrase(PASS, Some(TEST), None).unwrap();
+    o.set_passphrase(PASS, Some(TEST), None, None).unwrap();
     assert_eq!(get(&o, SDK, "settings"), None);
 }
 
@@ -211,7 +211,7 @@ fn g4_crash_at_each_step() {
         let (p, id, o, dir) = fresh();
         o.reseal_hook(Box::new(move |s| s == step));
         assert_eq!(
-            code(o.set_passphrase(PASS, Some(TEST), Some(&settings(1, 1)))),
+            code(o.set_passphrase(PASS, Some(TEST), Some(&settings(1, 1)), None)),
             "VaultIo"
         );
         drop(o);

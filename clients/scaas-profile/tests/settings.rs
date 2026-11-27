@@ -234,6 +234,7 @@ fn set_settings_needs_the_passphrase_to_weaken() {
         PASS,
         Some(scaas_profile::KdfParams { m_kib: 8192, t: 1 }),
         None,
+        None,
     )
     .unwrap();
     assert!(o.settings().unwrap() == ProfileSettings::default());

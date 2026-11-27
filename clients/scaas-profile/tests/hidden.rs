@@ -91,7 +91,7 @@ fn hidden(p: &Profiles, name: &str, pass: &[u8]) -> OpenProfile {
 fn visible(p: &Profiles, name: &str, pass: &[u8]) -> OpenProfile {
     let id = p.create(name).unwrap().id;
     let o = p.open(&id, None).unwrap();
-    o.set_passphrase(pass, Some(TEST), None).unwrap();
+    o.set_passphrase(pass, Some(TEST), None, None).unwrap();
     o
 }
 

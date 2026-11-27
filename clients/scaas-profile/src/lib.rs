@@ -42,7 +42,7 @@ pub use lifecycle::{
 };
 pub use names::{check_name, name_key, same_name, uuid7};
 pub use profile::{MatrixStore, OpenProfile, ProfileEvent, ProfileInfo, Profiles, ProfilesConfig};
-pub use reseal::Step;
+pub use reseal::{ConfirmMigratedKeystore, Step};
 pub use settings::ProfileSettings;
 pub use store::{Core, CoreOpen, Item, Manifest, Plain, ProfilePart, WriteGuard, PART_MAX};
 

@@ -593,7 +593,7 @@ async fn passphrase_required_before_any_work() {
         "refused before any work: no store call"
     );
     // the positive twin
-    up.set_passphrase(sec(PASS), Some(TEST_KDF), None)
+    up.set_passphrase(sec(PASS), Some(TEST_KDF), None, None)
         .await
         .unwrap();
     let seed = v.import_words(words()).await.unwrap().id;
@@ -709,6 +709,7 @@ async fn hidden_calls_route() {
 /// passphrase. `delete_preview` reads the migrated keystore throughout (two seeds, one without a backup).
 #[tokio::test(flavor = "multi_thread")]
 async fn migrated_default_refused_until_sealed() {
+    use scaas_sdk::user_profile::ConfirmMigratedSeeds;
     use scaas_sdk::vault::{FileStore, Generate};
     use scaas_sdk::{Sdk, SdkConfig};
     let base = tmp();
@@ -793,10 +794,39 @@ async fn migrated_default_refused_until_sealed() {
     assert_eq!(core.calls(), calls, "refused before any store call");
     let p = up.delete_preview().await.unwrap();
     assert_eq!((p.seeds, p.unbacked), (2, 1));
+    // G-3 (owner 2026-11-28): the seeds being moved are shown (labels and count, the keystore's public fields), and sealing
+    // needs the user's confirm of that count (`ConfirmationMissing` without it or with another count, nothing written)
+    let m = up.migrated_seeds().await.unwrap().unwrap();
+    let mut labels = m.labels.clone();
+    labels.sort();
+    assert_eq!(
+        (m.seeds, labels),
+        (2, vec!["G".to_string(), "Main".to_string()])
+    );
+    for wrong in [None, Some(ConfirmMigratedSeeds { seeds: 1 })] {
+        assert_eq!(
+            code(
+                up.set_passphrase(sec(PASS), Some(TEST_KDF), None, wrong)
+                    .await
+            ),
+            "ConfirmationMissing"
+        );
+    }
+    assert!(!up.core().protected(), "nothing sealed");
     // the positive control: sealed, the same `Sdk` reads the migrated keystore
-    up.set_passphrase(sec(PASS), Some(TEST_KDF), None)
-        .await
-        .unwrap();
+    up.set_passphrase(
+        sec(PASS),
+        Some(TEST_KDF),
+        None,
+        Some(ConfirmMigratedSeeds { seeds: 2 }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        up.migrated_seeds().await.unwrap(),
+        None,
+        "no longer migrating"
+    );
     let mut ids: Vec<String> = v.seeds().await.unwrap().into_iter().map(|s| s.id).collect();
     ids.sort();
     let mut want = vec![generated.clone(), imported.clone()];
