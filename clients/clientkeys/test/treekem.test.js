@@ -1640,3 +1640,21 @@ test("the path-less re-check's R-1: a resume keeps the compromise warnings, as a
   );
   assert.deepEqual(more.review, cold.review, "the leaves under review");
 });
+
+test("F-1 (owner 2026-11-28): a device's own path-less record whose nonce its seed reproduces but whose tag it could not have written is the compromise warning, with no key and no chain until a path commit; another member's wrong tag stays C45", () => {
+  const w = f.pathlessFaultsScenario(false);
+  const st = (name) =>
+    Object.fromEntries(f.replayOf(w, name).epochs.map((e) => [e.epoch, [e.state, e.reason ?? null]]));
+  const B = st("B");
+  const A = st("A");
+  // epoch 3: B's own path-less Add with a wrong tag; epoch 6: A's own
+  assert.deepEqual(B[3], ["compromise", null], "B's own record");
+  assert.deepEqual(A[6], ["compromise", null], "A's own record");
+  // no chain after it: B's next path-less epochs are not followed until A's path commit at 7
+  assert.deepEqual(B[4], ["not followed", "parent not followed"], "B lost the chain");
+  assert.equal(B[7][0], "followed", "the path commit reaches B");
+  // control: the same wrong tags at the other anchored members stay "author did not hold" (C45)
+  assert.equal(A[3][0], "author did not hold", "B's record at A");
+  assert.equal(st("C")[6][0], "author did not hold", "A's record at C");
+  assert.equal(st("C")[3][0], "author did not hold", "B's record at C");
+});
