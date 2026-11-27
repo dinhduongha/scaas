@@ -2,11 +2,11 @@
 
 **Status:** SPECIFIED, nothing built. A **frame**: the owner's rulings of 2026-11-27 (§1, §16) are fixed; the means are controller
 calls (`owner: no`). Fable reviewed the frame twice on 2026-11-27: at `06d9843d5` (three areas, all "approve with fixes") and again
-at `fa51e8275` (round 2: no P1, every round-1 finding fixed or partly fixed, new findings from the fixes); every finding of both
-rounds is applied as the controller's ruling of the same day (§19). No decryption-oracle path was found in either round, and no owner
+at `fa51e8275` (round 2: no P1, every round-1 finding fixed or partly fixed, new findings from the fixes), then a third time at
+`9f2ee89b7` (round 3: area C approve, areas A and B approve with one P1 each, no P0); every finding of the three rounds is applied as the controller's ruling of the same day (§19). No decryption-oracle path was found in either round, and no owner
 ruling was reopened. Branch `user-profiles-spec` (from `dev` `644ea61a8`), worktree `.claude/worktrees/user-profiles-spec`. Rule ids
 (SPECIFIED, defined once in [clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12, recorded in [decisions.md](../../decisions.md)
-§41): CLI-UPR-01 to CLI-UPR-27. No contract, signed byte format, chain profile or node rule changes; no on-chain byte changes. The
+§41): CLI-UPR-01 to CLI-UPR-28. No contract, signed byte format, chain profile or node rule changes; no on-chain byte changes. The
 `ua-rs` calls and the two file formats of §7 and §10.1, and the keystore's new vault label of §7.4, are new and need vector rows in
 clientkeys and `ua-rs` before code. UNAUDITED.
 
@@ -175,8 +175,9 @@ keystore format (CLI-SDK-03), its MAC, its anchor and every seed's own vault pas
 {"format":"scaas.profiles","v":1,"rev":7,"last":"0193b2c4-6a1e-7c3d-9f20-5b8e1d2a4c6f","profiles":[{"id":"0193b2c4-6a1e-7c3d-9f20-5b8e1d2a4c6f","name":"default"}]}
 ```
 
-- **A cache, never the truth.** A visible profile's name is a **public field of its envelope** (`name`), in clear and, for a
-  protected profile, authenticated by the wraps' associated data (§7.1); a hidden profile's envelope has no public name. The index
+- **A cache, never the truth.** A visible profile's name is a **public field of its envelope** (`name`), in clear: a **hint** for the
+  list and the rebuild, outside the wraps' associated data; the authoritative name and hidden flag are the sealed `label` (§7.1),
+  compared with the hint after unlock. A hidden profile's envelope has no public name. The index
   only spares the picker a read of every envelope. It is rebuilt from the envelopes whenever it is missing or does not parse while
   `p/` holds a profile directory, which is **never a first run**: one row per envelope with a public name, protected or not. A
   rebuild therefore lists **every visible profile**; only hidden ones are unlisted, as always. Also offered on demand with a typed
@@ -191,10 +192,12 @@ keystore format (CLI-SDK-03), its MAC, its anchor and every seed's own vault pas
   **one helper**, `name_key(s)` = NFKC, then Unicode lower case (Rust's `str::to_lowercase`, JavaScript's `toLowerCase`, at the
   Unicode version the vectors pin), compared in constant time over equal-length padded buffers. Visible names are unique by
   `name_key` (`ProfileNameTaken`). A name from a file or an envelope passes the same helper before it is shown.
-- **The index is not trusted.** At open the row is compared with the envelope: a row whose label differs from the envelope's public
-  name is rewritten from it (`Event::ProfileIndexMismatch`); a row that points at an envelope with no public name (a hidden profile)
-  is refused: that open is `ProfileOpen`, the row is dropped, nothing else is written. A planted row cannot hide a hidden profile
-  from the prompt, since the search reads envelopes, not rows (§8).
+- **The index and the hint are not trusted.** At open the row is compared with the envelope, and after unlock the envelope's hint with
+  the sealed `label`: a visible profile whose row or hint differs from its label has both rewritten from the label
+  (`Event::ProfileIndexMismatch`); a row that points at an envelope with no public name, or an envelope whose label is sealed as
+  hidden but which carries a planted public name, is refused: that open is `ProfileOpen`, the row is dropped and the planted hint
+  removed, nothing else is written, and the profile opens again through the hidden prompt. A planted row cannot hide a hidden profile
+  from the prompt, since the search reads envelopes, not rows (§8); a planted hint can (a denial, §14).
 - At most **32** profile directories under `p/` (`ProfileLimit` at create and import), of which at most **16** hidden (§8).
 
 ## 7. Protection (CLI-UPR-04, CLI-UPR-05, CLI-UPR-12, CLI-UPR-19 to CLI-UPR-21; SPECIFIED)
@@ -211,9 +214,10 @@ drop, never written in clear, never across the FFI). `profile.envelope` is canon
 | `format`, `v` | `scaas.profile`, 1 |
 | `id` | the profile's id, equal to its directory's name |
 | `state` | `unprotected` or `protected` |
+| `rev` | the envelope's own revision, raised at every envelope write (rename, `hide`, `show`, platform unlock, a re-seal's commit); compared with the anchor (§7.2), outside the wraps' associated data |
 | `gen` | the current generation `N` (0 while unprotected) |
 | `migration` | `pending` while a migration fills this profile (§12), else absent |
-| `name` | a visible profile's name (NFC), in clear; absent on a hidden profile |
+| `name` | a visible profile's name (NFC), in clear: a hint, outside the wraps' associated data, checked against `label` after unlock; absent on a hidden profile |
 | `kdf` | protected: `{alg: "argon2id", v: 1, m, t, p: 4, salt: <16 random bytes, base64>}`, memory in KiB, the bounds of §7.5 |
 | `pass` | protected: `DEK_p` wrapped under `KEK_pass` (below) |
 | `platform` | optional, never on a hidden profile: `{salt: <32 random bytes>, wrap}`, `DEK_p` wrapped under `K_plat` |
@@ -242,8 +246,10 @@ shown, without a terminator; integers big-endian at the width shown.
 
 - `pass` and `platform.wrap` are `ua-rs` `seal_key` wraps of `DEK_p` and keep its prefix (`"scaas/ua/v1/keywrap" ‖ u8(usage)`,
   `appkey.rs`), followed by the caller's AD: `lp("scaas.profile.wrap")` (or `lp("scaas.profile.platform")`) ‖ the canonical JSON
-  object of **exactly** the public fields `format`, `v`, `id`, `state`, `gen`, `name` (when present) and `kdf`, in that order, with no
-  other field. A changed state, generation, visible name, parameter or salt fails the wrap; clientkeys produces the same bytes.
+  object of **exactly** the public fields `format`, `v`, `id`, `state`, `gen` and `kdf`, in that order, with no other field (not
+  `rev`, not `name`). A changed state, generation, parameter or salt fails the wrap; clientkeys produces the same bytes. So `rename`,
+  `hide()` and `show()` re-seal only `label` under `DEK_p` and never touch the wraps: they need no passphrase and no biometric, and no
+  key outlives its call (`hide()` still drops the platform wrap, §7.6).
 - `label`: AD = `lp("scaas.profile.label") ‖ be16(1) ‖ lp(id)`.
 
 **Refusals by state** (no item is read before these hold):
@@ -273,23 +279,32 @@ shown, without a terminator; integers big-endian at the width shown.
   other store: on every platform it names files itself (§5).
 - **Manifests, one per part.** Each part's manifest is a sealed item of the reserved part `profile`, named `manifest:<part>` (so its
   AD and its HMAC file name are its own and no store item can take them), holding every `(item name, rev)` of the part and a
-  **tombstone** `(item name, last rev)` for every item the part deleted, and its own `rev`. Bound: at most 65,536 entries per part
-  (a write that would pass it is refused, `ProfilePartFull`; pqchat-core prunes what it no longer needs) and the 16 MiB plain bound.
+  **tombstone** `(item name, last rev)` for every item the part deleted, and its own `rev`. An item created again under a deleted
+  name continues **above** its tombstone: the core stores `rev = tombstone rev + the caller's revision`, and the face shows the caller
+  its own revision (pqchat-core's 0 = absent, then 1), so a re-created item is never a false rollback. **Tombstones are dropped at a
+  re-seal**: the new generation's key opens no item of the old one, so nothing deleted can be put back. Bound: at most 65,536 entries
+  per part, tombstones included (a write that would pass it is refused, `ProfilePartFull`; pqchat-core prunes what it no longer needs;
+  a re-seal retires the tombstones) and the 16 MiB plain bound.
 - **Writes.** Under the profile's **store write lock** (§7.3): the item (`put_if` as today), then the part's manifest with that item's
   new `rev` (`put_if` at the manifest's read `rev`, three tries, then `StoreConflict`), then the anchor. A delete writes the manifest
   first with the item's tombstone, then removes the file. Cost, stated (arithmetic, not a timing): one item write is three atomic file
   writes (item, manifest, anchor), each a temporary file, `fsync` and rename; a keystore update, which today writes `keystore.prev`,
   `keystore` and `keystore.head`, becomes seven.
-- **The anchor** is `{gen, for each part its manifest's rev and the first 16 bytes of SHA-256 of its file, the first 16 bytes of
-  SHA-256 of profile.envelope}`, in the keychain item `scaas.profile.<id>.head`, else the file `profile.head`. It is written after
-  every item write, after every envelope write (rename, `hide`, `show`, platform unlock) and at every re-seal's commit, and compared in
-  the order `gen`, then each manifest, then the envelope.
+- **The anchor** is `{gen, for each part its manifest's rev and the first 16 bytes of SHA-256 of its file, the envelope's rev and the
+  first 16 bytes of SHA-256 of profile.envelope}`. Every client writes the file `profile.head`; a client whose store has a keychain
+  also writes the keychain item `scaas.profile.<id>.head` and compares both by the same rule. It is written after every item write,
+  after every envelope write and at every re-seal's commit.
+- **The anchor is compared as the keystore's is** (`vault/mod.rs` `rolled_back`): for the generation, for each manifest and for the
+  envelope, a value **ahead** of the anchor (a higher `gen`, a higher `rev`) is a crash between the write and the anchor's write, or a
+  write by another client that could not reach this anchor, and **the anchor follows**; a value **below** the anchor, or **another
+  hash at the same** `rev`, is `ProfileRollback`. So a kill between a manifest (or an envelope) and its anchor opens with no event,
+  and the CLI (no keychain) and the desktop app (a keychain) taking turns on one profile open with no event.
 - **Rollback, exactly what holds.** On read: an item whose `rev` is below its manifest's, or at or below its own tombstone's, is
   `Event::ProfileRollback` (shown, not fatal, writes refused for that item until the user accepts, as `KeystoreRollback`); an item
   above the manifest's is a crash between the two writes, and the manifest is brought forward; an item the manifest **lists but whose
-  file is missing** is `Event::ProfileDamaged` (a removed `settings` does not silently fall back to defaults); a manifest or an
-  envelope that differs from the anchor, or a `gen` below it, is `ProfileRollback` for the profile, so an envelope from before a
-  `hide()` or a rename put back is seen. Where the anchor is the file `profile.head` in the same directory (every client whose store
+  file is missing** is `Event::ProfileDamaged` (a removed `settings` does not silently fall back to defaults); a manifest, an
+  envelope or a `gen` below the anchor, or another hash at the same rev, is `ProfileRollback` for the profile, so an envelope from
+  before a `hide()` or a rename put back is seen. Where the anchor is the file `profile.head` in the same directory (every client whose store
   has no keychain: the CLI and the TUI on every OS, the desktop app on Linux), **the anchor file and whatever it covers, put back
   together** (one item, its manifest and `profile.head`; or the whole directory), is not seen: stated in §14. A passphrase change
   rotates `DEK_p` (§7.3), so an old envelope and the old passphrase open nothing written after the change.
@@ -303,7 +318,10 @@ shown, without a terminator; integers big-endian at the width shown.
   the same name; this is a change to the keystore code (one mapping), which otherwise runs above the adapter as today.
 - **One store core, two faces.** The sealed store is one synchronous core (file I/O and AEAD are blocking work), holding the store
   write lock and the manifests for every part. The SDK's `SecureStore` face runs it on `spawn_blocking`; **pqchat-core's
-  `PqChatStore` face is synchronous** and pqchat-core calls it from a blocking task (`spawn_blocking`; one change in pqchat-core).
+  `PqChatStore` face is synchronous** and pqchat-core calls it from a blocking task: the one helper is pqchat-core's `Items`
+  (`store.rs:91`), whose `get` and `update` become `async` and run the synchronous store call on `spawn_blocking`; its 33
+  construction sites in 9 files (`chain_state.rs`, `chain_store.rs`, `consent.rs`, `device.rs`, `matrix.rs`, `message.rs`,
+  `reads.rs`, `signed.rs`, `stores.rs`, counted at `9f2ee89b7`) gain an `.await` and nothing else.
   Chosen over an async adapter because a synchronous face never waits on a future, so it cannot deadlock or panic on a
   current-thread runtime, and pqchat-core's trait, its other stores and its tests stay as they are. pqchat-core's revision (0 =
   absent, then +1) is the item's `rev`. `StoreFault` **carries the code** (`ProfileLocked`, `VaultFormat`, `ProfileRollback`,
@@ -315,15 +333,18 @@ shown, without a terminator; integers big-endian at the width shown.
   Argon2id output, dummy runs included, the OpaqueString bytes of a passphrase, a typed hidden name, and every plaintext buffer of an
   item, a label, an export or an import live in `Zeroizing` buffers or the arena and are dropped at the end of the call; `DEK_p` and
   the derived item keys stay in the profile arena until lock.
+- **The browser** (PLANNED): IndexedDB has no synchronous form, so the synchronous core and pqchat-core's synchronous face do not
+  carry to wasm32; the browser store needs an async core of its own, the same formats and rules, and is a later task.
 
 ### 7.3 Re-seal, crash safety, writes during a re-seal (CLI-UPR-20, CLI-UPR-25)
 
 `set_passphrase` (unprotected → protected), `change_passphrase` (a new `DEK_p` under the new passphrase) and a raise of the KDF
 parameters are one procedure, run under the instance lock **and the profile's store write lock, held for the whole run**:
 
-1. take the store write lock: every writer of every part (the SDK, pqchat-core, pqvault-core) waits until the commit, then writes
-   into the new generation under the new keys; no write lands in `g<N>/` once its items are being copied, so none is lost and a
-   pqchat counter never goes backwards;
+1. take the store write lock: every writer of every part (the SDK, pqchat-core, pqvault-core) **waits** until the commit (never
+   `StoreConflict`), then writes into the new generation under the new keys; no write lands in `g<N>/` once its items are being
+   copied, so none is lost and a pqchat counter never goes backwards. A writer waits at most **120 s** (a re-seal of the largest
+   profile, 64 MiB of items, is far below it); past that it fails **`ProfileBusy`** and writes nothing, and the caller retries;
 2. write `profile.envelope.next` with `state: "protected"` and `gen: N+1` **from the start**, the new `kdf`, the `pass` wrap of a
    **new** `DEK_p` and its `label`; the file name is the journal (a reader never takes `.next` as the envelope), so no `sealing`
    value and no second wrap exist; a passphrase change or a parameter raise **drops the `platform` wrap and its key** (the user turns
@@ -337,7 +358,9 @@ parameters are one procedure, run under the instance lock **and the profile's st
 At the profile's own open (under its instance lock; never at another profile's or another instance's start): a
 `profile.envelope.next` present means the commit did not happen, so `g<N+1>/` is removed **first** and then the journal, and the
 profile stays as it was (**roll back**; the user repeats the action); a generation **below** the envelope's `gen` is removed (a
-crash between steps 4 and 5); a generation **above** `gen` with no journal is `Event::ProfileDamaged` (and `ProfileRollback` where the
+crash between steps 4 and 5) **only when `g<gen>/` exists and the wrap has opened** (so after the passphrase and the anchor check);
+otherwise it is `Event::ProfileDamaged` and nothing is removed, so an envelope with an edited or newer `gen` beside an older generation
+never erases it; a generation **above** `gen` with no journal is `Event::ProfileDamaged` (and `ProfileRollback` where the
 anchor says the envelope is old), **never removed**. A crash at any step therefore leaves either the old profile whole or the new
 one whole, and an old envelope put back never erases the live generation. The previous plain `g0` of a migrated "default" is removed
 only after the commit.
@@ -428,10 +451,12 @@ anyone enrolled on a shared OS account (O11), cannot plant an endpoint that deci
 ## 8. Hidden profiles (CLI-UPR-08, CLI-UPR-13; SPECIFIED)
 
 - **At most 16 hidden profiles** per root. `create_hidden`, an import as hidden and `hide()` refuse at that cap
-  (`ProfileHiddenLimit`), so the search below never meets more hidden envelopes than it may try.
+  (`ProfileHiddenLimit`). The search below accepts up to **32** candidates (the directory limit), so 16 hidden profiles and damaged
+  directories together never lock the hidden prompt out.
 - **`create_hidden(name, passphrase)`** makes a profile protected from its first write, with no public name and its label sealed as
-  hidden; **no index row is written, ever**. `hide()` on an open, protected, visible profile removes the public name (one envelope
-  write, the wraps re-sealed since `name` is in their associated data, the anchor rewritten) and drops its row; residual, stated: the
+  hidden; **no index row is written, ever**. `hide()` on an open, protected, visible profile removes the public name and re-seals
+  the label as hidden (one envelope write under `DEK_p`, no passphrase; the platform wrap dropped; the anchor rewritten) and drops
+  its row; residual, stated: the
   name was in the index and the envelope before, and earlier copies of those files (old disk blocks, backups) and shell history may
   keep it; a rename after hiding is the remedy. `show()` writes the public name and the row.
 - **No duplicate.** Every path that makes a profile hidden or changes a hidden profile's name or passphrase (`create_hidden`, an import
@@ -442,13 +467,13 @@ anyone enrolled on a shared OS account (O11), cannot plant an endpoint that deci
   never on a command line, §13). The SDK, reading without any instance lock and without the root lock:
   1. lists `p/` and takes the **candidates**: every directory named by a UUID whose envelope has no public name, plus every
      UUID-named directory whose envelope is missing or does not parse (`.tmp-*`, tombstones and `.journal` are not candidates; the
-     index is not read, so a planted row cannot hide a profile); more than 16 candidates is **`ProfileSearchTooLarge`** before any
-     run, which only unusable directories can cause, since hidden profiles are capped at 16;
+     index is not read, so a planted row cannot hide a profile); more than 32 candidates is **`ProfileSearchTooLarge`** before any
+     run, which only directories planted beyond the directory limit can cause;
   2. runs **max(candidates, 4)** KDF runs: each hidden envelope (protected, `id` equal to its directory, parameters within this
      device's maximum) at **its own** parameters, then the wrap, then `name_key` of the sealed name against the typed one; a candidate
      without a usable envelope (missing, unreadable, unprotected without a name, above this device's maximum, a mismatched id) costs
      one run at the default parameters and never stops the search; dummy runs at the default parameters fill up to four; **no early
-     stop**;
+     stop**; the total work is bounded by 32 runs at this device's maximum;
   3. on exactly one match takes that directory's instance lock (`ProfileInUse` if held, which only a holder of the name and
      passphrase can provoke), re-reads its envelope under the lock and opens it; zero matches or more than one is `ProfileOpen`, as is
      every other failure: no such name, a wrong passphrase, no hidden profile at all.
@@ -456,7 +481,7 @@ anyone enrolled on a shared OS account (O11), cannot plant an endpoint that deci
 - **Equal time, exactly what holds:** a failed open costs the same for zero to four candidates **when every candidate is at the
   default parameters**. A candidate at raised parameters makes every hidden open slower by its extra cost, and more than four
   candidates add one run each: a screen observer then learns that some hidden or damaged directory exists or has raised parameters,
-  which the disk tells anyway. The total work is bounded by 16 runs at this device's maximum.
+  which the disk tells anyway. The total work is bounded by 32 runs at this device's maximum.
 - Unusable directories are also reported at the start (`Event::ProfileDamaged`, no name), so the user can remove them by hand.
 - The prompt "Open another profile" is always offered. A hidden profile writes nothing that names it outside its directory (not
   `last`, not a recent list); its name is never drawn (the TUI and the app show "Hidden profile").
@@ -504,7 +529,7 @@ re-seal or a dialog; work inside a profile runs under its instance lock.
 | **open** (hidden) | name and passphrase | §8 |
 | **lock** | — | `vault.lock_all()` on the profile's `Sdk` (every seed and hidden set; it relies on review A-8's code fix, `lock_all` also walking hidden sets on seeds that are not unlocked, branch `fix-lock-all-hidden`), key-locked keys closed, then **`Sdk::close()`** (new: watchers, followers and operation trackers stopped, RPC and gateway pools dropped with the credential values they hold, a closed flag every later call meets), the profile's stores refuse every call (`ProfileLocked`), the profile arena destroyed, the Matrix client closed, the instance lock released; the client clears its view models and what it put on the clipboard (CLI-TUI-14). The `Sdk` object may outlive the lock in a binding's `Arc`; every call on it then fails `ProfileLocked` and no request leaves on it |
 | **switch** | — | lock, then open the other (O7); nothing is carried over |
-| **rename** | open; for a hidden profile no duplicate (§8) | a visible profile's public name and row, or a hidden profile's sealed label, rewritten; the wraps re-sealed when the public name changes; the anchor rewritten |
+| **rename** | open; for a hidden profile no duplicate (§8); no passphrase | the sealed label re-sealed under `DEK_p`, and for a visible profile its public hint and row; the wraps untouched; the anchor rewritten |
 | **hide / show** | open, protected | §8 |
 | **passphrase, parameters** | open | §7.3 |
 | **settings** | open; the profile passphrase for a weakening change | §7.7 |
@@ -562,14 +587,15 @@ payload = be32(len) ‖ label JSON ‖ be32(len) ‖ settings JSON ‖ be16(item
   (`O_CREAT | O_EXCL`, mode `0600`), never through an existing file or a symlink (`Argument`); mobile and wasm: chunks handed to the
   platform's share sheet or file picker.
 - **Import is two calls** (CLI-UPR-27). `import_preview(source, export_passphrase)` verifies and opens the whole file (no KDF under the
-  root lock), builds the new profile's temporary directory `p/.tmp-<random>/` with its `build.lock` held, writes nothing else and
-  returns an `ImportReview`: the name and hidden flag, the seed and account counts, and **every setting**, each with an item id:
+  root lock) and **keeps the decrypted payload in memory** (at most 64 MiB, in `Zeroizing` buffers held by the review handle):
+  **nothing plain is written to disk**, and a crash during the review leaves nothing. It returns an `ImportReview`: the name and hidden flag, the seed and account counts, and **every setting**, each with an item id:
   endpoints by label and host with their `first` marks, the idle lock, the clipboard choice, and what would be kept without a confirm
   (a stronger policy, lowered caps, the default chain profile), so a file that sets caps to zero or picks another default chain is
   seen; every string passes the name helper before it is shown. `import(review, choices, profile_passphrase, name)` then seals the new
-  profile under the new passphrase (a new UUIDv7, protected from the first write, O5), applies the choices by item id, and commits
-  under the root lock by one rename and the row (none for a hidden profile, after the duplicate check of §8; `ProfileHiddenLimit`,
-  `ProfileLimit`, `ProfileNameTaken` as named). Dropping the review removes its temporary directory.
+  profile under the new passphrase (a new UUIDv7, protected from the first write, O5), applies the choices by item id, writes the
+  temporary directory `p/.tmp-<random>/` (its `build.lock` held), **sealed under the new profile's key from its first byte**, and
+  commits under the root lock by one rename and the row (none for a hidden profile, after the duplicate check of §8; `ProfileHiddenLimit`,
+  `ProfileLimit`, `ProfileNameTaken` as named). Dropping the review wipes its buffers.
 - **Settings at import keep only what cannot weaken:** a stronger RPC policy, lowered caps and the default chain profile are kept;
   every named endpoint, every `first` mark, the idle lock and the clipboard choice are dropped unless the user confirms each one by
   itself; **a credential reference in a file is always dropped**, never offered for confirm (export never writes one, so a file that
@@ -647,7 +673,8 @@ impl Vault {   // the key lock (§7.4); ImportKey gains key_passphrase: Option<A
 New codes (CLI-SDK-13's naming): `ProfileInUse`, `ProfileOpen`, `ProfileUnknown` (a `--profile` name or id with no visible
 profile), `ProfileNameTaken`, `ProfileNameInvalid`, `ProfileLimit`, `ProfileHiddenLimit`, `ProfilePartFull`, `ProfileRootUnsafe`,
 `ProfilePassphraseRequired`, `ProfilePassphraseWeak`, `ProfileFormat`, `ProfileVersion`, `ProfileKdfTooLarge`,
-`ProfileKdfOutOfMemory`, `ProfileSearchTooLarge`, `ProfileImportOpen`, `ProfileExportTooLarge`, `ProfileLocked`, `KeyLocked`; events
+`ProfileKdfOutOfMemory`, `ProfileSearchTooLarge`, `ProfileImportOpen`, `ProfileExportTooLarge`, `ProfileLocked`, `ProfileBusy` (a
+writer that waited 120 s on a re-seal), `KeyLocked`; events
 `ProfileIndexMismatch`, `ProfileRollback`, `ProfileDamaged`. No code, event or `Debug` carries an id, a name, a passphrase or a path.
 The `ua-rs` calls (the profile arena, the Argon2id wraps, the item seal and HMAC name, the label seal, the export chunk seal, the
 dummy run) and the two formats need vector rows in clientkeys and `ua-rs` before code (AGENTS.md: byte formats everywhere at once);
@@ -706,7 +733,8 @@ Every chain is test-only, so **a one-time move into "default" is enough**; no ol
     logs.
   - **The chain-profile rename (§15) lands first**, so `--profiles <file>` and `--profile <name>` never sit one letter apart.
 - **Browser (wasm), PLANNED.** One IndexedDB database per profile named by its id, the index in its own database, Web Locks, the same
-  sealed core and parameters up to 256 MiB.
+  formats and parameters up to 256 MiB, and an async store core of its own: the synchronous core and pqchat-core's synchronous face
+  do not carry there (§7.2).
 
 ## 14. Threat model (SPECIFIED)
 
@@ -719,7 +747,7 @@ Every chain is test-only, so **a one-time move into "default" is enough**; no ol
 | someone at a session left open (the idle lock locks the seeds, not the profile, Q-UP6) | the same as the row above, without a biometric | the same bounds |
 | a second instance (the same user's other window or command) | refused: `ProfileInUse` | the OS lock (§9); a malicious process of the same user is out of scope |
 | someone watching the screen | the visible names only; no hidden name drawn; the hidden prompt always present; a failed hidden open costs the same for zero to four candidates at the default parameters | §8 |
-| someone who writes the root or a profile directory (the other person on a shared account, a restore) | **denials, a writer's power:** delete or corrupt files; plant UUID directories without a usable envelope until hidden opens are `ProfileSearchTooLarge` (reported at start as damaged, removed by hand); delete a visible profile by `delete_locked` with its name typed (no passphrase, as removing its directory by hand would do anyway). **No disclosure:** rename or plant index rows (checked against the envelopes at open; a row on a hidden profile refused; the search ignores rows); plant an unprotected directory with a visible name and settings (announced as unprotected, its settings shown before sealing, §7.1); put back old copies (next row) | §6, §7.1, §7.2, §8 |
+| someone who writes the root or a profile directory (the other person on a shared account, a restore) | **denials, a writer's power:** delete or corrupt files; plant UUID directories without a usable envelope until hidden opens are `ProfileSearchTooLarge` (reported at start as damaged, removed by hand); delete a visible profile by `delete_locked` with its name typed (no passphrase, as removing its directory by hand would do anyway). plant a public name on a hidden profile's envelope, which only takes it out of the hidden prompt (the open through the list is refused and removes the hint); change a visible profile's shown name before unlock (the hint is outside the wraps), detected at unlock against the sealed label (`ProfileIndexMismatch`) and rewritten. **No disclosure:** rename or plant index rows (checked against the envelopes and the sealed label; a row on a hidden profile refused; the search ignores rows); plant an unprotected directory with a visible name and settings (announced as unprotected, its settings shown before sealing, §7.1); put back old copies (next row) | §6, §7.1, §7.2, §8 |
 | someone who puts back an older copy | one item, a manifest or the envelope (a pre-`hide()` or pre-rename envelope included): `ProfileRollback` (§7.2); a listed item removed: `ProfileDamaged`; the keystore: `KeystoreRollback` as today; an old envelope never erases the live generation (§7.3); **the anchor file and what it covers, put back together, where the anchor is a file** (the CLI and the TUI on every OS, the desktop app on Linux): **not seen** (stated) | the keychain anchor where there is one; an old envelope with the old passphrase opens nothing written after a passphrase change (`DEK_p` rotated) |
 | a network observer, an RPC node, a gateway, the Matrix homeserver | that several identities use one IP address and timing; never a profile id or name; after a switch, nothing more from the locked profile (`Sdk::close`) | non-goal (§2); ids never leave the device (§4) |
 | a holder of an export file | the format, the KDF parameters, the chunk count and the length; nothing else without the export passphrase | Argon2id at the file's parameters per guess; inside, the seed and key vaults behind their own passphrases; no id, no PqChat state, no credential reference (§10.1) |
@@ -866,13 +894,16 @@ Each negative test has its positive control and its named mutant, which must tur
 | G3 state | `state` flipped to `unprotected`, a plain item in a protected profile, a sealed item in an unprotected one: each refused; with the keychain marker, an unprotected envelope beside it is `ProfileFormat` and a missing anchor `ProfileRollback`; a missing marker is rewritten at a protected open; an unprotected profile's settings shown before `set_passphrase` seals them | the untouched profile opens | the state check removed; `state` or `name` left out of the wrap's AD |
 | store files (R2-A-1) | a kill between a FileStore write and its rename leaves `*.tmp.*`; the next open removes it and opens; `.lock` files are accepted; any other file is `VaultFormat` | a clean generation opens | the pattern check refusing `.lock` or `.tmp.*`; no clean-up at open |
 | G4 crash | a crash at each step of `set_passphrase`, `change_passphrase`, create, import and migration leaves the old or the new profile whole, and the next open or start finishes or rolls back; two processes migrating at once make one "default" | the same actions without a crash | the journal ignored; the envelope renamed before the generation is complete; no root lock at migration |
-| re-seal writes (R2-A-2, R2-C-4) | a writer of every part (SDK, pqchat-core) running through a `change_passphrase`: every write issued during the re-seal is present after the commit, and a pqchat counter never goes backwards | a re-seal with no writer | the store write lock not held during the re-seal |
-| generations (R2-C-5) | an older envelope put back beside the live `g<N>/`: `ProfileDamaged` / `ProfileRollback`, `g<N>/` kept; a lower generation removed at open; a journaled `g<N+1>/` removed before its journal; a passphrase change drops the platform wrap | a normal open after a commit | removing every generation other than `gen` |
+| re-seal writes (R2-A-2, R2-C-4) | a writer of every part (SDK, pqchat-core) running through a `change_passphrase`: every write issued during the re-seal waits (never `StoreConflict`) and is present after the commit, and a pqchat counter never goes backwards; a writer held past 120 s (a stalled re-seal under `test-hooks`) is `ProfileBusy` and writes nothing | a re-seal with no writer | the store write lock not held during the re-seal; a waiting writer answered `StoreConflict` |
+| generations (R2-C-5, R3-C-1) | an older envelope put back beside the live `g<N>/`: `ProfileDamaged` / `ProfileRollback`, `g<N>/` kept; an envelope whose `gen` was edited upward beside the only generation: `ProfileDamaged`, nothing removed; a lower generation removed at open only after the wrap opened and `g<gen>/` exists; a journaled `g<N+1>/` removed before its journal; a passphrase change drops the platform wrap | a normal open after a commit | removing every generation other than `gen`; removing a lower generation before the wrap opens |
 | G5 rollback | an old copy of `settings` (or any item) put back is `ProfileRollback`; a deleted item put back (at or below its tombstone) is `ProfileRollback`; a listed item removed is `ProfileDamaged`; an old manifest or a pre-`hide()` envelope under the anchor is `ProfileRollback`; after a passphrase change the old envelope with the old passphrase opens no item written after; two writers of different items of one part both land in its manifest | the current copies open with no event | the manifest's rev not compared; no tombstone at delete; the envelope not in the anchor; `DEK_p` kept at a passphrase change; the manifest written without `put_if` |
+| anchor (R3-A-1) | a kill between a manifest write and its anchor, and between an envelope write and its anchor, opens with no event and the anchor follows; the CLI (no keychain) and the desktop app (a keychain) taking turns on one profile on macOS open with no event; a manifest or envelope below the anchor, or another hash at the same rev, is `ProfileRollback` | an untouched profile opens | "differs from the anchor" as the rule; the envelope's `rev` not compared |
+| name hint (R3-B-1) | `rename`, `hide()`, `show()` need no passphrase and leave `pass` and `platform.wrap` byte-identical; after `rename` a platform open still works; a hint changed on disk opens, raises `ProfileIndexMismatch` and is rewritten from the label; a hint planted on a hidden envelope: the open through the list refused, the hint removed, the hidden prompt finds the profile again | the hint unchanged opens with no event | `name` kept in the wraps' AD; the hint trusted over the label |
+| re-created items, tombstones (N-2, N-3) | an item deleted then created again opens with no event (its rev above the tombstone); after a re-seal the new manifests hold no tombstone | an item never deleted | the stored rev restarting at the caller's revision; tombstones carried into the new generation |
 | G6 platform | another profile's wrap, a wrong secret, an all-zero secret, a policy without `biometry_current_set` or `invalidated_by_enrollment`: each refused; enable on a hidden profile is `Argument`; `hide()` and a passphrase change drop the wrap | the enabled wrap opens its own profile | the policy check removed; the profile id left out of the wrap's AD |
-| G7 hidden | runs counted (not timed) equal max(candidates, 4) for 0, 1, 4 and 5 candidates, a corrupt candidate among them one dummy run; the 17th `create_hidden`, hidden import and `hide()` are `ProfileHiddenLimit`; at 16 hidden profiles each still opens; a duplicate (name, passphrase) at `create_hidden`, hidden import, `hide()`, a hidden rename and a hidden passphrase change is `ProfileNameTaken`; a planted row on a hidden profile: the open through it refused, the row dropped, the prompt still finds the profile; `create_hidden` writes no index byte | the one match opens | an early stop at the match; a corrupt candidate ending the search; candidates read from the index; `hide()` without the duplicate check; `last` written on a hidden open |
+| G7 hidden | runs counted (not timed) equal max(candidates, 4) for 0, 1, 4 and 5 candidates, a corrupt candidate among them one dummy run; the 17th `create_hidden`, hidden import and `hide()` are `ProfileHiddenLimit`; at 16 hidden profiles plus damaged directories (up to 32 candidates) each still opens; 33 candidates are `ProfileSearchTooLarge`; a duplicate (name, passphrase) at `create_hidden`, hidden import, `hide()`, a hidden rename and a hidden passphrase change is `ProfileNameTaken`; a planted row on a hidden profile: the open through it refused, the row dropped, the prompt still finds the profile; `create_hidden` writes no index byte | the one match opens | an early stop at the match; a corrupt candidate ending the search; candidates read from the index; `hide()` without the duplicate check; `last` written on a hidden open |
 | G8 KDF | parameters below and above the bounds, each field alone, refused before any KDF (a counter); above this device's maximum `ProfileKdfTooLarge`; a forced allocation failure `ProfileKdfOutOfMemory`; a release build refuses `test-hooks`; no KDF runs under the root lock (a second instance's start completes during a hidden search) | the default and a raised in-bounds set open | out-of-memory mapped to `ProfileOpen`; the per-device maximum not checked; a KDF under the root lock |
-| G9 export, import | export without the profile passphrase refused; the file never holds an id, a lock, a keychain item, `keystore.prev`, a PqChat item, a credential reference or a cache (checked on the payload); a truncated, reordered, extended or one-byte-changed file (header included) is `ProfileImportOpen` with nothing written; a `chunk` other than 1,048,576, a header above 4 KiB, an item name other than `keystore` / `sdk.state` or one twice: refused; payloads of exactly 1 MiB and 1 MiB + 1 round-trip; a crafted file's credential reference is dropped even when every endpoint is confirmed; its endpoints, `first` marks, idle lock and clipboard choice are dropped without a confirm; `import_preview` lists every setting, kept ones included; its operations in flight are not followed; a payload above 64 MiB is `ProfileExportTooLarge`; an existing file or a symlink at the export path is refused; another instance's start during a preview leaves its temporary directory | the unchanged file imports: a new id, the same seed fingerprints, a new PqChat device id | the last-chunk flag ignored; parse before verify; settings imported whole; a filter that forgets credential references; start removing a temporary directory whose `build.lock` is held |
+| G9 export, import | export without the profile passphrase refused; the file never holds an id, a lock, a keychain item, `keystore.prev`, a PqChat item, a credential reference or a cache (checked on the payload); a truncated, reordered, extended or one-byte-changed file (header included) is `ProfileImportOpen` with nothing written; a `chunk` other than 1,048,576, a header above 4 KiB, an item name other than `keystore` / `sdk.state` or one twice: refused; payloads of exactly 1 MiB and 1 MiB + 1 round-trip; a crafted file's credential reference is dropped even when every endpoint is confirmed; its endpoints, `first` marks, idle lock and clipboard choice are dropped without a confirm; `import_preview` lists every setting, kept ones included, and writes nothing to disk (a crash during the review leaves no file); the temporary directory `import` writes holds only sealed items; its operations in flight are not followed; a payload above 64 MiB is `ProfileExportTooLarge`; an existing file or a symlink at the export path is refused; another instance's start during a preview leaves its temporary directory | the unchanged file imports: a new id, the same seed fingerprints, a new PqChat device id | the last-chunk flag ignored; parse before verify; settings imported whole; a filter that forgets credential references; start removing a temporary directory whose `build.lock` is held; a preview written to disk in plain form |
 | settings (R2-C-3) | an added endpoint, a `first` mark, a credential reference, the idle lock off and the clipboard on, each without the typed profile passphrase: refused; with a platform unlock only: refused | a lowered cap and a stronger policy pass without it | the passphrase check removed |
 | G10 index, delete | a deleted and a corrupt index are rebuilt (never a first run) and list every visible profile, protected ones included; two envelopes with one visible name are both listed and marked; a crash at each step of delete leaves a tombstone that start finishes; a directory without an envelope is reported, never removed; a locked visible profile deletes with `ConfirmDeleteUnreadable`; legacy items beside existing profiles are reported | an intact index lists as before | a missing index treated as a first run; the clean-up removing a directory without an envelope; a rebuild listing only unprotected profiles |
 | G11 SDK fit | a sealed item at the plain 16 MiB bound reads its `rev` and is written at it; a sealed item that does not open is `VaultFormat` (not `VaultIo`); a call after lock is `ProfileLocked`, from the SDK and from pqchat-core (`StoreFault` with its code); after lock no request leaves on the old `Sdk` (`Sdk::close`); `lock` with a hidden set open on a seed that is not unlocked revokes it (A-8's fix); `sdk()` twice returns the same `Sdk` | a small item round-trips | `rev_of`'s 16 MiB cap kept for sealed items; `StoreError` collapsed to `Io`; the lock leaving the stores open; `close` not called at lock |
@@ -912,7 +943,8 @@ Each negative test has its positive control and its named mutant, which must tur
 | CLI-UPR-24 | the key lock's means: the label form, skipped by every seed-wide loop, refused with a `prf` envelope, out of backups and links, `keystore.prev` rewritten | no |
 | CLI-UPR-25 | writes during a re-seal: the store write lock held for the whole run, every writer waits, no write lost | no |
 | CLI-UPR-26 | a settings change that could weaken the profile needs the typed profile passphrase | no |
-| CLI-UPR-27 | import in two calls: a preview of every setting, then the import of the user's choices | no |
+| CLI-UPR-27 | import in two calls: a preview of every setting held in memory, then the import of the user's choices, sealed from its first byte | no |
+| CLI-UPR-28 | the anchor is compared as the keystore's: ahead is a crash and the anchor follows; below, or another hash at the same rev, is a rollback; the envelope has a `rev` | no |
 
 ## 19. Review response (Fable, 2026-11-27; the controller's rulings, owner may veto)
 
@@ -951,3 +983,15 @@ Each negative test has its positive control and its named mutant, which must tur
 | SDK and app cores | R2-A-3, R2-A-5, R2-A-6 | §5, §7.2, §10, §11 (a directory on every platform with a keychain interface; the synchronous pqchat face, chosen because it never waits on a future; `StoreFault` codes; `Sdk::close`); CLI-UPR-22 |
 | rename list | R2-A-7 | §15 (the places added, the exemption list, the mesh vectors' clash kept, the gate over listed paths); CLI-UPR-01 (list only) |
 | smaller | R2-A-8, R2-A-9, R2-A-11, R2-B-7, R2-B-8, R2-C-6, R2-C-11, R2-C-12 | §4 `Builder::from_unix_timestamp_millis`; §5 modes; §7.1 the pinned AD and the unprotected-profile residual; §7.5 `test-hooks` in three crates; §10 start without other profiles' locks; §10.1 the pinned chunk encoding and item names; §11 `ProfileSdkConfig`, String seed ids, `ProfileUnknown`; §13 descriptors, commands without a profile, `--profile-name-fd`, logs; §14 `delete_locked` among a writer's denials; §17; CLI-UPR-18's title |
+
+**Round 3** (at `9f2ee89b7`; area C approve, areas A and B approve with one P1 each, no P0):
+
+| Topic | Findings | Applied in |
+|---|---|---|
+| the anchor's comparison | R3-A-1, B N-1 | §7.1 the envelope's `rev`, §7.2 the keystore's rule (ahead follows; below or another hash at the same rev is a rollback), every client writing `profile.head`; CLI-UPR-28 |
+| the visible name in the wraps' associated data | R3-B-1 | §6, §7.1 (`name` a hint outside the AD, checked against the sealed label after unlock), §8, §10 (`rename`, `hide()`, `show()` without a passphrase, the wraps untouched), §14; CLI-UPR-12, CLI-UPR-13 |
+| a lower generation removed before authentication | R3-C-1 | §7.3 (only when `g<gen>/` exists and the wrap opened; else `ProfileDamaged`); CLI-UPR-20 |
+| re-created items, tombstones, the search cap | B N-2, N-3, N-4 | §7.2 (rev above the tombstone; tombstones dropped at a re-seal), §8 (the search accepts 32 candidates; hidden profiles stay capped at 16); CLI-UPR-13, CLI-UPR-19 |
+| the import preview on disk | R3-C-2, A P2 | §10.1 (the payload held in memory; the temporary directory written only by `import`, sealed); CLI-UPR-27 |
+| a planted public name on a hidden envelope | R3-C-3 | §6, §14 (a denial); CLI-UPR-13 |
+| pqchat-core's face, waiting writers, the browser | A P2, P3 | §7.2 (`Items` the one helper, 33 sites in 9 files; the browser needs an async core), §7.3 (writers wait at most 120 s, then `ProfileBusy`), §13; CLI-UPR-22, CLI-UPR-25 |
