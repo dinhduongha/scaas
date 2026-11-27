@@ -6,7 +6,8 @@
 //! protected profiles there are planted by hand (one wrap at the test KDF set) and opened through `UserProfiles`. UP7 (§7.3,
 //! §7.6): `set_passphrase` and `change_passphrase` through `UserProfile`, and every secret-creating call refused
 //! `ProfilePassphraseRequired` before any work on an unprotected profile's `Sdk`. UP8 (§8): the hidden calls route to the
-//! store's (its own tests are clients/scaas-profile/tests/hidden.rs).
+//! store's (its own tests are clients/scaas-profile/tests/hidden.rs). UP10 (§7.7, §10.1; §17 settings R2-C-3, G9): the
+//! settings rule, export and import through the SDK (the store's own tests: clients/scaas-profile/tests/{settings,export}.rs).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -73,7 +74,7 @@ fn file_of(dir: &Path, keys: &ProfileKeys, part: &str, name: &str) -> PathBuf {
 /// The store's codes reach the SDK by name: each `scaas-profile` code is the `SdkError` of the same name (none collapsed).
 #[test]
 fn store_codes_are_the_sdks() {
-    assert_eq!(Error::ALL.len(), 25);
+    assert_eq!(Error::ALL.len(), 27);
     for e in Error::ALL {
         assert_eq!(SdkError::from(*e).code(), e.code());
     }
@@ -828,4 +829,396 @@ async fn delete_through_sdk() {
     std::fs::remove_file(root.join("profiles.json")).unwrap();
     ups.rebuild_index(ConfirmRebuildIndex {}).await.unwrap();
     assert_eq!(names(ups.list().await.unwrap()), ["keep"]);
+}
+
+// ---- UP10: settings, export, import (spec §7.7, §10.1; §17 settings R2-C-3, G9) ----
+
+use scaas_sdk::user_profile::{ConfirmExportProfile, ExportTarget, ImportChoices, ImportSource};
+
+const XPASS: &str = "export passphrase, typed twice";
+const NEW: &str = "a new passphrase, typed twice";
+
+/// §17 settings (R2-C-3) through the SDK: an added endpoint, a `first` mark, a credential reference, the idle lock off and the
+/// clipboard on, each without the typed passphrase `Argument`, with a wrong one `ProfileOpen`; a lowered cap and a stronger
+/// policy pass without it.
+#[tokio::test(flavor = "multi_thread")]
+async fn settings_weakening_needs_the_passphrase() {
+    use scaas_sdk::user_profile::{
+        ChainSettings, CredentialKind, CredentialRef, Endpoint, EndpointList,
+    };
+    let (_ups, up, _) = open_protected().await;
+    let mut s = up.settings().await.unwrap();
+    s.idle_lock_s = Some(300);
+    up.set_settings(s, None).await.unwrap();
+    let base = up.settings().await.unwrap();
+    let mut with_ep = base.clone();
+    with_ep.chains.insert(
+        "scaas-testnet".into(),
+        ChainSettings {
+            endpoints: vec![Endpoint {
+                list: EndpointList::Rpc,
+                label: "mine".into(),
+                url: "https://rpc.example".into(),
+                first: false,
+            }],
+            ..ChainSettings::default()
+        },
+    );
+    let mut first = with_ep.clone();
+    first.chains.get_mut("scaas-testnet").unwrap().endpoints[0].first = true;
+    let mut cred = base.clone();
+    cred.credentials.push(CredentialRef {
+        chain_profile: "scaas-testnet".into(),
+        list: EndpointList::Rpc,
+        label: "mine".into(),
+        kind: CredentialKind::Bearer,
+        file: None,
+        env: Some("SCAAS_TOKEN".into()),
+    });
+    let mut idle_off = base.clone();
+    idle_off.idle_lock_s = None;
+    let mut clip = base.clone();
+    clip.clipboard = true;
+    for (what, n) in [
+        ("an endpoint", &with_ep),
+        ("a credential", &cred),
+        ("idle off", &idle_off),
+        ("clipboard on", &clip),
+    ] {
+        assert_eq!(
+            code(up.set_settings(n.clone(), None).await),
+            "Argument",
+            "{what}"
+        );
+        assert_eq!(
+            code(
+                up.set_settings(n.clone(), Some(sec("a wrong passphrase")))
+                    .await
+            ),
+            "ProfileOpen",
+            "{what}"
+        );
+    }
+    up.set_settings(with_ep, Some(sec(PASS))).await.unwrap();
+    assert_eq!(
+        code(up.set_settings(first, None).await),
+        "Argument",
+        "a first mark"
+    );
+    let mut strong = up.settings().await.unwrap();
+    strong.caps.max_gas = Some(1000);
+    strong
+        .chains
+        .get_mut("scaas-testnet")
+        .unwrap()
+        .strict_majority = true;
+    up.set_settings(strong, None).await.unwrap();
+    let got = up.settings().await.unwrap();
+    assert!(got.caps.max_gas == Some(1000) && got.chains["scaas-testnet"].strict_majority);
+    assert!(got.idle_lock_s == Some(300) && !got.clipboard && got.credentials.is_empty());
+}
+
+fn export_rows() -> serde_json::Value {
+    let p = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../smartcontracts/vectors/profile/export.json");
+    serde_json::from_slice(&std::fs::read(p).unwrap()).unwrap()
+}
+
+fn unhex(s: &str) -> Vec<u8> {
+    let s = s.trim_start_matches("0x");
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+        .collect()
+}
+
+/// Every file under `root` with its bytes, sorted.
+fn snapshot(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut out = Vec::new();
+    let mut todo = vec![root.to_path_buf()];
+    while let Some(d) = todo.pop() {
+        for e in std::fs::read_dir(&d).unwrap() {
+            let e = e.unwrap();
+            if e.file_type().unwrap().is_dir() {
+                todo.push(e.path());
+            } else {
+                out.push((e.path(), std::fs::read(e.path()).unwrap_or_default()));
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// A file row's file: its `file`, else reproduced by the store's test entry point from its payload, salt and nonce prefix.
+fn row_file(f: &serde_json::Value) -> Vec<u8> {
+    use base64::Engine;
+    if let Some(h) = f["file"].as_str() {
+        return unhex(h);
+    }
+    let filler = |name: &str, n: usize| {
+        let mut out = Vec::with_capacity(n + 32);
+        let mut i = 0;
+        while out.len() < n {
+            out.extend(scaas_ua::keccak256(
+                format!("scaas/profile/vectors/{name}/{i}").as_bytes(),
+            ));
+            i += 1;
+        }
+        out.truncate(n);
+        out
+    };
+    let items: Vec<(String, Vec<u8>)> = f["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| {
+            let b = match i[1].as_str() {
+                Some(h) => unhex(h),
+                None => filler(
+                    i[1]["filler"].as_str().unwrap(),
+                    i[1]["len"].as_u64().unwrap() as usize,
+                ),
+            };
+            (i[0].as_str().unwrap().to_string(), b)
+        })
+        .collect();
+    let refs: Vec<(&str, &[u8])> = items.iter().map(|(n, b)| (n.as_str(), &b[..])).collect();
+    let pl = scaas_profile::Profiles::test_payload(
+        f["label"].as_str().unwrap().as_bytes(),
+        &unhex(f["settings"].as_str().unwrap()),
+        &refs,
+    )
+    .unwrap();
+    let salt = base64::engine::general_purpose::STANDARD
+        .decode(f["kdf"]["salt"].as_str().unwrap())
+        .unwrap();
+    let p = scaas_profile::Profiles::new(scaas_profile::ProfilesConfig::new(tmp().join("rows")))
+        .unwrap();
+    p.test_export(
+        &pl,
+        f["passphrase"].as_str().unwrap().as_bytes(),
+        TEST_KDF,
+        &salt.try_into().unwrap(),
+        &unhex(f["nonce_prefix"].as_str().unwrap())
+            .try_into()
+            .unwrap(),
+    )
+    .unwrap()
+}
+
+/// The refusal row `r`'s file (export.json's comment): `file`, `file_len` zeros led by `prefix_bytes`, or `base` with `edit`.
+fn refusal_file(
+    r: &serde_json::Value,
+    bases: &std::collections::HashMap<String, Vec<u8>>,
+) -> Vec<u8> {
+    const STEP: usize = 1_048_576 + 16;
+    if let Some(h) = r["file"].as_str() {
+        return unhex(h);
+    }
+    if let Some(len) = r["file_len"].as_u64() {
+        let mut f = vec![0u8; len as usize];
+        let p = unhex(r["prefix_bytes"].as_str().unwrap());
+        f[..p.len()].copy_from_slice(&p);
+        return f;
+    }
+    let mut f = bases[r["base"].as_str().unwrap()].clone();
+    let e = &r["edit"];
+    let hl = u32::from_be_bytes(f[8..12].try_into().unwrap()) as usize;
+    let at = |i: u64| 12 + hl + i as usize * STEP;
+    let chunk = |f: &[u8], i: u64| f[at(i)..(at(i) + STEP).min(f.len())].to_vec();
+    match e["op"].as_str() {
+        None => {}
+        Some("truncate") => f.truncate(f.len() - e["n"].as_u64().unwrap() as usize),
+        Some("replace") => {
+            let o = e["offset"].as_u64().unwrap() as usize;
+            let b = unhex(e["hex"].as_str().unwrap());
+            f[o..o + b.len()].copy_from_slice(&b);
+        }
+        Some("drop_chunk") => {
+            let i = e["i"].as_u64().unwrap();
+            let c = chunk(&f, i).len();
+            f.drain(at(i)..at(i) + c);
+        }
+        Some("swap_chunks") => {
+            let (i, j) = (e["i"].as_u64().unwrap(), e["j"].as_u64().unwrap());
+            let mut g = f[..at(0)].to_vec();
+            for k in 0..((f.len() - at(0)).div_ceil(STEP) as u64) {
+                let from = if k == i {
+                    j
+                } else if k == j {
+                    i
+                } else {
+                    k
+                };
+                g.extend(chunk(&f, from));
+            }
+            f = g;
+        }
+        Some("append_chunk") => {
+            let c = chunk(&f, e["i"].as_u64().unwrap());
+            f.extend(c);
+        }
+        Some(op) => panic!("edit {op}"),
+    }
+    f
+}
+
+/// §17 G9: every refusal row of export.json at the test set read by the SDK as `ProfileImportOpen`, and nothing written under
+/// the root (the row without `test-hooks` is the store's default build's: clients/scaas-profile/tests/export.rs).
+#[tokio::test(flavor = "multi_thread")]
+async fn g9_every_refusal_row_is_import_open() {
+    let v = export_rows();
+    let root = tmp().join("root");
+    let ups = UserProfiles::new(ProfilesConfig::new(root.to_string_lossy().into_owned()))
+        .await
+        .unwrap();
+    let bases: std::collections::HashMap<String, Vec<u8>> = v["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| (f["case"].as_str().unwrap().to_string(), row_file(f)))
+        .collect();
+    let before = snapshot(&root);
+    let mut n = 0;
+    for r in v["refusals"].as_array().unwrap() {
+        if !r["test_hooks"].as_bool().unwrap() {
+            continue;
+        }
+        let f = refusal_file(r, &bases);
+        let pass = sec(r["passphrase"].as_str().unwrap());
+        let got = code(
+            ups.import_preview(ImportSource::Bytes(f), pass)
+                .await
+                .map(drop),
+        );
+        assert_eq!(got, "ProfileImportOpen", "{}", r["case"]);
+        n += 1;
+    }
+    assert_eq!(n, 26);
+    assert!(snapshot(&root) == before, "nothing written");
+}
+
+/// §17 G9 through the SDK, the positive control: a protected profile with a seed exports; its file previews (one seed,
+/// nothing written) and imports with a new id under a new passphrase; the imported profile holds the same seed fingerprints,
+/// the seed unlocks there with its own vault passphrase to the same native address, and `sdk.state`'s operation in flight is
+/// marked `imported` (a landed one kept). Export refusals: the name, the profile passphrase, an existing file.
+#[tokio::test(flavor = "multi_thread")]
+async fn g9_export_import_through_sdk() {
+    use scaas_sdk::vault::Keystore;
+    use scaas_sdk::wallet::NativeKeyRef;
+    let (ups, up, root) = open_protected().await;
+    let s = up.sdk(sdk_config(vec![])).await.unwrap();
+    let seed = s
+        .vault()
+        .import_words(ImportWords {
+            label: "Main".into(),
+            words: sec(REPO),
+            vault_passphrase: sec(VAULT_PASS),
+        })
+        .await
+        .unwrap()
+        .id;
+    let key = |seed: String| NativeKeyRef {
+        seed,
+        network: "stellar".into(),
+        index: 0,
+        change: None,
+        coin_type: None,
+        path: None,
+    };
+    let addr = s
+        .wallet()
+        .native_address(key(seed.clone()), None)
+        .await
+        .unwrap();
+    let store = up.part_store(SDK).unwrap();
+    let state =
+        br#"{"rev":1,"ops":[{"op":"a","state":"signed"},{"op":"b","state":"landed"}]}"#.to_vec();
+    store
+        .put_if("sdk.state".into(), None, state, StorePolicy::default())
+        .await
+        .unwrap();
+    let fingerprints = |b: &[u8]| -> Vec<String> {
+        Keystore::parse(b)
+            .unwrap()
+            .seeds
+            .into_iter()
+            .map(|e| e.fingerprint)
+            .collect()
+    };
+    let ks = store.get("keystore".into(), String::new()).await.unwrap();
+    let before = fingerprints(&ks.unwrap().bytes);
+    let dir = tmp();
+    let target = dir.join("work.scaasx").to_string_lossy().into_owned();
+    let confirm = |n: &str| ConfirmExportProfile { name: sec(n) };
+    let ex = |c, p: &str, t: &str| {
+        up.export(
+            c,
+            sec(p),
+            sec(XPASS),
+            Some(TEST_KDF),
+            ExportTarget::Path(t.into()),
+        )
+    };
+    assert_eq!(
+        code(ex(confirm("play"), PASS, &target).await),
+        "ConfirmationMissing"
+    );
+    assert_eq!(
+        code(ex(confirm("work"), "a wrong passphrase", &target).await),
+        "ProfileOpen"
+    );
+    ex(confirm("Work"), PASS, &target).await.unwrap();
+    assert_eq!(
+        code(ex(confirm("work"), PASS, &target).await),
+        "Argument",
+        "an existing file"
+    );
+    let snap = snapshot(&root);
+    let review = ups
+        .import_preview(ImportSource::Path(target.clone()), sec(XPASS))
+        .await
+        .unwrap();
+    assert!(snapshot(&root) == snap, "the preview wrote nothing");
+    assert!(review.name() == "work" && !review.hidden() && review.seeds == 1);
+    let choices = ImportChoices {
+        confirm: vec![],
+        kdf: Some(TEST_KDF),
+    };
+    let info = ups
+        .import(review, choices, sec(NEW), Some("work 2".into()))
+        .await
+        .unwrap();
+    let list = ups.list().await.unwrap();
+    let old = list.into_iter().find(|i| i.name == "work").unwrap().id;
+    assert!(info.id != old && info.protected);
+    let up2 = ups
+        .open(info.id, Some(ProfileUnlock::Passphrase(sec(NEW))))
+        .await
+        .unwrap();
+    let store2 = up2.part_store(SDK).unwrap();
+    let ks = store2.get("keystore".into(), String::new()).await.unwrap();
+    assert_eq!(
+        fingerprints(&ks.unwrap().bytes),
+        before,
+        "the same seed fingerprints"
+    );
+    let st = store2.get("sdk.state".into(), String::new()).await.unwrap();
+    let st: serde_json::Value = serde_json::from_slice(&st.unwrap().bytes).unwrap();
+    assert_eq!(
+        st["ops"][0]["state"], "imported",
+        "an operation in flight is not followed"
+    );
+    assert_eq!(st["ops"][1]["state"], "landed");
+    let s2 = up2.sdk(sdk_config(vec![])).await.unwrap();
+    let id2 = s2.vault().seeds().await.unwrap()[0].id.clone();
+    s2.vault()
+        .unlock(id2.clone(), Unlock::Passphrase(sec(VAULT_PASS)))
+        .await
+        .unwrap();
+    assert_eq!(
+        s2.wallet().native_address(key(id2), None).await.unwrap(),
+        addr
+    );
 }

@@ -53,8 +53,10 @@ pub enum Step {
     Migrating,
     /// migration step 1: "default" created with `migration: pending`, its row written
     MigrationCreated,
-    /// migration step 2: one legacy item moved (after each)
+    /// migration step 2: one legacy item moved (after each), the overlay last
     MigrationMoved,
+    /// import: the new profile complete in its `p/.tmp-*`, not yet committed
+    ImportBuilt,
 }
 
 /// A test hook: called after each step; `true` stops the re-seal there, the files left as they are.

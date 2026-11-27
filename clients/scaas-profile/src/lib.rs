@@ -3,11 +3,11 @@
 //! docs/clients/scaas-sdk.md §12): the local store of many protected profiles, without the SDK (owner 2026-11-27, CLI-UPR-02's
 //! Change); the SDK (feature `user-profile`) builds on it. Every KDF, AEAD and MAC runs in `scaas-ua`'s profile arena
 //! (`ProfileKeys`); this crate holds handles, public bytes and files. Synchronous: run every call on a blocking thread. Built so
-//! far (plan UP5 to UP8): the sealed store core of one open profile ([`Core`]), the manifests and the anchor; the profile
+//! far (plan UP5 to UP10): the sealed store core of one open profile ([`Core`]), the manifests and the anchor; the profile
 //! root, the index, the envelope, the instance lock, start, create, open, list and lock ([`Profiles`], [`OpenProfile`]); the
 //! re-seal (`set_passphrase`, `change_passphrase`, spec §7.3); hidden profiles (`create_hidden`, `open_hidden`, `hide`, `show`,
 //! `rename`, spec §8); delete, `delete_locked`, `rebuild_index` (spec §6, §10) and the migration of the CLI's single store into
-//! "default" (spec §12). UNAUDITED.
+//! "default" (spec §12); the settings' storage and rules, export and import (spec §7.7, §10.1, plan UP10). UNAUDITED.
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -21,6 +21,7 @@ compile_error!("scaas-profile's feature `test-hooks` is test-only: never in a re
 
 pub mod anchor;
 pub mod envelope;
+mod export;
 mod file;
 mod hidden;
 mod index;
@@ -29,15 +30,18 @@ mod migrate;
 pub mod names;
 mod profile;
 mod reseal;
+pub mod settings;
 pub mod store;
 
 pub use anchor::{Anchor, Head, Verdict};
 pub use envelope::{Envelope, Kdf, KdfParams, State};
+pub use export::{ImportReview, ImportSource, FILE_MAX};
 pub use file::rev_of;
 pub use lifecycle::{ConfirmDeleteUnreadable, ConfirmRebuildIndex};
 pub use names::{check_name, name_key, same_name, uuid7};
 pub use profile::{MatrixStore, OpenProfile, ProfileEvent, ProfileInfo, Profiles, ProfilesConfig};
 pub use reseal::Step;
+pub use settings::ProfileSettings;
 pub use store::{Core, CoreOpen, Item, Manifest, Plain, ProfilePart, WriteGuard, PART_MAX};
 
 macro_rules! codes {
@@ -112,8 +116,13 @@ codes! {
     ProfileHiddenLimit,
     /// more than 32 candidates for a hidden search (spec §8 step 1), before any KDF run
     ProfileSearchTooLarge,
-    /// a delete's name typed again that is not the profile's (spec §10)
+    /// a delete's or an export's name typed again that is not the profile's (spec §10, §10.1)
     ConfirmationMissing,
+    /// an export file that does not open: a wrong passphrase, a changed, cut or extended file, a refused header or item
+    /// (spec §10.1; the reason only in the local log)
+    ProfileImportOpen,
+    /// an export's payload above 64 MiB (spec §10.1)
+    ProfileExportTooLarge,
 }
 
 impl std::fmt::Display for Error {

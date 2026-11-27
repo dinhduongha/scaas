@@ -7,11 +7,17 @@
 //! events (plan UP6); the re-seal's calls and the refusal of every secret-creating call on an unprotected profile's `Sdk`
 //! (plan UP7); hidden profiles: `create_hidden`, `open_hidden`, `hide`, `show`, `rename` (plan UP8); delete with the seeds'
 //! backups checked, `delete_locked`, `rebuild_index`, the migration of the CLI's store into "default" and the refusal of
-//! every vault call on it until it is sealed (plan UP9). Outside the binding surface in wave 1. UNAUDITED.
+//! every vault call on it until it is sealed (plan UP9); the settings with the rule of spec §7.7, export, and import in two
+//! calls with the keystore checked by the SDK's parser and `sdk.state`'s operations marked `imported` (plan UP10). Outside the
+//! binding surface in wave 1. UNAUDITED.
+pub use scaas_profile::settings::{
+    Caps, ChainSettings, CredentialKind, CredentialRef, Endpoint, EndpointList, ReviewItem, Setting,
+};
 pub use scaas_profile::{
     keychain_name, Anchor, ConfirmDeleteUnreadable, ConfirmRebuildIndex, Core, CoreOpen, Error,
     Head, Item, KdfParams, Manifest, MatrixStore, Plain, ProfileEvent,
-    ProfileInfo as UserProfileInfo, ProfileKeychain, ProfilePart, Verdict, WriteGuard, PART_MAX,
+    ProfileInfo as UserProfileInfo, ProfileKeychain, ProfilePart, ProfileSettings, Verdict,
+    WriteGuard, PART_MAX,
 };
 
 use crate::error::SdkError;
@@ -43,6 +49,9 @@ pub struct ProfilesConfig {
     /// the CLI's data directory of today's single store (spec §12), migrated into "default" at start; the caller computes it
     /// (the SDK reads no environment)
     pub legacy: Option<String>,
+    /// the CLI's overlay (`$XDG_CONFIG_HOME/scaas/overlay.json`, else `~/.config/scaas/overlay.json`), moved into "default"'s
+    /// settings by the migration; the caller computes it
+    pub legacy_overlay: Option<String>,
 }
 
 impl ProfilesConfig {
@@ -55,6 +64,7 @@ impl ProfilesConfig {
             limits: Limits::default(),
             kdf_max_kib: KdfParams::MAX_KIB,
             legacy: None,
+            legacy_overlay: None,
         }
     }
 }
@@ -73,6 +83,83 @@ pub struct ConfirmDeleteUnbacked {}
 pub struct DeletePreview {
     pub seeds: u32,
     pub unbacked: u32,
+}
+
+/// `export`'s name typed again (spec §10.1), compared by `name_key`.
+pub struct ConfirmExportProfile {
+    pub name: Arc<SecretBytes>,
+}
+
+/// Where an export goes (spec §10.1): a new file at a path (native); the share sheet of mobile and wasm is wave 2.
+pub enum ExportTarget {
+    Path(String),
+}
+
+/// An import's file: a path, or its bytes (at most the file bound, [`scaas_profile::FILE_MAX`]).
+pub enum ImportSource {
+    Path(String),
+    Bytes(Vec<u8>),
+}
+
+/// What [`UserProfiles::import`] applies: the review's settings confirmed by item id, and the new passphrase's KDF
+/// parameters (`None`: 64 MiB / 3).
+pub struct ImportChoices {
+    pub confirm: Vec<u32>,
+    pub kdf: Option<KdfParams>,
+}
+
+/// An opened export (spec §10.1): the store's review (its payload in memory only, wiped at drop) with the seed and account
+/// counts of its keystore. No `Debug`.
+pub struct ImportReview {
+    review: scaas_profile::ImportReview,
+    pub seeds: u32,
+    pub accounts: u32,
+}
+
+impl ImportReview {
+    pub fn name(&self) -> &str {
+        self.review.name()
+    }
+
+    pub fn hidden(&self) -> bool {
+        self.review.hidden()
+    }
+
+    /// Every setting with its item id; the kept ones marked (credential references are never listed).
+    pub fn settings(&self) -> Vec<ReviewItem> {
+        self.review.settings()
+    }
+}
+
+const STATE: &str = "sdk.state";
+
+/// `sdk.state` with every operation a chain fact has not ended marked `imported` in its `state` (spec §10.1): `Op::resume`
+/// sends only `signed` rows and every other step is the user's call, so none is sent or followed without the user's word. A
+/// state of no such form (`rev`, `ops`, each with a `state`) is `ProfileImportOpen`.
+fn mark_imported(bytes: &[u8]) -> Result<Zeroizing<Vec<u8>>, SdkError> {
+    use serde_json::Value;
+    let bad = || SdkError::ProfileImportOpen;
+    if scaas_ua::json::depth_within(bytes, 64).is_err() {
+        return Err(bad());
+    }
+    let mut v: Value = serde_json::from_slice(bytes).map_err(|_| bad())?;
+    if !v.get("rev").is_some_and(Value::is_u64) {
+        return Err(bad());
+    }
+    let ops = v
+        .get_mut("ops")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(bad)?;
+    for op in ops {
+        let s = op.get_mut("state").ok_or_else(bad)?;
+        match s.as_str().ok_or_else(bad)? {
+            "landed" | "reverted" | "consumed" | "expired" => {}
+            _ => *s = Value::from("imported"),
+        }
+    }
+    serde_json::to_vec(&v)
+        .map(Zeroizing::new)
+        .map_err(|_| bad())
 }
 
 /// How a protected profile opens (spec §11; the platform unlock is wave 2).
@@ -123,6 +210,7 @@ impl UserProfiles {
         c.kdf_max_kib = config.kdf_max_kib;
         c.max_concurrent_heavy = config.limits.max_concurrent_heavy as usize;
         c.legacy = config.legacy.map(Into::into);
+        c.legacy_overlay = config.legacy_overlay.map(Into::into);
         let profiles = Arc::new(run(move || Profiles::new(c)).await?);
         Ok(Arc::new(UserProfiles {
             profiles,
@@ -201,6 +289,63 @@ impl UserProfiles {
     pub async fn rebuild_index(&self, confirm: ConfirmRebuildIndex) -> Result<(), SdkError> {
         let p = self.profiles.clone();
         run(move || p.rebuild_index(confirm)).await
+    }
+
+    /// Opens an export (spec §10.1, the first call): read and verified whole in memory, nothing written; its keystore checked
+    /// by the SDK's parser and its seeds and accounts counted, its `sdk.state`'s operations marked `imported`. Every refusal is
+    /// `ProfileImportOpen` (the store's local reason: `last_import_refusal`), but `ProfileKdfTooLarge` and
+    /// `ProfileKdfOutOfMemory`.
+    pub async fn import_preview(
+        &self,
+        source: ImportSource,
+        export_passphrase: Arc<SecretBytes>,
+    ) -> Result<Arc<ImportReview>, SdkError> {
+        let p = self.profiles.clone();
+        let mut r = run(move || {
+            export_passphrase.with(|e| match &source {
+                ImportSource::Path(s) => {
+                    p.import_preview(scaas_profile::ImportSource::Path(s.as_ref()), e)
+                }
+                ImportSource::Bytes(b) => {
+                    p.import_preview(scaas_profile::ImportSource::Bytes(b), e)
+                }
+            })
+        })
+        .await?;
+        let ks = match r.item(KEYSTORE) {
+            Some(b) => Keystore::parse(b).map_err(|_| SdkError::ProfileImportOpen)?,
+            None => Keystore::default(),
+        };
+        if let Some(b) = r.item(STATE) {
+            let marked = mark_imported(b)?;
+            r.set_item(STATE, marked)?;
+        }
+        let n = |c: usize| u32::try_from(c).unwrap_or(u32::MAX);
+        Ok(Arc::new(ImportReview {
+            seeds: n(ks.seeds.len()),
+            accounts: n(ks.seeds.iter().map(|s| s.accounts.len()).sum()),
+            review: r,
+        }))
+    }
+
+    /// Imports a reviewed export (spec §10.1, the second call) as a new protected profile under `profile_passphrase` (a new
+    /// id; `name` `None`: the file's), with the settings kept without a confirm and those `choices` confirms by item id, never
+    /// a credential reference. Not opened. `ProfilePassphraseWeak`, `ProfileNameTaken`, `ProfileLimit`, `ProfileHiddenLimit`.
+    pub async fn import(
+        &self,
+        review: Arc<ImportReview>,
+        choices: ImportChoices,
+        profile_passphrase: Arc<SecretBytes>,
+        name: Option<String>,
+    ) -> Result<UserProfileInfo, SdkError> {
+        let p = self.profiles.clone();
+        run(move || {
+            profile_passphrase.with(|s| {
+                let name = name.as_deref().map(str::as_bytes);
+                p.import(&review.review, &choices.confirm, s, name, choices.kdf)
+            })
+        })
+        .await
     }
 
     fn profile(&self, open: OpenProfile) -> Arc<UserProfile> {
@@ -361,6 +506,51 @@ impl UserProfile {
         run(move || confirm.name.with(|n| p.delete(&open, n))).await
     }
 
+    /// The profile's settings (spec §5): none stored, the defaults.
+    pub async fn settings(&self) -> Result<ProfileSettings, SdkError> {
+        let open = self.open.clone();
+        run(move || open.settings()).await
+    }
+
+    /// Replaces the settings (spec §7.7): on a protected profile a change that could weaken it needs `passphrase`, typed
+    /// (`Argument` without it, `ProfileOpen` when wrong); a change that only strengthens needs none. Applying them to the
+    /// chain profiles is the CLI's and the TUI's (wave 2).
+    pub async fn set_settings(
+        &self,
+        s: ProfileSettings,
+        passphrase: Option<Arc<SecretBytes>>,
+    ) -> Result<(), SdkError> {
+        let open = self.open.clone();
+        run(move || match &passphrase {
+            Some(p) => p.with(|p| open.set_settings(&s, Some(p))),
+            None => open.set_settings(&s, None),
+        })
+        .await
+    }
+
+    /// Exports this protected profile to a new file (spec §10.1): its name typed again (`ConfirmationMissing`), the export
+    /// passphrase under the profile passphrase's rule (`ProfilePassphraseWeak`), the profile passphrase (`ProfileOpen`); an
+    /// existing file or a symlink at the path `Argument`.
+    pub async fn export(
+        &self,
+        confirm: ConfirmExportProfile,
+        profile_passphrase: Arc<SecretBytes>,
+        export_passphrase: Arc<SecretBytes>,
+        kdf: Option<KdfParams>,
+        target: ExportTarget,
+    ) -> Result<(), SdkError> {
+        let open = self.open.clone();
+        let ExportTarget::Path(t) = target;
+        run(move || {
+            confirm.name.with(|n| {
+                profile_passphrase.with2(&export_passphrase, |pp, xp| {
+                    open.export(n, pp, xp, kdf, t.as_ref())
+                })
+            })
+        })
+        .await
+    }
+
     /// The `SecureStore` face of part `part` for an app core (the part `profile` is the manifests' and no `ProfilePart`).
     pub fn part_store(&self, part: ProfilePart) -> Result<Arc<dyn SecureStore>, SdkError> {
         self.open.core().live()?;
@@ -424,6 +614,8 @@ impl From<Error> for SdkError {
             Error::ProfileHiddenLimit => SdkError::ProfileHiddenLimit,
             Error::ProfileSearchTooLarge => SdkError::ProfileSearchTooLarge,
             Error::ConfirmationMissing => SdkError::ConfirmationMissing,
+            Error::ProfileImportOpen => SdkError::ProfileImportOpen,
+            Error::ProfileExportTooLarge => SdkError::ProfileExportTooLarge,
         }
     }
 }
@@ -455,7 +647,9 @@ fn store_code(e: Error) -> StoreError {
         | Error::ProfilePassphraseWeak
         | Error::ProfileHiddenLimit
         | Error::ProfileSearchTooLarge
-        | Error::ConfirmationMissing => StoreError::Io,
+        | Error::ConfirmationMissing
+        | Error::ProfileImportOpen
+        | Error::ProfileExportTooLarge => StoreError::Io,
     }
 }
 

@@ -156,7 +156,12 @@ pub(crate) fn search(
 }
 
 /// The label `{name, hidden}` sealed under the held `DEK_p`, base64.
-fn seal_label(keys: &ProfileKeys, id: &str, name: &str, hidden: bool) -> Result<String, Error> {
+pub(crate) fn seal_label(
+    keys: &ProfileKeys,
+    id: &str,
+    name: &str,
+    hidden: bool,
+) -> Result<String, Error> {
     let l = Label {
         name: name.into(),
         hidden,

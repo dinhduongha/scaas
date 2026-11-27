@@ -14,11 +14,15 @@
 //!   legacy items in an unprotected `g0/` only under `migration: pending`, and §7.3 / §12 seal them there; clearing it at the
 //!   end of the move would make the moved keystore `ProfileFormat` and leave it out of the seal.
 //! - The CLI has no keychain item (its anchor is the file `keystore.head`): re-naming keychain items is the app's (wave 2).
-//!   The overlay (`overlay.json`) goes into `settings` with the settings' format (UP10).
+//! - The overlay (`overlay.json`, CLI-TUI-06) moves last into `g0/settings` (UP10): its `limits` the caps of every chain
+//!   profile, each credential a credential reference of its chain profile (every overlay field maps); written, then removed
+//!   at the source. An overlay that does not parse (or above 64 KiB) is reported (`ProfileDamaged`) and left. It counts only
+//!   beside legacy items or a pending migration: an overlay alone starts nothing.
 use crate::envelope::{self, Envelope, State};
 use crate::file::{self, lock_file, mkdir, read_bounded, MAX_BYTES};
 use crate::names::new_id;
 use crate::profile::{remove_dir, remove_file, sync_dir, ProfileEvent, Profiles, BUILD_LOCK};
+use crate::settings;
 use crate::{Error, Step};
 use std::path::Path;
 use zeroize::Zeroizing;
@@ -30,12 +34,22 @@ const HEAD: &str = "keystore.head";
 impl Profiles {
     /// Under the root lock, after the start's clean-up (`first_run`: `p/` holds no profile directory): the migration from
     /// `src`; whether this is still a first run.
-    pub(crate) fn migrate(&self, src: &Path, first_run: bool) -> Result<bool, Error> {
+    pub(crate) fn migrate(
+        &self,
+        src: &Path,
+        overlay: Option<&Path>,
+        first_run: bool,
+    ) -> Result<bool, Error> {
         let at = |n: &&str| std::fs::symlink_metadata(src.join(n)).is_ok();
-        if !ITEMS.iter().any(at) {
+        let legacy = ITEMS.iter().any(at);
+        let overlay = overlay.filter(|o| std::fs::symlink_metadata(o).is_ok());
+        if !legacy && overlay.is_none() {
             return Ok(first_run);
         }
-        let _legacy = lock_file(&src.join("keystore.lock"))?;
+        let _legacy = match legacy {
+            true => Some(lock_file(&src.join("keystore.lock"))?),
+            false => None,
+        };
         let pending = self.scan()?.into_iter().find_map(|(id, e)| {
             e.filter(|e| e.state == State::Unprotected && e.migration.is_some())
                 .map(|_| id)
@@ -49,7 +63,7 @@ impl Profiles {
                 id
             }
             None => {
-                if !first_run {
+                if !first_run && legacy {
                     self.event(ProfileEvent::ProfileDamaged);
                 }
                 return Ok(first_run);
@@ -64,7 +78,29 @@ impl Profiles {
             self.move_item(src, name, &to)?;
             self.died(Step::MigrationMoved)?;
         }
+        if let Some(o) = overlay {
+            self.move_overlay(o, &dir.join("g0"))?;
+            self.died(Step::MigrationMoved)?;
+        }
         Ok(false)
+    }
+
+    /// The overlay `o` as `settings` in `g0` (written over a copy a crash left), then removed; one that does not parse
+    /// reported and left.
+    fn move_overlay(&self, o: &Path, g0: &Path) -> Result<(), Error> {
+        let s = match read_bounded(o, 64 << 10)? {
+            None => return Ok(()),
+            Some(b) => b
+                .ok_or(Error::VaultFormat)
+                .and_then(|b| settings::from_overlay(&b)),
+        };
+        let Ok(s) = s else {
+            self.event(ProfileEvent::ProfileDamaged);
+            return Ok(());
+        };
+        file::write(g0, &g0.join(settings::ITEM), &s.json()?)?;
+        remove_file(o)?;
+        o.parent().map_or(Ok(()), sync_dir)
     }
 
     /// Step 1 under the root lock: "default", unprotected, `migration: pending`, built in `p/.tmp-*` and committed as at create.

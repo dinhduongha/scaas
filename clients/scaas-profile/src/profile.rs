@@ -49,6 +49,9 @@ pub struct ProfilesConfig {
     /// the CLI's data directory of today's single store (spec §12), migrated into "default" at start; the caller computes it
     /// (`--data-dir`, `$XDG_DATA_HOME/scaas`, `$HOME/.local/share/scaas`): this crate reads no environment
     pub legacy: Option<PathBuf>,
+    /// the CLI's overlay of today (`$XDG_CONFIG_HOME/scaas/overlay.json`, spec §12), moved into "default"'s `settings` by the
+    /// migration; the caller computes it
+    pub legacy_overlay: Option<PathBuf>,
     /// test-only (feature `test-hooks`): called after each step of a delete and a migration; `true` stops there as if the
     /// process died (`VaultIo`, the files left as they are)
     #[cfg(feature = "test-hooks")]
@@ -63,6 +66,7 @@ impl ProfilesConfig {
             kdf_max_kib: KdfParams::MAX_KIB,
             max_concurrent_heavy: 1,
             legacy: None,
+            legacy_overlay: None,
             #[cfg(feature = "test-hooks")]
             hook: None,
         }
@@ -138,6 +142,8 @@ pub struct Profiles {
     pub(crate) kdf_max_kib: u32,
     pub(crate) heavy: Arc<Heavy>,
     events: Mutex<Vec<ProfileEvent>>,
+    /// the last refused import preview's local reason (spec §10.1: a log line's)
+    pub(crate) refusal: Mutex<Option<&'static str>>,
     #[cfg(feature = "test-hooks")]
     before_kdf: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     #[cfg(feature = "test-hooks")]
@@ -266,6 +272,7 @@ impl Profiles {
                 max: config.max_concurrent_heavy.max(1),
             }),
             events: Mutex::new(Vec::new()),
+            refusal: Mutex::new(None),
             #[cfg(feature = "test-hooks")]
             before_kdf: Mutex::new(None),
             #[cfg(feature = "test-hooks")]
@@ -276,7 +283,7 @@ impl Profiles {
             let _root = pr.root_lock()?;
             let first_run = pr.start()?;
             match &config.legacy {
-                Some(src) => pr.migrate(src, first_run)?,
+                Some(src) => pr.migrate(src, config.legacy_overlay.as_deref(), first_run)?,
                 None => first_run,
             }
         };
