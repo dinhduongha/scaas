@@ -1336,20 +1336,15 @@ async fn quote_app_call_reads_the_gas_rows_before_the_signature() {
     let args = json!({"id": format!("0x{}", "11".repeat(32)),
         "sig": {"keyData": "0x", "signature": "0x", "members": []}})
     .to_string();
-    let quote = |contract: &str, name: &str| {
-        let (a, p, k, contract, e, args) = (
-            a.clone(),
-            payer.clone(),
-            signer.clone(),
-            contract.to_string(),
-            entry(name),
-            args.clone(),
-        );
+    let quote_by = |contract: &str, name: &str, p: KeyRef, k: KeyRef| {
+        let (a, contract, e, args) = (a.clone(), contract.to_string(), entry(name), args.clone());
         async move {
             a.quote_app_call("local".into(), contract, e, args, p, k)
                 .await
         }
     };
+    let quote =
+        |contract: &str, name: &str| quote_by(contract, name, payer.clone(), signer.clone());
     let got = quote(APP_CONTRACT, "putNote").await.unwrap();
     let q = got.quote.expect("the rows quote it");
     assert_eq!(
@@ -1376,6 +1371,33 @@ async fn quote_app_call_reads_the_gas_rows_before_the_signature() {
         "AppDomainRefused",
         "a listed token"
     );
+    // review A-6: a signer kind without a verify row, an `msig` signer: unquoted, never another kind's figure
+    let mldsa = KeyRef::Ua {
+        seed: seed.clone(),
+        kind: 0x0130,
+        account: 0,
+        index: 0,
+    };
+    let q = quote_by(APP_CONTRACT, "putNote", payer.clone(), mldsa)
+        .await
+        .unwrap();
+    assert!(q.quote.is_none(), "no verify row of the kind");
+    let msig = KeyRef::Msig {
+        ua: format!("0x{}", "22".repeat(32)),
+        slots: vec![],
+    };
+    let q = quote_by(APP_CONTRACT, "putNote", payer.clone(), msig)
+        .await
+        .unwrap();
+    assert!(q.quote.is_none(), "an msig signer");
+    // review A-2: a payer that is no native EVM key is refused before the review, rows or none
+    for name in ["putNote", "putOther"] {
+        assert_eq!(
+            code(quote_by(APP_CONTRACT, name, signer.clone(), signer.clone()).await),
+            "Argument",
+            "{name}"
+        );
+    }
 }
 
 /// Controller call 2026-11-22 (CLI-SDK-33): one handle given twice in one call is `Argument`, before any lock is taken (it
