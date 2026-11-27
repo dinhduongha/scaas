@@ -113,6 +113,9 @@ codes! {
     TreeStale,
     /// a send under a tree epoch whose info in force the device does not hold (after a gap, or taken flagged: C33)
     TreeInfoMissing,
+    /// a path commit while leaves are under review (a compromise warning or an author that did not hold the epoch names
+    /// them), not acknowledged by the caller: nothing signed (the path-less delta §6.2, F-3)
+    TreeLeavesUnderReview,
 }
 
 impl fmt::Display for PqChatError {

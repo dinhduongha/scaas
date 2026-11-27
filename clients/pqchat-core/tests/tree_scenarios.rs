@@ -1139,6 +1139,7 @@ async fn an_info_after_a_gap_needs_its_review() {
             index: 0,
         },
         refresh: false,
+        review_acknowledged: false,
     };
     let reads = net.items().len();
     let e =
@@ -1206,6 +1207,7 @@ fn commit_req(
             index: 0,
         },
         refresh: false,
+        review_acknowledged: false,
     }
 }
 
@@ -2029,6 +2031,66 @@ async fn unconfirmed_holds_until_the_majority_agrees() {
     }
 }
 
+/// fable-D-10 of the path-less review: a head is confirmed by its number and its id. Once a majority agreed on the head, a
+/// poll whose majority disagrees stays confirmed (the control); a stored confirmation naming another id at the same number
+/// (a twin after a failed pin write) is asked again, `unconfirmed` while the majority disagrees.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_head_is_confirmed_by_its_id() {
+    use pqchat_core::PqChatStore as _;
+    struct Spy(MemoryStore, Mutex<Vec<String>>);
+    impl pqchat_core::PqChatStore for Spy {
+        fn load(&self, key: &str) -> Result<Option<pqchat_core::Item>, pqchat_core::StoreFault> {
+            self.0.load(key)
+        }
+        fn replace(
+            &self,
+            key: &str,
+            expected: u64,
+            value: &[u8],
+        ) -> Result<bool, pqchat_core::StoreFault> {
+            self.1.lock().unwrap().push(key.to_string());
+            self.0.replace(key, expected, value)
+        }
+    }
+    let _one = common::sdk::ONE.lock().await;
+    let w = common::sdk::world().await;
+    let v = vectors();
+    let sc = scenario(&v, "main");
+    let store = Arc::new(Spy(MemoryStore::new(), Mutex::new(vec![])));
+    let s = sref(&Home::scenario(&v, &sc, None));
+    let poll = |agrees: bool| {
+        let net = HomeNet::with(Home::scenario(&v, &sc, None), None, 3, agrees);
+        crate_on(&w, net, store.clone())
+    };
+    let st = replay(&poll(true), &v, &s, "A").await.unwrap();
+    assert!(!st.unconfirmed, "the majority agreed");
+    let st = replay(&poll(false), &v, &s, "A").await.unwrap();
+    assert!(
+        !st.unconfirmed,
+        "control: the head confirmed stays confirmed"
+    );
+    let k = store
+        .1
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|k| k.starts_with("tree/confirmed/"))
+        .cloned()
+        .expect("the confirmation written");
+    let it = store.0.load(&k).unwrap().unwrap();
+    let mut c: Value = serde_json::from_slice(&it.value).unwrap();
+    c["id"] = json!(format!("0x{}", "ee".repeat(32)));
+    assert!(store
+        .0
+        .replace(&k, it.revision, &serde_json::to_vec(&c).unwrap())
+        .unwrap());
+    let st = replay(&poll(false), &v, &s, "A").await.unwrap();
+    assert!(
+        st.unconfirmed,
+        "a confirmation of another id at the same number"
+    );
+}
+
 /// R2-D-5 of the T4-T9 re-check: a store that fails to write the pin after a resume succeeded returns the error and leaves
 /// the replay it resumed from whole: a resume from it again follows every epoch after its pin.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -2292,6 +2354,15 @@ async fn the_pathless_form_from_the_state() {
         Ok(()),
         "the counter of another head"
     );
+    // fable-D-3: a resume that finds no new epoch reads the head's admins from the walk, so the form stays path-less
+    tries(&st.ids[st.ids.len() - 2], 0);
+    let idle = resume(&r, &v, &s, "A", Some(&st.replay)).await.unwrap();
+    assert!(idle.replay.epochs.is_empty(), "control: no new epoch");
+    assert_eq!(
+        r.pq.pathless_form(&idle, &req("A"), &adds, &seen).unwrap(),
+        Ok(()),
+        "the default form after an idle resume"
+    );
     let home = Home::scenario(&v, &scenario(&v, "pathless-own"), None);
     let (s, seen) = (sref(&home), home.tree_of());
     let r = crate_over(&w, HomeNet::new(home));
@@ -2340,4 +2411,50 @@ async fn the_pathless_faults_read_as_their_control() {
             "{dev}: a later poll's reads are the control's too"
         );
     }
+}
+
+/// The path-less delta §6.2 F-3, §6.5 (fable-D-1 = G-2 of the path-less review): with leaves under review (A's replay of
+/// `pathless-faults`: 4 and 7, from its C45 epochs), a path commit is refused by name before anything is built or signed
+/// unless the caller acknowledged them; acknowledged, the build goes on (the control: another outcome than the refusal).
+/// A device with none under review (D) is not asked.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_path_commit_over_leaves_under_review_asks_first() {
+    let _one = common::sdk::ONE.lock().await;
+    let w = common::sdk::world().await;
+    let v = vectors();
+    let home = Home::scenario(&v, &scenario(&v, "pathless-faults"), None);
+    let s = sref(&home);
+    let net = HomeNet::new(home);
+    let r = crate_over(&w, net.clone());
+    let st = replay(&r, &v, &s, "A").await.unwrap();
+    assert_eq!(
+        st.replay.review,
+        vec![4, 7],
+        "control: the leaves under review"
+    );
+    let mut c = commit_req(&w, &v, "A", None, vec![]);
+    c.admins = vec![v["devices"]["A"]["ua"]
+        .as_str()
+        .unwrap()
+        .to_ascii_lowercase()];
+    c.refresh = true;
+    let e = r.pq.tree_commit(&s, &st, c.clone(), 0).await.err().unwrap();
+    assert_eq!(e.code(), "TreeLeavesUnderReview");
+    assert_eq!(*net.writes.lock().unwrap(), 0, "nothing sent");
+    c.review_acknowledged = true;
+    let e =
+        r.pq.tree_commit(&s, &st, c, 0)
+            .await
+            .err()
+            .map(|e| e.code());
+    assert_ne!(
+        e,
+        Some("TreeLeavesUnderReview"),
+        "acknowledged: the build goes on"
+    );
+    let d = replay(&r, &v, &s, "D").await.unwrap();
+    assert!(
+        d.replay.review.is_empty(),
+        "control: D has none under review"
+    );
 }

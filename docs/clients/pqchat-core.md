@@ -302,10 +302,12 @@ warning, an admin's new info after a gap, the order of a commit's pieces, the cl
 - **Path-less Adds (Change 2026-11-25, the [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md) §6; the owner's ruling for the warning, controller calls
   C45-C47; SPECIFIED, nothing built).** The admins are warned from `sincePath ≥ W(N)`, `W(0)` = 20, `W(N) = max(1, N − ⌈N/4⌉)`,
   with the next refresh's cost; every path-less Add's review shows the count; the default form is path-less only when the device
-  followed the head, nothing is owed, no head admin is `gone`, no path commit is staged on the head and the bound leaves room;
+  followed the head, nothing is owed, no head admin is `gone`, no path commit of the device's own is staged on the head (F-5, owner
+  2026-11-27), a `try` is left and the bound leaves room;
   the default bound is 20. A device anchored in a run keeps the chain's key when a tag fails ("the author did not hold the
   epoch"); a path-less joiner whose later tag fails sees "this device's Welcome may not match the group"; a good tag with a
-  `sealedInfo` that fails is "followed, info not taken"; the leaves under review are listed in every path commit's review; a
+  `sealedInfo` that fails is "followed, info not taken"; the leaves under review are listed in every path commit's review,
+  and a path commit over them is built only once the caller acknowledged them (`TreeLeavesUnderReview`); a
   path-less record of the device's own `(ua, keyId)` whose nonce no `try` of its seed reproduces is the compromise warning.
 - **One branch.** Both modes end in an epoch key `K` per epoch id; sender chains, `sealedInfo`, messages, stores and consent sit
   above `K` and do not change. Until the mode is built the crate refuses `groupMode ≠ 0` by name. A tree session's state,

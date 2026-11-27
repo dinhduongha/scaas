@@ -103,6 +103,9 @@ pub struct TreeCommit {
     /// "add and refresh" (the path-less delta §6.5): an Adds-only change built as a path commit; otherwise it goes
     /// path-less whenever the conditions of C46 hold
     pub refresh: bool,
+    /// the user saw the leaves under review ([`TreeSplit::review`]) and asked for the path commit all the same (the
+    /// path-less delta §6.2, F-3); without it such a commit is `TreeLeavesUnderReview`, nothing signed
+    pub review_acknowledged: bool,
 }
 
 /// A tree session as this device follows it: the replay's epochs and warnings, and whether the device can send.
@@ -149,13 +152,19 @@ pub struct TreeSplit {
     /// a path-less build's deferred cost (§6.4, D-10): the ciphertexts the next path commit carries for the leaves added
     /// without one, and what they ask ([`deferred_line`]); `None` for a path commit or without rows
     pub deferred: Option<(u64, pt::PqGas)>,
+    /// for a path commit of an Adds-only change, why the path form is built (C46's first failing condition, or "add and
+    /// refresh"); `None` for a path-less build or a change that is not Adds-only (fable-D-1)
+    pub fallback: Option<&'static str>,
+    /// the leaves under review (the path-less delta §6.2, F-3) a path commit would send the new secrets to: listed before
+    /// anything is signed; `tree_commit` builds such a commit only with `review_acknowledged` (fable-D-1 = G-2)
+    pub review: Vec<u32>,
 }
 
-/// The review's line of a deferred cost (the path-less delta §6.4): "the next refresh carries about m ciphertexts, about
-/// x M asked".
+/// The review's line of a deferred cost (the path-less delta §6.4): "the next refresh carries at least m ciphertexts, at
+/// least x M asked" (a lower bound, the controller's call of 2026-11-27; the path-less review's D-11).
 pub fn deferred_line(m: u64, g: pt::PqGas) -> String {
     format!(
-        "the next refresh carries about {m} ciphertext{}, about {:.1} M asked",
+        "the next refresh carries at least {m} ciphertext{}, at least {:.1} M asked",
         if m == 1 { "" } else { "s" },
         g.asked() as f64 / 1e6
     )
@@ -214,6 +223,33 @@ pub fn tree_advised(keys: usize, committers: usize) -> bool {
 /// 2026-11-27): `{epochId, parent}`; it holds back a path-less Add only while its parent is the head.
 fn staged_key(session_id: &str) -> String {
     format!("tree/staged/{}", session_id.to_ascii_lowercase())
+}
+
+/// Whether a send's simulation reverted because the commit lost its parent's slot (F-5 by the owner's ruling of 2026-11-27:
+/// the contract's order decides, the loser is refused by name and rebuilt): `PqChatEpochTaken(bytes32,bytes32)`
+/// (`0x683ad3f6`) or `PqChatTreeParent(bytes32)` (`0x33161576`), by name or selector in the endpoint's reason. The app
+/// replays and rebuilds on `TreeStale` (fable-E-2 = D-6 of the path-less review).
+fn lost_slot(e: &PqChatError) -> bool {
+    // the endpoint's revert by its code and text (scaas-rpc stays out of the crate's normal graph, tests/deps.rs)
+    let PqChatError::Sdk(scaas_sdk::SdkError::Rpc(rpc)) = e else {
+        return false;
+    };
+    if rpc.code() != "Revert" {
+        return false;
+    }
+    let r = rpc.to_string().to_ascii_lowercase();
+    // and `PqChatNonceUsed(bytes32,uint64)` (`0xf89eeec1`): a `try` reused after a restore, rebuilt at the next one
+    // (the delta §4.1 as amended, the path-less review's E-6)
+    [
+        "683ad3f6",
+        "33161576",
+        "f89eeec1",
+        "pqchatepochtaken",
+        "pqchattreeparent",
+        "pqchatnonceused",
+    ]
+    .iter()
+    .any(|x| r.contains(x))
 }
 
 /// The store key of this device's path-less `try` counter on a head (C47): `{parent, next}`.
@@ -904,15 +940,24 @@ impl PqChat {
             .unwrap_or_default();
         let head = ids.len().saturating_sub(1) as u64;
         // ARCH-POS-13: the majority read is made until a majority confirmed the head (R2-D-3), public facts only
-        let confirmed: Option<u64> = items
-            .get::<Value>(&confirmed_key(&tree_id))?
-            .and_then(|v| v.as_u64());
-        let asked = confirmed.is_none_or(|c| head > c);
+        // the head confirmed by its number and its id (the path-less review's D-10: a twin at the same number after a failed
+        // pin write is asked again)
+        let confirmed: Option<(u64, String)> =
+            items.get::<Value>(&confirmed_key(&tree_id))?.and_then(|v| {
+                Some((
+                    v.get("epoch")?.as_u64()?,
+                    v.get("id")?.as_str()?.to_string(),
+                ))
+            });
+        let asked =
+            confirmed.is_none_or(|(c, id)| head > c || (head == c && ids.last() != Some(&id)));
         let seen = reads.views.get("treeOf()").cloned().unwrap_or_default();
         let unconfirmed = asked && self.majority_tree(s, &seen).await != Fresh::Confirmed;
         // the confirmation first: a pin write that fails after it leaves a confirmed head, which a later poll pins
         if asked && !unconfirmed {
-            items.update::<Value, _>(&confirmed_key(&tree_id), |_| Ok(json!(head)))?;
+            items.update::<Value, _>(&confirmed_key(&tree_id), |_| {
+                Ok(json!({"epoch": head, "id": ids.last()}))
+            })?;
         }
         if pin.is_some() || !unconfirmed {
             items.update::<Value, _>(&pin_key(&tree_id), |_| Ok(r.pin.clone()))?;
@@ -1097,14 +1142,22 @@ impl PqChat {
         c: TreeCommit,
         leaf: u32,
     ) -> Result<TreeBuilt, PqChatError> {
-        let (mut prepared, mut head_confirmed) = self.tree_built(s, st, &c, &c.adds, leaf).await?;
+        let (mut prepared, mut head_confirmed, _) =
+            self.tree_built(s, st, &c, &c.adds, leaf, false).await?;
         let mut split = self
             .tree_split(s, &c.me, &shape_of(&prepared.record))
             .await?;
         let first = split.batches.first().copied().unwrap_or(0) as usize;
         let (head, left) = c.adds.split_at(first.min(c.adds.len()));
         if split.batches.len() > 1 {
-            (prepared, head_confirmed) = self.tree_built(s, st, &c, head, leaf).await?;
+            // the first batch keeps the whole request's form, the one `tree_commit_plan` quoted (the path-less review's
+            // D-5: fewer Adds could fit the bound and be signed path-less, not the commit quoted)
+            let quoted = TreeCommit {
+                refresh: c.refresh || prepared.record.get("pathless") != Some(&json!(true)),
+                ..c.clone()
+            };
+            (prepared, head_confirmed, _) =
+                self.tree_built(s, st, &quoted, head, leaf, false).await?;
             split = self
                 .tree_split(s, &c.me, &shape_of(&prepared.record))
                 .await?;
@@ -1133,9 +1186,10 @@ impl PqChat {
                     Ok(json!({"parent": parent, "next": next}))
                 })?;
         }
-        // F-5 (owner 2026-11-27): this device's own path commit sent in several transactions holds its path-less Adds back
-        // while it is staged on this head
-        if signed.record.get("pathless") == Some(&json!(false)) && plan.txs.len() > 1 {
+        // F-5 (owner 2026-11-27): this device's own path commit holds its path-less Adds back while it is staged on this head
+        // (the path-less review's D-7 = G-5: every signed path commit, one transaction or several: until it lands the head
+        // does not move, and once it moves the marker names another parent)
+        if signed.record.get("pathless") == Some(&json!(false)) {
             let parent = signed
                 .record
                 .get("parentEpochId")
@@ -1168,7 +1222,7 @@ impl PqChat {
         c: &TreeCommit,
         leaf: u32,
     ) -> Result<TreeSplit, PqChatError> {
-        let (prepared, _) = self.tree_built(s, st, c, &c.adds, leaf).await?;
+        let (prepared, _, form) = self.tree_built(s, st, c, &c.adds, leaf, true).await?;
         let shape = shape_of(&prepared.record);
         let mut split = self.tree_split(s, &c.me, &shape).await?;
         if prepared.record.get("pathless") == Some(&json!(true)) {
@@ -1177,13 +1231,22 @@ impl PqChat {
                 refresh: true,
                 ..c.clone()
             };
-            let (path, _) = self.tree_built(s, st, &refresh, &c.adds, leaf).await?;
-            split.refresh = Some(
-                self.tree_split(s, &c.me, &shape_of(&path.record))
-                    .await?
-                    .plans,
-            );
+            // the path-less review's D-4: an alternative that cannot be built or planned is no price, not a refusal of the
+            // path-less Add that fits
+            split.refresh = match self.tree_built(s, st, &refresh, &c.adds, leaf, true).await {
+                Ok((path, _, _)) => self
+                    .tree_split(s, &c.me, &shape_of(&path.record))
+                    .await
+                    .ok()
+                    .map(|x| x.plans),
+                Err(_) => None,
+            };
             split.deferred = self.tree_deferred(s, st, shape.adds)?;
+        } else {
+            split.review = st.replay.review.clone();
+            split.fallback = (c.removes.is_empty() && !c.adds.is_empty())
+                .then(|| form.err())
+                .flatten();
         }
         Ok(split)
     }
@@ -1221,6 +1284,8 @@ impl PqChat {
             plans: vec![one_tx()],
             refresh: None,
             deferred: None,
+            fallback: None,
+            review: vec![],
         };
         let Some(g) = self.conf(&s.chain)?.tree_gas.as_deref() else {
             return Ok(one());
@@ -1268,6 +1333,8 @@ impl PqChat {
         Ok(TreeSplit {
             refresh: None,
             deferred: None,
+            fallback: None,
+            review: vec![],
             adds_per_commit: per,
             batches,
             plans,
@@ -1282,7 +1349,8 @@ impl PqChat {
         c: &TreeCommit,
         adds: &[Value],
         leaf: u32,
-    ) -> Result<(pt::PqTreeCommit, bool), PqChatError> {
+        preview: bool,
+    ) -> Result<(pt::PqTreeCommit, bool, Result<(), &'static str>), PqChatError> {
         // C33: the device seals the info in force when it holds it, else the marker; a new info after a gap (the device
         // holds none in force) is the admin's reviewed action only (codex-r3-7), never sealed by itself
         let info = match (&c.info, st.replay.info_to_seal.as_ref()) {
@@ -1321,7 +1389,18 @@ impl PqChat {
             info,
         };
         let key = c.me.key.clone();
-        let pathless = !c.refresh && self.pathless_form(st, c, adds, &seen)?.is_ok();
+        // the form and, for the path form, its reason (the path-less delta §6.5, fable-D-1: the quote names it)
+        let form = match c.refresh {
+            true => Err("add and refresh"),
+            false => self.pathless_form(st, c, adds, &seen)?,
+        };
+        let pathless = form.is_ok();
+        // the path-less delta §6.2 F-3, §6.5 (fable-D-1 = G-2): a path commit sends the new secrets to every live leaf; with
+        // leaves under review it is built only once the caller has shown them and asked (`review_acknowledged`), never by
+        // the planner's fallback alone; the quote ([`PqChat::tree_commit_plan`], `preview`) lists them instead
+        if !pathless && !st.replay.review.is_empty() && !c.review_acknowledged && !preview {
+            return Err(PqChatError::TreeLeavesUnderReview);
+        }
         let try_ = self.next_try(st)?;
         let prepared = self
             .tree_run(s, &mut reads, start.unwrap_or(0), |rd| {
@@ -1353,7 +1432,7 @@ impl PqChat {
         if reads.views.get("treeOf()") != Some(&seen) {
             return Err(PqChatError::TreeStale);
         }
-        Ok((prepared, head_confirmed))
+        Ok((prepared, head_confirmed, form))
     }
 
     /// The `try` (C47) of this device's next path-less Add on the head of `st`: one more than the last it signed on that
@@ -1389,11 +1468,12 @@ impl PqChat {
         seen: &Value,
     ) -> Result<Result<(), &'static str>, PqChatError> {
         let r = &st.replay;
+        // the walk's head admins (fable-D-3: a resume that finds no new epoch has no `epochs` to read them from)
         let head_admins: Vec<String> = r
-            .epochs
-            .last()
-            .map(|e| e.admins.iter().map(|a| a.to_ascii_lowercase()).collect())
-            .unwrap_or_default();
+            .head_admins
+            .iter()
+            .map(|a| a.to_ascii_lowercase())
+            .collect();
         let mut mine: Vec<String> = c.admins.iter().map(|a| a.to_ascii_lowercase()).collect();
         mine.sort();
         // the pin's register before the head's exits, and the exits applied at the head: every UA gone there
@@ -1477,11 +1557,11 @@ impl PqChat {
         };
         let whole = plan.txs.len() == 1 && !landed.record;
         let (item, args) = piece_args(c, &tx, whole)?;
-        Ok(Some(
-            self.net
-                .prepare(&s.chain, &s.home, item, args, payer)
-                .await?,
-        ))
+        match self.net.prepare(&s.chain, &s.home, item, args, payer).await {
+            Ok(call) => Ok(Some(call)),
+            Err(e) if lost_slot(&e) => Err(PqChatError::TreeStale),
+            Err(e) => Err(e),
+        }
     }
 
     /// What of `c` is in state at the home: at the final block, or at the latest one (`latest`, D-14); whether its epoch is
@@ -1914,5 +1994,40 @@ mod tests {
                 "{item}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod lost_slot_tests {
+    use super::*;
+
+    /// fable-E-2 = D-6 of the path-less review: a send refused because the commit lost its parent's slot is named, by the
+    /// error's selector or name in the endpoint's reason; another revert, or another error, is not.
+    #[test]
+    fn a_lost_slot_is_named() {
+        let rv = |r: &str| {
+            PqChatError::Sdk(scaas_sdk::SdkError::Rpc(scaas_rpc::RpcError::Revert {
+                endpoint: 0,
+                data: vec![],
+                reason: r.into(),
+            }))
+        };
+        assert!(lost_slot(&rv("execution reverted: 0x683ad3f6aabb")));
+        assert!(lost_slot(&rv("0x33161576cc")));
+        assert!(lost_slot(&rv("PqChatEpochTaken(0x01, 0x02)")));
+        assert!(
+            lost_slot(&rv("0xf89eeec1dd")),
+            "a try reused after a restore"
+        );
+        assert!(!lost_slot(&rv("0x3f8b1c2e")));
+        assert!(!lost_slot(&PqChatError::TreeVoid));
+        // the same text in another error is no lost slot
+        let gone = PqChatError::Sdk(scaas_sdk::SdkError::Rpc(scaas_rpc::RpcError::NodeRefused {
+            status: 400,
+            code: "X".into(),
+            detail: Some("0x683ad3f6".into()),
+            revert_data: None,
+        }));
+        assert!(!lost_slot(&gone));
     }
 }

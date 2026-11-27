@@ -191,6 +191,7 @@ async fn chain_tree_session() {
         info_reviewed: false,
         payer: l.payer.clone(),
         refresh: false,
+        review_acknowledged: false,
     };
     // the path-less delta §6.5, §9 (the quote) and §6.4 (the deferred cost), on a device with the chain's rows: the
     // path-less build names both prices, its own and "add and refresh"'s (the same Adds as a path commit, dearer), and the
@@ -245,6 +246,39 @@ async fn chain_tree_session() {
     assert!(
         p.refresh.is_none() && p.deferred.is_none(),
         "a path commit names one price"
+    );
+    // the path-less review's D-7 = G-5: a path commit of this device's own, signed in one transaction and not landed,
+    // holds its path-less Adds back on this head (F-5); the quoting device's own store, nothing of it is sent
+    let before = quoting
+        .tree_commit_plan(&s, &a0, &req1, leaf_a)
+        .await
+        .unwrap();
+    assert_eq!(
+        before.fallback, None,
+        "control: path-less before the path commit"
+    );
+    let staged = quoting
+        .tree_commit(
+            &s,
+            &a0,
+            TreeCommit {
+                adds: vec![],
+                refresh: true,
+                ..req1.clone()
+            },
+            leaf_a,
+        )
+        .await
+        .unwrap();
+    assert_eq!(staged.signed.record["pathless"], json!(false));
+    let after = quoting
+        .tree_commit_plan(&s, &a0, &req1, leaf_a)
+        .await
+        .unwrap();
+    assert_eq!(
+        after.fallback,
+        Some("a key refresh is in progress"),
+        "D-7: the staged marker of a one-transaction path commit"
     );
     let TreeBuilt {
         signed: c1,
@@ -363,6 +397,7 @@ async fn chain_tree_session() {
                 info_reviewed: false,
                 payer: l.payer.clone(),
                 refresh: false,
+                review_acknowledged: false,
             },
             leaf_b,
         )
@@ -402,6 +437,7 @@ async fn chain_tree_session() {
                 info_reviewed: false,
                 payer: l.payer.clone(),
                 refresh: false,
+                review_acknowledged: false,
             },
             leaf_of(&a2, &alice).0,
         )
@@ -545,6 +581,7 @@ async fn add_all(
         info_reviewed: false,
         payer: l.payer.clone(),
         refresh,
+        review_acknowledged: false,
     };
     let TreeBuilt {
         signed,

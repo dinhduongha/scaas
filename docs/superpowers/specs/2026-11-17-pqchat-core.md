@@ -375,6 +375,7 @@ operation states).
 | `TreeCreationIncomplete` | a tree creation that did not complete and whose prepared record this store does not hold: it cannot be finished (codex-r3-5) |
 | `TreeStale` | a tree commit on a state whose head moved since (C33: replay first; the TreeKEM T4-T9 review's D-10) |
 | `TreeInfoMissing` | a send under a tree epoch whose info in force the device does not hold (after a gap, or taken flagged: C33; the review's C-3) |
+| `TreeLeavesUnderReview` | a path commit while leaves are under review (a compromise warning or a C45 state names them), not acknowledged by the caller: nothing signed (the path-less delta §6.2, F-3; the path-less review's D-1 = G-2) |
 
 ## 9. Threat model
 
