@@ -859,7 +859,8 @@ impl MatrixClient {
         self.request(f).await?.cancel().await.map_err(|_| v)
     }
 
-    /// Where a flow stands.
+    /// Where a flow stands; `MatrixVerification` for a flow this client does not hold (never seen, or dropped by matrix-sdk
+    /// after it ended: the device's trust is then the outcome).
     pub async fn step(&self, f: &Flow) -> R<Step> {
         let ended = |code: Option<String>| match code.as_deref() {
             Some("m.mismatched_sas") | Some("m.key_mismatch") => Step::Mismatch,

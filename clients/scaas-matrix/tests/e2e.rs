@@ -329,9 +329,13 @@ async fn scaas_matrix_against_synapse() {
     assert_eq!(ea, eb, "the same seven emoji on both sides");
     alice.confirm(&fa).await.unwrap();
     bob.confirm(&fb).await.unwrap();
+    // a finished flow may already be dropped by matrix-sdk's verification cache (then `step` is MatrixVerification): the
+    // outcome that counts is each device's trust, asserted right after
+    let done = |r: Result<Step, MatrixError>| {
+        matches!(r, Ok(Step::Verified) | Err(MatrixError::MatrixVerification))
+    };
     until("both verified", || async {
-        alice.step(&fa).await.unwrap() == Step::Verified
-            && bob.step(&fb).await.unwrap() == Step::Verified
+        done(alice.step(&fa).await) && done(bob.step(&fb).await)
     })
     .await;
     assert_eq!(
