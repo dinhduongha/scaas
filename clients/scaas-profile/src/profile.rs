@@ -14,7 +14,7 @@
 use crate::envelope::{self, Envelope, KdfParams, Label, State, B64};
 use crate::file::{self, lock_file, mkdir, read_bounded, try_lock_file};
 use crate::index::{self, Index, Journal, Row};
-use crate::names::{check_name, is_id, new_id, random, same_name};
+use crate::names::{check_name, is_id, new_id, random, random_vec, same_name};
 use crate::store::{Core, CoreOpen, ProfilePart};
 use crate::{keychain_name, Error, Head, ProfileKeychain};
 use base64::Engine;
@@ -720,11 +720,11 @@ impl OpenProfile {
                     _ => return Err(Error::VaultFormat),
                 }
             }
-            let key = Zeroizing::new(random::<32>()?);
+            let key = Zeroizing::new(random_vec(32)?);
             let b64 = Zeroizing::new(B64.encode(&key[..]));
             let pt = Zeroizing::new([HEAD, b64.as_bytes(), TAIL].concat());
             match self.core.put_if(ProfilePart::Sdk, MATRIX_KEY, None, &pt) {
-                Ok(()) => return self.matrix_dir(Zeroizing::new(key.to_vec())),
+                Ok(()) => return self.matrix_dir(key),
                 Err(Error::StoreConflict) => continue,
                 Err(e) => return Err(e),
             }

@@ -893,3 +893,14 @@ fn create_wrap_open() {
         k.item_file("sdk", "keystore").unwrap()
     );
 }
+
+/// `ProfileKeys::random_bytes` (CLI-SDK-01: `scaas-profile` draws its ids, tags and the Matrix store key here): at most 4,096
+/// bytes, `Argument` above; two draws differ; no key held.
+#[test]
+fn random_bytes_bounded() {
+    assert_eq!(ProfileKeys::random_bytes(4097).err(), Some(Error::Argument));
+    assert_eq!(ProfileKeys::random_bytes(4096).unwrap().len(), 4096);
+    let a = ProfileKeys::random_bytes(32).unwrap();
+    assert_eq!(a.len(), 32);
+    assert_ne!(a, ProfileKeys::random_bytes(32).unwrap());
+}

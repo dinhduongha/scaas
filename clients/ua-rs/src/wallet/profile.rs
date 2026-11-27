@@ -12,7 +12,7 @@
 //! `OutOfMemory` to `KdfOutOfMemory`. Byte formats: clientkeys `src/profile.js`, `smartcontracts/vectors/profile/`. UNAUDITED.
 use super::aead::{aead_open, aead_seal, hkdf_sha256, hmac_sha256, Alg};
 use super::appkey::{
-    passphrase_bytes, rng, AppKeys, Argon2Params, KeyHandle, KeyUsage, Nonce, Origin,
+    passphrase_bytes, random_bytes, rng, AppKeys, Argon2Params, KeyHandle, KeyUsage, Nonce, Origin,
 };
 use super::store::{MemoryProtection, SecretStore};
 use super::{Error, Result};
@@ -166,6 +166,13 @@ impl ProfileKeys {
             return Err(Error::Argument);
         }
         Ok(())
+    }
+
+    /// Non-key randomness from the OS generator, at most 4,096 bytes (`Argument` above): a profile id's random bytes, a
+    /// temporary directory's tag, the Matrix store key's bytes (the one key that leaves the arena, user-profiles spec §7.2;
+    /// CLI-SDK-01: `scaas-profile` draws its randomness here). Needs no key: an empty or locked arena's too.
+    pub fn random_bytes(n: usize) -> Result<Vec<u8>> {
+        random_bytes(n)
     }
 
     /// One Argon2id run at `kdf` over a random input, its output dropped (a hidden search's dummy run, spec §8).

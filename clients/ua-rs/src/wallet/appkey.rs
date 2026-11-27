@@ -159,6 +159,16 @@ pub(super) fn rng(out: &mut [u8]) -> Result<()> {
     OsRng.try_fill_bytes(out).map_err(|_| Error::Rng)
 }
 
+/// [`AppKeys::random_bytes`] without a scope (the profile arena's, `profile.rs`): at most 4,096 bytes of the OS generator.
+pub(super) fn random_bytes(n: usize) -> Result<Vec<u8>> {
+    if n > RANDOM_MAX {
+        return Err(Error::Argument);
+    }
+    let mut out = vec![0u8; n];
+    rng(&mut out)?;
+    Ok(out)
+}
+
 fn key32(s: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
     Ok(Zeroizing::new(s.try_into().map_err(|_| Error::Argument)?))
 }
@@ -248,12 +258,7 @@ impl AppKeys {
 
     /// Non-key randomness (a salt, a nonce prefix, passphrase words): at most 4,096 bytes.
     pub fn random_bytes(&self, n: usize) -> Result<Vec<u8>> {
-        if n > RANDOM_MAX {
-            return Err(Error::Argument);
-        }
-        let mut out = vec![0u8; n];
-        rng(&mut out)?;
-        Ok(out)
+        random_bytes(n)
     }
 
     #[cfg(feature = "app-core")]

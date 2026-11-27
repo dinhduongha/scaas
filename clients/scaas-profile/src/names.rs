@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! The profile id and the name helpers (spec §4, §6; plan pinned format 10): a UUIDv7 as `uuid` 1's
-//! `Builder::from_unix_timestamp_millis` builds it, 10 random bytes from the OS RNG; `name_key` (NFKC, then Unicode lower case),
+//! `Builder::from_unix_timestamp_millis` builds it, 10 random bytes from the OS RNG (`scaas-ua`'s); `name_key` (NFKC, then Unicode lower case),
 //! the one comparison key of a name; `check_name` (NFC, 1 to 64 bytes, no `Cc` or `Cf` character). Rows:
 //! smartcontracts/vectors/profile/ids.json.
 use crate::Error;
@@ -14,7 +14,7 @@ pub fn uuid7(ms: u64, random: &[u8; 10]) -> String {
         .to_string()
 }
 
-/// A new profile id: now, and 10 bytes of the OS RNG.
+/// A new profile id: now, and 10 bytes of the OS RNG (`scaas-ua`'s).
 pub(crate) fn new_id() -> Result<String, Error> {
     let ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -26,11 +26,15 @@ pub(crate) fn new_id() -> Result<String, Error> {
     ))
 }
 
-/// `N` bytes of the OS RNG (getrandom, as the SDK's `uuid4` and `scaas-ua`'s `OsRng` draw).
+/// `n` bytes of the OS RNG through `scaas-ua` (CLI-SDK-01: randomness for keys from `ua-rs`; `ProfileKeys::random_bytes`, at
+/// most 4,096); a failure is `VaultIo`.
+pub(crate) fn random_vec(n: usize) -> Result<Vec<u8>, Error> {
+    scaas_ua::wallet::ProfileKeys::random_bytes(n).map_err(|_| Error::VaultIo)
+}
+
+/// [`random_vec`] as an array (public bytes: an id's, a tag's).
 pub(crate) fn random<const N: usize>() -> Result<[u8; N], Error> {
-    let mut b = [0u8; N];
-    getrandom::getrandom(&mut b).map_err(|_| Error::VaultIo)?;
-    Ok(b)
+    random_vec(N)?.try_into().map_err(|_| Error::VaultIo)
 }
 
 /// Whether `s` is a UUID in its canonical lower-case form (a profile directory's name).
