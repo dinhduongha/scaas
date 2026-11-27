@@ -15,6 +15,7 @@ use crate::envelope::{self, Envelope, KdfParams, Label, State, B64};
 use crate::file::{self, lock_file, mkdir, read_bounded, try_lock_file};
 use crate::index::{self, Index, Journal, Row};
 use crate::names::{check_name, is_id, new_id, random, random_vec, same_name};
+use crate::reseal;
 use crate::store::{Core, CoreOpen, ProfilePart};
 use crate::{keychain_name, Error, Head, ProfileKeychain};
 use base64::Engine;
@@ -87,16 +88,16 @@ pub enum ProfileEvent {
 }
 
 /// The heavy limiter: at most `max` Argon2id runs at once.
-struct Heavy {
+pub(crate) struct Heavy {
     running: Mutex<usize>,
     free: Condvar,
     max: usize,
 }
 
-struct HeavyGuard<'a>(&'a Heavy);
+pub(crate) struct HeavyGuard<'a>(&'a Heavy);
 
 impl Heavy {
-    fn acquire(&self) -> HeavyGuard<'_> {
+    pub(crate) fn acquire(&self) -> HeavyGuard<'_> {
         let n = self.running.lock().unwrap_or_else(PoisonError::into_inner);
         let mut n = self
             .free
@@ -125,7 +126,7 @@ pub struct Profiles {
     p: PathBuf,
     keychain: Option<Arc<dyn ProfileKeychain>>,
     kdf_max_kib: u32,
-    heavy: Heavy,
+    heavy: Arc<Heavy>,
     events: Mutex<Vec<ProfileEvent>>,
     #[cfg(feature = "test-hooks")]
     before_kdf: Mutex<Option<Box<dyn FnOnce() + Send>>>,
@@ -162,28 +163,28 @@ fn prepare_root(root: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-fn remove_dir(p: &Path) -> Result<(), Error> {
+pub(crate) fn remove_dir(p: &Path) -> Result<(), Error> {
     match std::fs::remove_dir_all(p) {
         Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(Error::VaultIo),
         _ => Ok(()),
     }
 }
 
-fn remove_file(p: &Path) -> Result<(), Error> {
+pub(crate) fn remove_file(p: &Path) -> Result<(), Error> {
     match std::fs::remove_file(p) {
         Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(Error::VaultIo),
         _ => Ok(()),
     }
 }
 
-fn sync_dir(p: &Path) -> Result<(), Error> {
+pub(crate) fn sync_dir(p: &Path) -> Result<(), Error> {
     File::open(p)
         .and_then(|d| d.sync_all())
         .map_err(|_| Error::VaultIo)
 }
 
 /// The envelope of directory `dir` (named `id`), read bounded: `Ok(None)` when absent.
-fn read_envelope(dir: &Path, id: &str) -> Result<Option<(Envelope, Vec<u8>)>, Error> {
+pub(crate) fn read_envelope(dir: &Path, id: &str) -> Result<Option<(Envelope, Vec<u8>)>, Error> {
     match read_bounded(&dir.join(envelope::FILE), envelope::MAX)? {
         None => Ok(None),
         Some(None) => Err(Error::ProfileFormat),
@@ -200,7 +201,7 @@ fn rev_at(bytes: &Option<Option<Vec<u8>>>) -> Option<u64> {
 
 /// A profile arena's refusal at open: a wrong passphrase or an altered wrap `ProfileOpen`, argon2's allocation failure
 /// `ProfileKdfOutOfMemory`.
-fn open_code(e: scaas_ua::wallet::Error) -> Error {
+pub(crate) fn open_code(e: scaas_ua::wallet::Error) -> Error {
     match e {
         scaas_ua::wallet::Error::KdfOutOfMemory => Error::ProfileKdfOutOfMemory,
         scaas_ua::wallet::Error::WalletLocked => Error::ProfileLocked,
@@ -221,11 +222,11 @@ impl Profiles {
             root: config.root,
             keychain: config.keychain,
             kdf_max_kib: config.kdf_max_kib,
-            heavy: Heavy {
+            heavy: Arc::new(Heavy {
                 running: Mutex::new(0),
                 free: Condvar::new(),
                 max: config.max_concurrent_heavy.max(1),
-            },
+            }),
             events: Mutex::new(Vec::new()),
             #[cfg(feature = "test-hooks")]
             before_kdf: Mutex::new(None),
@@ -489,9 +490,8 @@ impl Profiles {
             return Err(Error::ProfileUnknown);
         }
         let instance = try_lock_file(&dir.join(INSTANCE_LOCK))?.ok_or(Error::ProfileInUse)?;
-        // UP7: the profile's own clean-up (spec §7.3: `profile.envelope.next` rolled back, lower generations) runs here, under
-        // the instance lock and before the envelope is read
         let (env, bytes) = read_envelope(&dir, id)?.ok_or(Error::ProfileFormat)?;
+        let lower = self.generations(&dir, id, env.gen)?;
         self.check_marker(id, env.state)?;
         let Some(hint) = env.name.clone() else {
             self.drop_row(id)?;
@@ -530,6 +530,11 @@ impl Profiles {
                 k.lock()
             }
         })?);
+        // spec §7.3: a lower generation (a crash between a re-seal's commit and its clean-up) only now, after the wrap opened
+        // and the anchor check, beside the live `g<gen>/`
+        for g in &lower {
+            remove_dir(g)?;
+        }
         let opened = OpenProfile {
             info: ProfileInfo {
                 id: id.into(),
@@ -537,8 +542,12 @@ impl Profiles {
                 protected: keys.is_some(),
             },
             core,
-            keys,
             instance: Mutex::new(Some(instance)),
+            heavy: self.heavy.clone(),
+            kdf_max_kib: self.kdf_max_kib,
+            keychain: self.keychain.clone(),
+            #[cfg(feature = "test-hooks")]
+            hook: Mutex::new(None),
         };
         if name != hint {
             let mut e = env;
@@ -548,7 +557,7 @@ impl Profiles {
             file::write(&dir, &dir.join(envelope::FILE), &b)?;
             opened.core.set_envelope(Head::of(e.rev, &b))?;
         }
-        if let (Some(kc), true) = (&self.keychain, opened.info.protected) {
+        if let (Some(kc), true) = (&self.keychain, opened.core.protected()) {
             let marker = keychain_name(id, "protected");
             if kc.get(&marker)?.is_none() {
                 kc.put(&marker, b"1")?;
@@ -558,6 +567,62 @@ impl Profiles {
             self.event(ProfileEvent::ProfileIndexMismatch);
         }
         Ok(opened)
+    }
+
+    /// Spec §7.3 at the profile's own open, under its instance lock: a journal (`profile.envelope.next`) rolls the re-seal back,
+    /// `g<gen+1>/` removed first, then the journal; then a generation above `gen` is `ProfileDamaged` (`ProfileRollback` where
+    /// an anchor names a higher `gen`: the envelope is old), never removed; a generation below `gen` is `ProfileDamaged` without
+    /// `g<gen>/`, else returned, to be removed once the wrap has opened.
+    fn generations(&self, dir: &Path, id: &str, gen: u64) -> Result<Vec<PathBuf>, Error> {
+        let next = gen.checked_add(1).ok_or(Error::ProfileFormat)?;
+        if std::fs::symlink_metadata(dir.join(reseal::NEXT)).is_ok() {
+            remove_dir(&dir.join(format!("g{next}")))?;
+            remove_file(&dir.join(reseal::NEXT))?;
+            sync_dir(dir)?;
+        }
+        let (mut lower, mut higher) = (Vec::new(), false);
+        for e in std::fs::read_dir(dir).map_err(|_| Error::VaultIo)? {
+            let e = e.map_err(|_| Error::VaultIo)?;
+            let k = e.file_name().to_str().and_then(|n| {
+                let k = n.strip_prefix('g')?.parse::<u64>().ok()?;
+                (n == format!("g{k}")).then_some(k)
+            });
+            match k {
+                Some(k) if k > gen => higher = true,
+                Some(k) if k < gen => lower.push(e.path()),
+                _ => {}
+            }
+        }
+        if higher {
+            let anchored = self.anchor_gen(dir, id)?;
+            let e = match anchored > gen {
+                true => (ProfileEvent::ProfileRollback, Error::ProfileRollback),
+                false => (ProfileEvent::ProfileDamaged, Error::ProfileDamaged),
+            };
+            self.event(e.0);
+            return Err(e.1);
+        }
+        if !lower.is_empty() && !dir.join(format!("g{gen}")).is_dir() {
+            self.event(ProfileEvent::ProfileDamaged);
+            return Err(Error::ProfileDamaged);
+        }
+        Ok(lower)
+    }
+
+    /// The highest `gen` an anchor of the profile names (`profile.head`, the keychain's), 0 without one.
+    fn anchor_gen(&self, dir: &Path, id: &str) -> Result<u64, Error> {
+        let in_file = read_bounded(&dir.join(crate::store::ANCHOR_FILE), 2560)?.flatten();
+        let kept = match &self.keychain {
+            Some(kc) => kc.get(&keychain_name(id, "head"))?,
+            None => None,
+        };
+        Ok([in_file, kept]
+            .into_iter()
+            .flatten()
+            .filter_map(|a| crate::Anchor::parse(&a))
+            .map(|a| a.gen)
+            .max()
+            .unwrap_or(0))
     }
 
     /// The keychain marker's rules (spec §7.1): an unprotected envelope beside it `ProfileFormat`; a protected one beside it
@@ -682,15 +747,24 @@ pub struct MatrixStore {
 
 /// An open profile: its store core, its arena and its instance lock, until [`OpenProfile::lock`] or drop. No `Debug`.
 pub struct OpenProfile {
-    info: ProfileInfo,
-    core: Arc<Core>,
-    keys: Option<Arc<ProfileKeys>>,
+    pub(crate) info: ProfileInfo,
+    pub(crate) core: Arc<Core>,
     instance: Mutex<Option<File>>,
+    /// the profiles' heavy limiter, this device's KDF maximum and the keychain: a re-seal's (spec §7.3)
+    pub(crate) heavy: Arc<Heavy>,
+    pub(crate) kdf_max_kib: u32,
+    pub(crate) keychain: Option<Arc<dyn ProfileKeychain>>,
+    #[cfg(feature = "test-hooks")]
+    pub(crate) hook: Mutex<Option<crate::reseal::Hook>>,
 }
 
 impl OpenProfile {
-    pub fn info(&self) -> &ProfileInfo {
-        &self.info
+    /// The profile's id, name and whether it is protected now.
+    pub fn info(&self) -> ProfileInfo {
+        ProfileInfo {
+            protected: self.core.protected(),
+            ..self.info.clone()
+        }
     }
 
     /// The store core (the SDK's faces go over it).
@@ -698,9 +772,9 @@ impl OpenProfile {
         &self.core
     }
 
-    /// The profile arena; `None` for an unprotected profile.
-    pub fn keys(&self) -> Option<&Arc<ProfileKeys>> {
-        self.keys.as_ref()
+    /// The profile arena of the current generation; `None` for an unprotected profile.
+    pub fn keys(&self) -> Option<Arc<ProfileKeys>> {
+        self.core.keys()
     }
 
     /// The Matrix store's directory and key: the key a sealed item of part `sdk`, made with 32 random bytes on the first
@@ -742,7 +816,7 @@ impl OpenProfile {
     /// instance lock released. Again: nothing.
     pub fn lock(&self) {
         self.core.close();
-        if let Some(k) = &self.keys {
+        if let Some(k) = self.core.keys() {
             k.lock();
         }
         drop(

@@ -370,6 +370,10 @@ pub struct Sdk {
     /// the tests' count of SCaaS signatures made (`op::submit::sign`)
     #[cfg(all(test, feature = "evm"))]
     pub(crate) signs: std::sync::atomic::AtomicU32,
+    /// a user profile's `Sdk` (`UserProfile::sdk`): the profile's store core, read by [`Sdk::secrets_allowed`]; unset for a plain
+    /// [`Sdk::open`]
+    #[cfg(feature = "user-profile")]
+    pub(crate) profile: std::sync::OnceLock<Arc<scaas_profile::Core>>,
 }
 
 /// The configuration's module gas tables, then the SCaaS reference table: `Argument` for a module named `reference`, two of one
@@ -698,6 +702,8 @@ impl Sdk {
             state_seen: std::sync::atomic::AtomicU64::new(watch::REV_UNSEEN),
             #[cfg(all(test, feature = "evm"))]
             signs: std::sync::atomic::AtomicU32::new(0),
+            #[cfg(feature = "user-profile")]
+            profile: std::sync::OnceLock::new(),
         }))
     }
 
@@ -747,6 +753,17 @@ impl Sdk {
             t.push(h.abort_handle());
         }
         Ok(h)
+    }
+
+    /// `ProfilePassphraseRequired` on an unprotected user profile's `Sdk` (user-profiles spec §7.6, §12): the first check of
+    /// every call that would create a secret, before any work; a migrated "default" is unprotected until `set_passphrase` too.
+    /// A plain [`Sdk::open`] is not a profile's: always `Ok`.
+    pub(crate) fn secrets_allowed(&self) -> Result<(), SdkError> {
+        #[cfg(feature = "user-profile")]
+        if self.profile.get().is_some_and(|c| !c.protected()) {
+            return Err(SdkError::ProfilePassphraseRequired);
+        }
+        Ok(())
     }
 
     /// `ProfileLocked` once [`Sdk::close`] ran.

@@ -111,6 +111,7 @@ impl Vault {
         &self,
         req: DeriveFromSignature,
     ) -> Result<NewSeed, SdkError> {
+        self.sdk.secrets_allowed()?;
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -143,6 +144,7 @@ impl Vault {
     /// Root (d)'s new seed set (spec §6.6): a secp256k1 EVM key only. `Argument` (another network, not 32 bytes, outside
     /// [1, n)), `DerivationPassphraseShort`, `VaultPassphraseWeak`, `SeedExists`, `LabelTaken`.
     pub async fn derive_from_key(&self, req: DeriveFromKey) -> Result<NewSeed, SdkError> {
+        self.sdk.secrets_allowed()?;
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {

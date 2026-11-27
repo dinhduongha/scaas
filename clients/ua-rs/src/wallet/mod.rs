@@ -110,7 +110,9 @@ pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha25
 #[cfg(feature = "app-core")]
 pub use app_refusals::{SCAAS_APP_IDS, SCAAS_DOMAIN_NAMES, SCAAS_PURPOSES};
 #[cfg(feature = "key-handles")]
-pub use appkey::{AppKeys, Argon2Params, KeyHandle, KeyUsage, Nonce, APP_KEYS_MAX, KEYWRAP};
+pub use appkey::{
+    passphrase_bytes, AppKeys, Argon2Params, KeyHandle, KeyUsage, Nonce, APP_KEYS_MAX, KEYWRAP,
+};
 #[cfg(feature = "app-core")]
 pub use appkey::{KemWrap, APP_ROOT};
 #[cfg(all(feature = "app-core", feature = "fam-arweave", feature = "vectors"))]

@@ -297,6 +297,7 @@ impl Account {
         &self,
         req: CreatePasskeyKey,
     ) -> Result<crate::op::KeyRef, SdkError> {
+        self.sdk.secrets_allowed()?;
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -344,6 +345,7 @@ impl Account {
     /// mode). Not recoverable without a second member or a guardian: the app says so. Errors as [`Account::create_passkey_key`].
     #[cfg(feature = "evm")]
     pub async fn create_se_key(&self, req: CreateSeKey) -> Result<crate::op::KeyRef, SdkError> {
+        self.sdk.secrets_allowed()?;
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {

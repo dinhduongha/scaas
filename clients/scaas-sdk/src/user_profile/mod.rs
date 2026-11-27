@@ -4,7 +4,8 @@
 //! 2026-11-27, CLI-UPR-02's Change: an app's build without the SDK holds a profile with it); this module adds what needs the
 //! SDK. Built so far: the store's `SecureStore` face ([`PartStore`]) and the mapping of its codes (plan UP5); the profiles
 //! over the crate ([`UserProfiles`]), an open profile's `Sdk`, stores and lock ([`UserProfile`]), `Sdk::close` at lock, the
-//! events (plan UP6). Outside the binding surface in wave 1. UNAUDITED.
+//! events (plan UP6); the re-seal's calls and the refusal of every secret-creating call on an unprotected profile's `Sdk`
+//! (plan UP7). Outside the binding surface in wave 1. UNAUDITED.
 pub use scaas_profile::{
     keychain_name, Anchor, Core, CoreOpen, Error, Head, Item, KdfParams, Manifest, MatrixStore,
     Plain, ProfileEvent, ProfileInfo as UserProfileInfo, ProfileKeychain, ProfilePart, Verdict,
@@ -129,7 +130,7 @@ impl UserProfiles {
         })
         .await?;
         Ok(Arc::new(UserProfile {
-            open,
+            open: Arc::new(open),
             sdk: tokio::sync::Mutex::new(None),
             authenticator: self.authenticator.clone(),
             limits: self.limits.clone(),
@@ -148,7 +149,7 @@ impl UserProfiles {
 
 /// An open profile (spec §11): its `Sdk`, its stores, its lock. No `Debug`.
 pub struct UserProfile {
-    open: OpenProfile,
+    open: Arc<OpenProfile>,
     sdk: tokio::sync::Mutex<Option<Arc<Sdk>>>,
     authenticator: Option<Arc<dyn Authenticator>>,
     limits: Limits,
@@ -173,8 +174,41 @@ impl UserProfile {
             gas_tables: config.gas_tables,
         })
         .await?;
+        // the gate of spec §7.6: while the profile is unprotected, every secret-creating call is `ProfilePassphraseRequired`
+        let _ = s.profile.set(self.open.core().clone());
         *held = Some(s.clone());
         Ok(s)
+    }
+
+    /// Protects this unprotected profile under `passphrase` (spec §7.3, §7.6): `kdf` `None` the default (64 MiB / 3);
+    /// `keep_settings` the `settings` item's bytes to seal (what the user kept of the settings shown), `None` drops them. From
+    /// the commit on, this profile's `Sdk` creates secrets. `ProfilePassphraseWeak`, `ProfileFormat` / `ProfileKdfTooLarge`
+    /// (the parameters), `Argument` on a protected profile, `ProfileBusy`, `ProfileKdfOutOfMemory`.
+    pub async fn set_passphrase(
+        &self,
+        passphrase: Arc<SecretBytes>,
+        kdf: Option<KdfParams>,
+        keep_settings: Option<Vec<u8>>,
+    ) -> Result<(), SdkError> {
+        let open = self.open.clone();
+        let keep = keep_settings.map(Zeroizing::new);
+        run(move || {
+            passphrase.with(|p| open.set_passphrase(p, kdf, keep.as_deref().map(|k| &k[..])))
+        })
+        .await
+    }
+
+    /// A new passphrase (and a new `DEK_p`) on this protected profile (spec §7.3): `old` checked against the wrap
+    /// (`ProfileOpen`); `kdf` `None` keeps the parameters, the same passphrase with new parameters raises them. Writers of
+    /// every part wait for the commit, then write into the new generation. `Argument` on an unprotected profile.
+    pub async fn change_passphrase(
+        &self,
+        old: Arc<SecretBytes>,
+        new: Arc<SecretBytes>,
+        kdf: Option<KdfParams>,
+    ) -> Result<(), SdkError> {
+        let open = self.open.clone();
+        run(move || old.with2(&new, |o, n| open.change_passphrase(o, n, kdf))).await
     }
 
     /// The `SecureStore` face of part `part` for an app core (the part `profile` is the manifests' and no `ProfilePart`).
@@ -199,6 +233,15 @@ impl UserProfile {
         }
         self.open.lock();
         out
+    }
+}
+
+/// Test-only (feature `test-hooks`, never in a release build).
+#[cfg(feature = "test-hooks")]
+impl UserProfile {
+    /// The profile's store core (its call counter, its hooks).
+    pub fn core(&self) -> Arc<Core> {
+        self.open.core().clone()
     }
 }
 
@@ -227,6 +270,7 @@ impl From<Error> for SdkError {
             Error::ProfileVersion => SdkError::ProfileVersion,
             Error::ProfileKdfTooLarge => SdkError::ProfileKdfTooLarge,
             Error::ProfileKdfOutOfMemory => SdkError::ProfileKdfOutOfMemory,
+            Error::ProfilePassphraseWeak => SdkError::ProfilePassphraseWeak,
         }
     }
 }
@@ -254,7 +298,8 @@ fn store_code(e: Error) -> StoreError {
         | Error::ProfileRootUnsafe
         | Error::ProfileVersion
         | Error::ProfileKdfTooLarge
-        | Error::ProfileKdfOutOfMemory => StoreError::Io,
+        | Error::ProfileKdfOutOfMemory
+        | Error::ProfilePassphraseWeak => StoreError::Io,
     }
 }
 

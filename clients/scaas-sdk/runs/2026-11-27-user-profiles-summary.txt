@@ -88,3 +88,13 @@ UP6b | features | 8fb61b159 + UP6b files | 0 | check_test_features ok, every con
 UP6b | fmt rust toml py | 8fb61b159 + UP6b files | 0 | every part ok
 UP6b | docs | 8fb61b159 + UP6b files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
 UP6b | mutants up6 part b (one at a time: run "<name>") | 7fea4c179 | 0 | close not called at lock: killed (left "Ok"); the closed flag not checked: killed (left "ChainUnknown"); record 11 mutants, 11 killed, 0 survived, 0 not loaded, 0 other failure (part a rows kept at aa921c1f7)
+UP7 | red (stubs: re-seal refused; then the open rules alone skipped; the SDK gate open) | 217bf2396 + UP7 files | 101 (expected) | reseal 0 / 8; open rules skipped: 5 / 8 (g4_crash_at_each_step, generations_older_envelope_kept, generations_edited_gen_and_journal_order red); passphrase_required_before_any_work red (4 of 6 calls reached the vault: WalletLocked; generate and import_words did their work and met the store's ProfilePassphraseRequired)
+UP7 | prof | 217bf2396 + UP7 files | 0 | default: lock 4 / 4, profiles 9 / 9, store 14 / 14 (reseal test-hooks only); test-hooks: lock 4 / 4, profiles 15 / 15, reseal 8 / 8, store 16 / 16; clippy both builds 0 warnings (re-run on the final tree with reseal 8 / 8); cargo deny advisories, bans, licenses, sources ok
+UP7 | ua-rs user-profile clippy (passphrase_bytes exported under key-handles), kh-nm | 217bf2396 + UP7 files | 0 | clippy --no-default-features --features user-profile --all-targets 0 warnings; kh-nm ok
+UP7 | sdk-up | 217bf2396 + UP7 files | 0 | user_profile 8 / 8; --lib user_profile 0 (144 filtered); with classical-roots,app-core: user_profile 8 / 8 (every gated call compiled in)
+UP7 | sdk-reg + passkey | 217bf2396 + UP7 files | 0 | vault 28 / 28, keystore_vectors 2 / 2, passkey 11 / 11, --lib vault 18 / 18
+UP7 | vault suites the gate touches | 217bf2396 + UP7 files | 0 | roots (classical-roots) 4 / 4, app_core (app-core) 13 / 13
+UP7 | sdk-clippy | 217bf2396 + UP7 files | 0 | UPF 0 warnings; default 0 warnings
+UP7 | features | 217bf2396 + UP7 files | 0 | check_test_features ok; feature_tree 5 / 5
+UP7 | fmt rust toml | 217bf2396 + UP7 files | 0 | 22 parts ok
+UP7 | docs | 217bf2396 + UP7 files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok

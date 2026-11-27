@@ -3,7 +3,9 @@
 //! the SDK's side of the store `scaas-profile` (owner 2026-11-27; the store's own tests are clients/scaas-profile/tests/). UP5:
 //! the `SecureStore` face and the codes. Profiles are built by hand: a generation directory and a `ProfileKeys` with a fresh
 //! `DEK_p` (`create_dek`, no Argon2id). UP6b (§10 lock, §11, §17 G11): `UserProfiles`, `UserProfile::sdk`, `Sdk::close`; the
-//! protected profiles there are planted by hand (one wrap at the test KDF set) and opened through `UserProfiles`.
+//! protected profiles there are planted by hand (one wrap at the test KDF set) and opened through `UserProfiles`. UP7 (§7.3,
+//! §7.6): `set_passphrase` and `change_passphrase` through `UserProfile`, and every secret-creating call refused
+//! `ProfilePassphraseRequired` before any work on an unprotected profile's `Sdk`.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -16,8 +18,8 @@
 mod fake_chain;
 
 use scaas_sdk::user_profile::{
-    Core, CoreOpen, Error, Head, PartStore, ProfilePart, ProfileSdkConfig, ProfileUnlock,
-    ProfilesConfig, UserProfile, UserProfiles,
+    Core, CoreOpen, Error, Head, KdfParams, PartStore, ProfilePart, ProfileSdkConfig,
+    ProfileUnlock, ProfilesConfig, UserProfile, UserProfiles,
 };
 use scaas_sdk::vault::{ImportWords, SecureStore, StoreError, StorePolicy, Unlock};
 use scaas_sdk::{ChainProfile, Event, RuntimeChoice, SdkError};
@@ -70,7 +72,7 @@ fn file_of(dir: &Path, keys: &ProfileKeys, part: &str, name: &str) -> PathBuf {
 /// The store's codes reach the SDK by name: each `scaas-profile` code is the `SdkError` of the same name (none collapsed).
 #[test]
 fn store_codes_are_the_sdks() {
-    assert_eq!(Error::ALL.len(), 21);
+    assert_eq!(Error::ALL.len(), 22);
     for e in Error::ALL {
         assert_eq!(SdkError::from(*e).code(), e.code());
     }
@@ -388,4 +390,214 @@ async fn g11_no_request_after_lock() {
     );
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(seen(), n2, "no request after lock");
+}
+
+// ---- UP7: the re-seal through `UserProfile`, the gate on an unprotected profile's `Sdk` (spec §7.3, §7.6, §12) ----
+
+const PASS2: &str = "another passphrase, longer";
+const TEST_KDF: KdfParams = KdfParams { m_kib: 8192, t: 1 };
+
+/// Spec §7.6: on the first run's unprotected "default", every secret-creating call of its `Sdk` (`generate`, `import_words`,
+/// `derive_child`, `import_key`, `derive_from_signature`, `derive_from_key`, `create_passkey_key`, `create_se_key`, an app
+/// core's construction under `app-core`) is `ProfilePassphraseRequired` before any work: the store sees no call. The positive
+/// twin: after `set_passphrase` the same `Sdk` imports a seed, and the profile reopens with it under the passphrase.
+#[tokio::test(flavor = "multi_thread")]
+async fn passphrase_required_before_any_work() {
+    use scaas_sdk::account::{CreatePasskeyKey, CreateSeKey};
+    use scaas_sdk::platform::KeyPolicy;
+    use scaas_sdk::vault::{DeriveChild, Generate, ImportKey};
+    let root = tmp().join("root");
+    let ups = UserProfiles::new(ProfilesConfig::new(root.to_string_lossy().into_owned()))
+        .await
+        .unwrap();
+    let id = ups.list().await.unwrap()[0].id.clone();
+    let up = ups.open(id.clone(), None).await.unwrap();
+    let s = up.sdk(sdk_config(vec![])).await.unwrap();
+    let (v, a) = (s.vault(), s.account());
+    let core = up.core();
+    let calls = core.calls();
+    let words = || ImportWords {
+        label: "Main".into(),
+        words: sec(REPO),
+        vault_passphrase: sec(VAULT_PASS),
+    };
+    let key = [7u8; 32];
+    let refused = vec![
+        code(
+            v.generate(Generate {
+                label: "G".into(),
+                vault_passphrase: sec(VAULT_PASS),
+            })
+            .await
+            .map(drop),
+        ),
+        code(v.import_words(words()).await.map(drop)),
+        code(
+            v.derive_child(DeriveChild {
+                parent: "s".into(),
+                label: "C".into(),
+                vault_passphrase: sec(VAULT_PASS),
+            })
+            .await
+            .map(drop),
+        ),
+        code(
+            v.import_key(ImportKey {
+                seed: "s".into(),
+                network: "evm".into(),
+                secret: Arc::new(
+                    SecretBytes::from_zeroizing(Zeroizing::new(key.to_vec())).unwrap(),
+                ),
+                vault_passphrase: sec(VAULT_PASS),
+            })
+            .await
+            .map(drop),
+        ),
+        code(
+            a.create_passkey_key(CreatePasskeyKey {
+                seed: "s".into(),
+                name: "pk".into(),
+            })
+            .await
+            .map(drop),
+        ),
+        code(
+            a.create_se_key(CreateSeKey {
+                seed: "s".into(),
+                name: "se".into(),
+                policy: KeyPolicy {
+                    biometry_current_set: true,
+                    invalidated_by_enrollment: true,
+                },
+            })
+            .await
+            .map(drop),
+        ),
+    ];
+    #[cfg(feature = "classical-roots")]
+    let refused = [
+        refused,
+        vec![
+            code(
+                v.derive_from_signature(scaas_sdk::vault::DeriveFromSignature {
+                    label: "S".into(),
+                    account: "0x5ca0000000000000000000000000000000000001".into(),
+                    set: 0,
+                    signature1: sec("one"),
+                    signature2: sec("two"),
+                    derivation_passphrase: sec("a derivation passphrase"),
+                    vault_passphrase: sec(VAULT_PASS),
+                })
+                .await
+                .map(drop),
+            ),
+            code(
+                v.derive_from_key(scaas_sdk::vault::DeriveFromKey {
+                    label: "K".into(),
+                    network: "evm".into(),
+                    key: Arc::new(
+                        SecretBytes::from_zeroizing(Zeroizing::new(key.to_vec())).unwrap(),
+                    ),
+                    derivation_passphrase: sec("a derivation passphrase"),
+                    index: 0,
+                    vault_passphrase: sec(VAULT_PASS),
+                })
+                .await
+                .map(drop),
+            ),
+        ],
+    ]
+    .concat();
+    let n = if cfg!(feature = "classical-roots") {
+        8
+    } else {
+        6
+    };
+    assert_eq!(refused.len(), n);
+    assert!(
+        refused.iter().all(|c| *c == "ProfilePassphraseRequired"),
+        "{refused:?}"
+    );
+    #[cfg(feature = "app-core")]
+    assert_eq!(
+        code(
+            scaas_sdk::app_core::AppCore::new(
+                s.clone(),
+                scaas_sdk::app_core::AppDesc {
+                    app_id: None,
+                    name: "My App".into(),
+                    class: None,
+                    labels: vec!["scaas/my-app/v1/".into()],
+                },
+            )
+            .map(drop)
+        ),
+        "ProfilePassphraseRequired"
+    );
+    assert_eq!(
+        core.calls(),
+        calls,
+        "refused before any work: no store call"
+    );
+    // the positive twin
+    up.set_passphrase(sec(PASS), Some(TEST_KDF), None)
+        .await
+        .unwrap();
+    let seed = v.import_words(words()).await.unwrap().id;
+    assert!(core.calls() > calls);
+    up.clone().lock().await;
+    let up = ups
+        .open(id, Some(ProfileUnlock::Passphrase(sec(PASS))))
+        .await
+        .unwrap();
+    let s = up.sdk(sdk_config(vec![])).await.unwrap();
+    assert_eq!(s.vault().seeds().await.unwrap()[0].id, seed);
+}
+
+/// `change_passphrase` through `UserProfile` (spec §7.3): the open `Sdk` keeps working on the new generation (its keystore
+/// read and written after the commit); the profile reopens under the new passphrase only.
+#[tokio::test(flavor = "multi_thread")]
+async fn change_passphrase_through_sdk() {
+    let (ups, up, _) = open_protected().await;
+    let s = up.sdk(sdk_config(vec![])).await.unwrap();
+    let seed = s
+        .vault()
+        .import_words(ImportWords {
+            label: "Main".into(),
+            words: sec(REPO),
+            vault_passphrase: sec(VAULT_PASS),
+        })
+        .await
+        .unwrap()
+        .id;
+    assert_eq!(
+        code(
+            up.change_passphrase(sec(PASS2), sec(PASS), Some(TEST_KDF))
+                .await
+        ),
+        "ProfileOpen"
+    );
+    up.change_passphrase(sec(PASS), sec(PASS2), Some(TEST_KDF))
+        .await
+        .unwrap();
+    assert_eq!(s.vault().seeds().await.unwrap()[0].id, seed);
+    s.vault().lock(seed.clone()).await;
+    let id = s.vault().seeds().await.unwrap()[0].id.clone();
+    up.clone().lock().await;
+    let list = ups.list().await.unwrap();
+    let pid = list[0].id.clone();
+    assert_eq!(
+        code(
+            ups.open(pid.clone(), Some(ProfileUnlock::Passphrase(sec(PASS))))
+                .await
+                .map(drop)
+        ),
+        "ProfileOpen"
+    );
+    let up = ups
+        .open(pid, Some(ProfileUnlock::Passphrase(sec(PASS2))))
+        .await
+        .unwrap();
+    let s = up.sdk(sdk_config(vec![])).await.unwrap();
+    assert_eq!(s.vault().seeds().await.unwrap()[0].id, id);
 }

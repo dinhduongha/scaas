@@ -813,6 +813,8 @@ impl AppCore {
     /// A new scope: `app_id` 0 or malformed, a name empty, no label prefix or an empty one: `Argument`; a prefix that starts
     /// or is started by another live core's (or another of its own): `AppLabelRefused`.
     pub fn new(sdk: Arc<Sdk>, desc: AppDesc) -> Result<Arc<AppCore>, SdkError> {
+        // an app core's keys and records need a seed and so a protected profile (user-profiles spec §5, §7.6)
+        sdk.secrets_allowed()?;
         let app_id = desc.app_id.as_deref().map(hex32).transpose()?;
         if app_id == Some([0; 32])
             || desc.name.is_empty()

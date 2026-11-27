@@ -3,8 +3,9 @@
 //! docs/clients/scaas-sdk.md §12): the local store of many protected profiles, without the SDK (owner 2026-11-27, CLI-UPR-02's
 //! Change); the SDK (feature `user-profile`) builds on it. Every KDF, AEAD and MAC runs in `scaas-ua`'s profile arena
 //! (`ProfileKeys`); this crate holds handles, public bytes and files. Synchronous: run every call on a blocking thread. Built so
-//! far (plan UP5, UP6): the sealed store core of one open profile ([`Core`]), the manifests and the anchor; the profile root,
-//! the index, the envelope, the instance lock, start, create, open, list and lock ([`Profiles`], [`OpenProfile`]). UNAUDITED.
+//! far (plan UP5, UP6, UP7): the sealed store core of one open profile ([`Core`]), the manifests and the anchor; the profile
+//! root, the index, the envelope, the instance lock, start, create, open, list and lock ([`Profiles`], [`OpenProfile`]); the
+//! re-seal (`set_passphrase`, `change_passphrase`, spec §7.3). UNAUDITED.
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -22,6 +23,7 @@ mod file;
 mod index;
 pub mod names;
 mod profile;
+mod reseal;
 pub mod store;
 
 pub use anchor::{Anchor, Head, Verdict};
@@ -29,6 +31,7 @@ pub use envelope::{Envelope, Kdf, KdfParams, State};
 pub use file::rev_of;
 pub use names::{check_name, name_key, same_name, uuid7};
 pub use profile::{MatrixStore, OpenProfile, ProfileEvent, ProfileInfo, Profiles, ProfilesConfig};
+pub use reseal::Step;
 pub use store::{Core, CoreOpen, Item, Manifest, Plain, ProfilePart, WriteGuard, PART_MAX};
 
 macro_rules! codes {
@@ -97,6 +100,8 @@ codes! {
     ProfileKdfTooLarge,
     /// argon2 could not allocate its memory
     ProfileKdfOutOfMemory,
+    /// a new profile passphrase under its rule (spec §7.6): fewer than 8 characters, or digits only, on its OpaqueString form
+    ProfilePassphraseWeak,
 }
 
 impl std::fmt::Display for Error {

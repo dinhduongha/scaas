@@ -185,6 +185,7 @@ impl Vault {
     /// under the vault passphrase, its entry written with `backup: pending` before the backup is handed out. `Argument` for a
     /// label outside its rule, `LabelTaken`, `VaultPassphraseWeak`; the store's errors as `VaultIo` / `StoreConflict`.
     pub async fn generate(&self, req: Generate) -> Result<NewSeed, SdkError> {
+        self.sdk.secrets_allowed()?;
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -379,6 +380,7 @@ impl Vault {
     /// `warnings` inherited, `backup: pending`; the parent unlocked (`WalletLocked`), `SeedExists` (the index used up all the same:
     /// the raised mark is written), `LabelTaken`.
     pub async fn derive_child(&self, req: DeriveChild) -> Result<NewSeed, SdkError> {
+        self.sdk.secrets_allowed()?;
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -456,6 +458,7 @@ impl Vault {
     /// Imports 12 to 24 English words (spec §6.4): checksum checked (`MnemonicInvalid`), 12 to 21 words with `short_seed`,
     /// `backup: verified`; `SeedExists` when its fingerprint is held, `LabelTaken`, `VaultPassphraseWeak`.
     pub async fn import_words(&self, req: ImportWords) -> Result<SeedInfo, SdkError> {
+        self.sdk.secrets_allowed()?;
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -498,6 +501,7 @@ impl Vault {
     /// (its label taken, its manifest another: a second SDK on the same store). Any failure after the open wallet took the key
     /// locks the seed, so no later re-seal writes a manifest that lists an import with no vault (closing review P2-7).
     pub async fn import_key(&self, req: ImportKey) -> Result<ImportedKey, SdkError> {
+        self.sdk.secrets_allowed()?;
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
