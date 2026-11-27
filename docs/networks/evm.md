@@ -472,7 +472,10 @@ the gate of `DeployBase.sol`: `chainUid()` of the factory and of each implementa
 block 0's hash; past block 256 `CHAIN_UID` is required). The script stops when the deployer has no code: on such a
 chain, deploy it first (the keyless presigned deployment transaction of that proxy, funded by a transfer to its signer)
 and re-run. `forge script … --broadcast` needs `--sender <deployer address>`, which `deploy.sh` and the e2e pass; forge
-places the linked libraries from that sender, not by CREATE2. It deploys `OpenFactory` (notice period `NOTICE_PERIOD`
+places every library the script links, through the deterministic deployer by CREATE2 (checked 2026-11-28 on a local
+chain: each library's transaction is `CREATE2`, `PqChatRecordLib` at the same address in forge's tests and on the chain),
+so a release whose init code links a library has the same address on every chain; it places them on every run, whatever
+the script's flags (`PqChatRecordLib` too without `DEPLOY_PQCHAT`, about 8.5 M gas asked). It deploys `OpenFactory` (notice period `NOTICE_PERIOD`
 seconds; owner ruling 2026-10-20: every mainnet — any chain outside `DeployBase._isTestChain`'s fixed list of test /
 dev chains, so 22777, Hedera 295 and an unknown chain too — defaults to and may not go below 3 days; the SCaaS testnet defaults to 10
 minutes, the other listed test / dev chains to 0; at most 30 days, the factory's `MAX_NOTICE_PERIOD`; `DEMO_SUPPLY`

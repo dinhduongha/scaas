@@ -150,7 +150,10 @@ UNAUDITED.
     keeps the signature and store steps inline (`PqChatCore._post`, unchanged). Both store the same blob form, and a test
     pins each path's stored bytes to it (Fable A-1, E-5).
 - **The env.** The class env pins the library first (the release's link closure), then the four modules in `modules()`
-  order. The factory checks every pin's code hash at `deployImplementation` (`LibraryCodeHashMismatch`). On chain, the
+  order. The factory checks every pin's code hash at `deployImplementation` (`LibraryCodeHashMismatch`). Forge places the
+  library by CREATE2 through the deterministic deployer, so its address, and with it the release's init code and address,
+  is the same on every chain (Fable D-9); `Deploy.s.sol` places it on every run, with or without `DEPLOY_PQCHAT` (D-8,
+  about 8.5 M gas asked, as every linked library). On chain, the
   factory ties only the modules to the release (`modules()`), not the library's address: as for every linked release,
   that `libs[0]` is the address in the release's code is checked by the deploy's tests (`GovDeploy.t.sol`,
   `LinkClosure.t.sol`) and the onchain script (Fable E-4).
