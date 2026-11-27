@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! App-core key handles (scaas-sdk spec §12.2, §12.3, §23.1 item 9; feature `app-core`): an app core above the SDK holds
+//! App-core key handles (scaas-sdk spec §12.2, §12.3, §23.1 item 9; feature `key-handles`, and with `app-core` what needs a
+//! seed or a UA kind: [`Wallet::app_keys`], the app root key, the KEM wrap, owner 2026-11-27): an app core above the SDK holds
 //! [`KeyHandle`]s, never key bytes. A handle's secret lies in its wallet's arena (locked pages, wiped at `lock`, which revokes
 //! every handle), it has one [`KeyUsage`] fixed when it is made, belongs to the [`AppKeys`] scope that made it
 //! (`AppHandleForeign` in another), and is neither `Clone`, `Debug` nor readable:
@@ -18,9 +19,12 @@
 //! [`APP_KEYS_MAX`] handles live in one arena (`AppArenaFull` past it; a destroyed handle's slot is reused). No app's label
 //! or constant lives here: labels are the caller's. UNAUDITED.
 use super::aead::{aead_open, aead_seal, hkdf_sha256, hmac_sha256, Alg};
+#[cfg(feature = "app-core")]
 use super::kem::KemKeyPair;
 use super::store::{Handle, SecretStore};
-use super::{Error, Result, Wallet};
+#[cfg(feature = "app-core")]
+use super::Wallet;
+use super::{Error, Result};
 use argon2::{Algorithm, Argon2, Params, Version};
 use rand_core::{OsRng, RngCore};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -32,6 +36,7 @@ use zeroize::Zeroizing;
 pub const APP_KEYS_MAX: usize = 16_384;
 /// [`AppKeys::seal_key`]'s AAD prefix; `seal` and `open` refuse an `aad` that starts with it.
 pub const KEYWRAP: &[u8] = b"scaas/ua/v1/keywrap";
+#[cfg(feature = "app-core")]
 /// The label of an app's per-account storage root ([`AppKeys::app_root_key`]).
 pub const APP_ROOT: &[u8] = b"scaas/app/v1/root";
 /// The most bytes [`AppKeys::random_bytes`] gives in one call.
@@ -51,6 +56,8 @@ pub enum KeyUsage {
 }
 
 /// How a handle came to be: the public MAC runs only on a key the scope drew or unwrapped (review K4, pqchat-core §5.3).
+// `Chain` and `Tree` are made by `pqchat_keys` and `tree` (feature `app-core`) only
+#[cfg_attr(not(feature = "app-core"), allow(dead_code))]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Origin {
     Drawn,
@@ -71,6 +78,7 @@ pub struct KeyHandle {
     /// the nonce an HKDF output of 44 bytes gave with the key (`okm[32:44]`), for [`Nonce::FromKey`]
     nonce: Option<[u8; 12]>,
     /// a sender-chain position's chain (`keccak256` of its context) and counter (`pqchat_keys`)
+    #[cfg_attr(not(feature = "app-core"), allow(dead_code))]
     pub(super) chain: Option<([u8; 32], u64)>,
     /// the app root or a key derived from it (owner ruling A-3, 2026-11-23): [`AppKeys::seal_key`] refuses it
     pub(super) rooted: bool,
@@ -100,6 +108,7 @@ pub enum Nonce<'a> {
     FromHandle(&'a KeyHandle),
 }
 
+#[cfg(feature = "app-core")]
 /// A KEM wrap of a key handle: the encapsulation and the sealed key (48 bytes for a 32-byte key).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KemWrap {
@@ -126,7 +135,7 @@ pub struct AppKeys {
 
 impl AppKeys {
     /// A new scope over `store`, a store of its own (the profile arena, `profile.rs`: no seed, so no app root).
-    #[cfg(feature = "user-profile")]
+    #[cfg(feature = "key-handles")]
     pub(super) fn over(store: Arc<SecretStore>) -> AppKeys {
         AppKeys {
             store,
@@ -135,6 +144,7 @@ impl AppKeys {
     }
 }
 
+#[cfg(feature = "app-core")]
 impl Wallet {
     /// A new scope of app-core key handles over this wallet's arena: its handles serve this scope only.
     pub fn app_keys(&self) -> AppKeys {
@@ -187,12 +197,14 @@ fn refuse_keywrap(aad: &[u8]) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "app-core")]
 /// The KEK of a wrap to `kem_pk`: HKDF(ss, salt empty, info = label ‖ aad ‖ 0x01 ‖ keccak256(kem_pk), 32).
 fn wrap_kek(ss: &[u8; 32], label: &[u8], aad: &[u8], kem_pk: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
     let info = [label, aad, &[1u8], &crate::keccak256(kem_pk)].concat();
     key32(&hkdf_sha256(ss, &[], &info, 32)?)
 }
 
+#[cfg(feature = "app-core")]
 /// The words of a generated vault passphrase (owner 2026-11-22): 6 × 11 bits, about 66 bits.
 const PASSPHRASE_WORDS: usize = 6;
 
@@ -244,6 +256,7 @@ impl AppKeys {
         Ok(out)
     }
 
+    #[cfg(feature = "app-core")]
     /// A generated vault passphrase (owner 2026-11-22, CLI-PQV-15 (2)): 6 words of the BIP-39 English list drawn uniformly from
     /// the OS generator (11 bits each, about 66 bits), separated by one space, as a secret buffer: the words never leave
     /// `ua-rs` but in it.
@@ -482,6 +495,7 @@ impl AppKeys {
         self.argon2id(&passphrase_bytes(passphrase)?, salt, params)
     }
 
+    #[cfg(feature = "app-core")]
     pub(super) fn wrap_with(
         &self,
         key: &KeyHandle,
@@ -511,6 +525,7 @@ impl AppKeys {
         })
     }
 
+    #[cfg(feature = "app-core")]
     /// `key` wrapped to the KEM key `kem_pk` (a UA's at a version the caller read, or a fresh ephemeral one): the FIPS 203
     /// §7.2 checks on `kem_pk` (`KemCheck`), the KEK's info `label ‖ aad ‖ 0x01 ‖ keccak256(kem_pk)` built here.
     /// `AppKeyRooted` for the app root key or a key derived from it (owner ruling A-3): only drawn keys and their derivations
@@ -528,6 +543,7 @@ impl AppKeys {
         self.wrap_with(key, label, aad, kem_pk, &m, &e)
     }
 
+    #[cfg(feature = "app-core")]
     /// The key of `wrap` by the KEM key `kem` (the account's, at the wrap's key version), as a handle of `usage`: `Aead` when
     /// it does not open.
     pub fn kem_unwrap(
@@ -545,6 +561,7 @@ impl AppKeys {
         self.make(&k, usage, Origin::Unwrapped, None)
     }
 
+    #[cfg(feature = "app-core")]
     /// The app's per-account storage root: HKDF-SHA-256(ikm = the wallet's BIP-39 seed, salt empty, info = [`APP_ROOT`] ‖
     /// `app_id` ‖ `ua`, 32), a `Derive` handle (owner 2026-11-20, confirmed).
     pub fn app_root_key(&self, app_id: &[u8; 32], ua: &[u8; 32]) -> Result<KeyHandle> {
@@ -583,6 +600,7 @@ impl AppKeys {
         h.nonce
     }
 
+    #[cfg(feature = "app-core")]
     /// [`AppKeys::kem_wrap`] with fixed `m` and X25519 ephemeral secret.
     pub fn vectors_kem_wrap(
         &self,

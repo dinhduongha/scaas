@@ -17,7 +17,8 @@
 //! [`Wallet::open_vault`]), the [`Manifest`], discovery, imported keys, the [`SeedBackup`] confirmation, [`Wallet::backup_seal`] and
 //! [`Wallet::restore_backup`]; `store`, T10: [`Wallet::unlock`] (the seed vault into a new arena at the raised generation) and
 //! [`Wallet::memory_protection`] (the arena's chunks `mlock`ed and no-dump, feature `mlock`). Randomness: `rand_core` 0.6
-//! `OsRng` inside; no call takes an RNG. UNAUDITED.
+//! `OsRng` inside; no call takes an RNG. Without `wallet`, feature `key-handles` (owner 2026-11-27, user-profiles O15) compiles
+//! only [`Error`], `aead`, the arena (`store`), `appkey` and `profile`: no seed, no UA kind, no signing code. UNAUDITED.
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -29,28 +30,33 @@
 mod aead;
 #[cfg(feature = "app-core")]
 mod app_refusals;
-#[cfg(feature = "app-core")]
+#[cfg(feature = "key-handles")]
 mod appkey;
 #[cfg(all(feature = "app-core", feature = "fam-arweave"))]
 mod arweave;
+#[cfg(feature = "wallet")]
 pub mod bounded;
 #[cfg(feature = "vectors")]
 pub mod derive;
-#[cfg(not(feature = "vectors"))]
+#[cfg(all(feature = "wallet", not(feature = "vectors")))]
 pub(crate) mod derive;
+#[cfg(feature = "wallet")]
 mod eip712;
+#[cfg(feature = "wallet")]
 pub mod entries;
 #[cfg(feature = "app-core")]
 mod file;
 #[cfg(feature = "vectors")]
 pub mod kem;
-#[cfg(not(feature = "vectors"))]
+#[cfg(all(feature = "wallet", not(feature = "vectors")))]
 mod kem;
+#[cfg(feature = "wallet")]
 mod manifest;
 #[cfg(feature = "vectors")]
 pub mod pairing;
-#[cfg(not(feature = "vectors"))]
+#[cfg(all(feature = "wallet", not(feature = "vectors")))]
 mod pairing;
+#[cfg(feature = "wallet")]
 mod policy;
 #[cfg(feature = "app-core")]
 pub mod pqchat;
@@ -60,45 +66,53 @@ pub mod pqchat_file;
 pub mod pqchat_keys;
 #[cfg(feature = "vectors")]
 pub mod pqsign;
-#[cfg(not(feature = "vectors"))]
+#[cfg(all(feature = "wallet", not(feature = "vectors")))]
 mod pqsign;
 #[cfg(feature = "app-core")]
 pub mod pqvault;
-#[cfg(feature = "user-profile")]
+#[cfg(feature = "key-handles")]
 mod profile;
 #[cfg(feature = "roots")]
 pub mod roots;
 #[cfg(feature = "vectors")]
 pub mod seal;
-#[cfg(not(feature = "vectors"))]
+#[cfg(all(feature = "wallet", not(feature = "vectors")))]
 mod seal;
+#[cfg(feature = "wallet")]
 mod secret;
+#[cfg(feature = "wallet")]
 mod service_pull;
 #[cfg(feature = "vectors")]
 pub mod sign;
-#[cfg(not(feature = "vectors"))]
+#[cfg(all(feature = "wallet", not(feature = "vectors")))]
 mod sign;
+#[cfg(feature = "wallet")]
 mod signer;
 #[cfg(feature = "fam-soroban")]
 pub mod soroban_tx;
 mod store;
+#[cfg(feature = "wallet")]
 mod substrate;
 #[cfg(feature = "app-core")]
 pub mod tree;
 #[cfg(feature = "app-core")]
 pub mod tree_public;
+#[cfg(feature = "wallet")]
 mod tx;
+#[cfg(feature = "wallet")]
 mod uasig;
+#[cfg(feature = "wallet")]
 mod vault;
+#[cfg(feature = "wallet")]
 mod webauthn;
 
 pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
 #[cfg(feature = "app-core")]
 pub use app_refusals::{SCAAS_APP_IDS, SCAAS_DOMAIN_NAMES, SCAAS_PURPOSES};
+#[cfg(feature = "key-handles")]
+pub use appkey::{AppKeys, Argon2Params, KeyHandle, KeyUsage, Nonce, APP_KEYS_MAX, KEYWRAP};
 #[cfg(feature = "app-core")]
-pub use appkey::{
-    AppKeys, Argon2Params, KemWrap, KeyHandle, KeyUsage, Nonce, APP_KEYS_MAX, APP_ROOT, KEYWRAP,
-};
+pub use appkey::{KemWrap, APP_ROOT};
 #[cfg(all(feature = "app-core", feature = "fam-arweave", feature = "vectors"))]
 pub use arweave::{vectors_sign_count, vectors_upload_key};
 #[cfg(all(feature = "app-core", feature = "fam-arweave"))]
@@ -107,40 +121,49 @@ pub use arweave::{ArweaveFile, UPLOAD_INFO};
 pub(crate) use eip712::u256_to_dec; // the PQZ facade's
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub(crate) use eip712::{from_hex, to_hex};
+#[cfg(feature = "wallet")]
 pub use eip712::{
     liquidity_order_typed_data, pqz_verdict_typed_data, rescue_vault_typed_data, scaas_typed_data,
     Erc7739Wallet, RescueVaultOp, TypedData,
 };
 #[cfg(feature = "app-core")]
 pub use file::SealedFile;
+#[cfg(feature = "wallet")]
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
 #[cfg(feature = "vectors")]
 pub use manifest::vectors_backup_payload;
+#[cfg(feature = "wallet")]
 pub use manifest::{
     AllowRollback, ImportEntry, ImportedUaEntry, KemEntry, Manifest, ManifestEntry, NativeEntry,
     PqzHeldEntry,
 };
 #[cfg(feature = "vectors")]
 pub use pairing::NonceSlotProbe;
+#[cfg(feature = "wallet")]
 pub use pairing::{FrostSession, Musig2Session};
+#[cfg(feature = "wallet")]
 pub use policy::{
     fee_due, scaas_bls_multi_message, scaas_purpose, sign_auditor_consent_native, sign_scaas,
     sign_scaas_bls_multi, sign_typed_by, AllowAnyTypedData, AllowRow, DecodedCall, Expect,
     Invalidate, SubjectKey,
 };
-#[cfg(feature = "user-profile")]
+#[cfg(feature = "key-handles")]
 pub use profile::{ExportKey, ProfileKeys};
 #[cfg(feature = "pqz")]
 pub(crate) use seal::now;
+#[cfg(feature = "wallet")]
 pub use seal::{
     seal, seal_container, AcceptedJson, ContainerExpect, ContainerExpectJson, ContainerSigner,
     CurrentJson, ExpectedSender, LinkSession, MembersJson, Recipient, RecipientId, Sealed,
     SealedContainer, LINK_SKEW, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
 };
+#[cfg(feature = "wallet")]
 pub use secret::{
     secret_dispose, secret_read, secret_write, secrets_live, SecretBytes, SECRET_MAX,
 };
+#[cfg(feature = "wallet")]
 pub use service_pull::{service_pull, RelayFeeWrap, ServicePull};
+#[cfg(feature = "wallet")]
 pub use sign::{sign_digest_by, sign_key_proof_by, sign_message_by, MAX_RAW_MESSAGE};
 #[cfg(feature = "vectors")]
 pub use sign::{
@@ -148,35 +171,46 @@ pub use sign::{
 };
 #[cfg(feature = "vectors")]
 pub use signer::TestExternalKey;
+#[cfg(feature = "wallet")]
 pub use signer::{AllowRawDigest, ExternalKey, KeyRef, SigRole, SignRequest, Signer};
 #[cfg(feature = "fam-dot")]
 pub use substrate::{ss58_public_key, system_account_key};
+#[cfg(feature = "wallet")]
 pub use tx::{sign_transaction_by, AccessListItem, EvmTx, SignedTx};
 #[cfg(feature = "app-core")]
 pub use uasig::{
     app_record_digest, is_scaas_purpose, sign_app_record, verify_app_record, verify_app_record_key,
     AppPath, AppRecordState,
 };
+#[cfg(feature = "wallet")]
 pub use uasig::{
     membership_sig, membership_sig_current, msig_combine, msig_sig, msig_sig_app, msig_sig_current,
     msig_slot_sig_current, msig_update_typed_data, registration_typed_data, ua_sig, ua_sig_app,
     Slot, UaSigRequest,
 };
+#[cfg(feature = "wallet")]
 pub use vault::{check_passphrase, PrfEnvelope, Unlock, Vault};
 #[cfg(feature = "vectors")]
 pub use vectors::{vectors_chunks_released, vectors_pause_after_copy};
+#[cfg(feature = "wallet")]
 pub use webauthn::{webauthn_assertion, webauthn_challenge, WEBAUTHN_MAX_ASSERTION};
+#[cfg(feature = "wallet")]
 pub use zeroize::ZeroizeOnDrop;
 
 use crate::UAError;
+#[cfg(feature = "wallet")]
 use rand_core::{OsRng, RngCore};
+#[cfg(feature = "wallet")]
 use std::sync::Arc;
 #[cfg(feature = "pqz")]
 // the PQZ facade's lease (T21 L82); unused, and so a -D warnings error, in a build without `pqz`
 pub(crate) use store::{copied, Lease};
 pub use store::{protect, MemoryProtection};
+#[cfg(feature = "wallet")]
 pub(crate) use store::{Handle, SecretStore};
+#[cfg(feature = "wallet")]
 use unicode_normalization::UnicodeNormalization;
+#[cfg(feature = "wallet")]
 use zeroize::{Zeroize, Zeroizing};
 
 /// A wallet error; [`Error::code`] is the name the vector files use. `Display` never shows an input.
@@ -354,6 +388,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 /// The networks of clientkeys `NETWORKS` (`seed.js`), their SLIP-44 paths, then those of `NATIVE_NETWORKS` (ua-rs-native spec
 /// §4.1: an app's native backend; no import, no imported UA, no key proof).
+#[cfg(feature = "wallet")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Network {
     Evm,
@@ -376,6 +411,7 @@ pub enum Network {
     Polkadot,
 }
 
+#[cfg(feature = "wallet")]
 const NETWORK_NAMES: [(Network, &str); 13] = [
     (Network::Evm, "evm"),
     (Network::Cosmos, "cosmos"),
@@ -392,6 +428,7 @@ const NETWORK_NAMES: [(Network, &str); 13] = [
     (Network::Polkadot, "polkadot"),
 ];
 
+#[cfg(feature = "wallet")]
 impl Network {
     /// The `fam-<row>` feature that holds this network (plan T42; Hedera's ECDSA side is its EVM side).
     pub fn feature(self) -> &'static str {
@@ -529,6 +566,7 @@ impl Network {
 }
 
 /// The signature scheme of a native network's keys (ua-rs-native spec §4.1, §4.2).
+#[cfg(feature = "wallet")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NativeScheme {
     /// ECDSA secp256k1, RFC 6979 (no extra data), low-s, `r ‖ s ‖ v`.
@@ -542,6 +580,7 @@ pub enum NativeScheme {
 }
 
 /// What the store keeps one slot for.
+#[cfg(feature = "wallet")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum KeyId {
     Ua(u16, u32, u32),
@@ -571,6 +610,7 @@ pub(crate) enum KeyId {
 
 /// A mnemonic as clientkeys `normalizeMnemonic` (NFKD, lower case, single spaces), at most 1 KiB and 24 words (spec §9.3),
 /// English, with its checksum.
+#[cfg(feature = "wallet")]
 fn parse_mnemonic(words: &str) -> Result<bip39::Mnemonic> {
     if words.len() > 1024 {
         return Err(Error::Argument);
@@ -587,6 +627,7 @@ fn parse_mnemonic(words: &str) -> Result<bip39::Mnemonic> {
 
 /// `chars()` collected into a buffer of its exact size (counted on a first pass), so no reallocation frees an unwiped copy of
 /// a secret string (T21 L32).
+#[cfg(feature = "wallet")]
 pub(crate) fn sized<I: Iterator<Item = char>>(chars: impl Fn() -> I) -> Zeroizing<String> {
     let mut s = Zeroizing::new(String::with_capacity(chars().map(char::len_utf8).sum()));
     s.extend(chars());
@@ -595,19 +636,23 @@ pub(crate) fn sized<I: Iterator<Item = char>>(chars: impl Fn() -> I) -> Zeroizin
 
 /// Whether `word` is one word of the BIP-39 English list (NFKD, lower case, surrounding white space ignored): an import
 /// screen's per-word check (scaas-sdk spec §6.4, R17), so the list never leaves `ua-rs`.
+#[cfg(feature = "wallet")]
 pub fn bip39_word_in_list(word: &str) -> bool {
     let nfkd = sized(|| word.trim().nfkd());
     let lower = sized(|| nfkd.chars().flat_map(char::to_lowercase));
     bip39::Language::English.find_word(&lower).is_some()
 }
 
+#[cfg(feature = "wallet")]
 const INDEX_INFO: &[u8] = b"scaas.keystore.index.v2";
 /// The longest `accounts` array an index MAC covers: 1,024 rows of a few hundred bytes.
+#[cfg(feature = "wallet")]
 const INDEX_ACCOUNTS_MAX: usize = 1 << 20;
 
 /// The public fields of a keystore seed entry the index MAC covers (scaas-sdk spec §6.2), in its canonical order.
 /// `accounts_json` is the entry's `accounts` array as the container holds it: compact JSON, each row's fields in the order
 /// clientkeys writes them; `vaults` the entry's vault texts by label (scaas-sdk T13b ruling 3: the MAC covers them).
+#[cfg(feature = "wallet")]
 pub struct IndexFields<'a> {
     pub id: &'a str,
     pub label: &'a str,
@@ -625,6 +670,7 @@ pub struct IndexFields<'a> {
 /// "warnings":[…],"backup":…,"accounts":[…],"vaults":{label:text,…}}`, the vaults by sorted label, strings as `JSON.stringify`
 /// writes them. `Argument` when `accounts_json` is not one JSON array (1 MiB, depth 3) written without white space outside its
 /// strings.
+#[cfg(feature = "wallet")]
 pub fn index_canonical(f: &IndexFields) -> Result<String> {
     let v = bounded::json(f.accounts_json.as_bytes(), INDEX_ACCOUNTS_MAX, 3)?;
     if !v.is_array() || serde_json::to_string(&v).map_or(0, |t| t.len()) != f.accounts_json.len() {
@@ -647,6 +693,7 @@ pub fn index_canonical(f: &IndexFields) -> Result<String> {
 }
 
 /// The 64-byte BIP-39 seed of `entropy` with the passphrase (NFKD).
+#[cfg(feature = "wallet")]
 fn seed_of(entropy: &[u8], bip39_passphrase: &str) -> Result<Zeroizing<[u8; 64]>> {
     let m = bip39::Mnemonic::from_entropy(entropy).map_err(|_| Error::Argument)?;
     let pass = sized(|| bip39_passphrase.nfkd());
@@ -654,6 +701,7 @@ fn seed_of(entropy: &[u8], bip39_passphrase: &str) -> Result<Zeroizing<[u8; 64]>
 }
 
 /// The entropy of a parsed mnemonic, at its BIP-39 length; the `Mnemonic` (word indices, `ZeroizeOnDrop`) is dropped here.
+#[cfg(feature = "wallet")]
 fn entropy_of(m: bip39::Mnemonic) -> Result<Zeroizing<Vec<u8>>> {
     let (mut a, len) = m.to_entropy_array();
     let e = Zeroizing::new(a.get(..len).ok_or(Error::Argument)?.to_vec());
@@ -661,6 +709,7 @@ fn entropy_of(m: bip39::Mnemonic) -> Result<Zeroizing<Vec<u8>>> {
     Ok(e)
 }
 
+#[cfg(feature = "wallet")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum BackupState {
     Fresh,
@@ -672,6 +721,7 @@ enum BackupState {
 /// The recovery phrase of a new wallet (spec §8.4, CLI-SGN-11, clientkeys `SeedBackup`): shown once ([`SeedBackup::reveal`]),
 /// confirmed by three words at random positions ([`SeedBackup::challenge`], [`SeedBackup::verify`]), only then handed out once
 /// ([`SeedBackup::take`]) and forgotten. States `fresh → revealed → challenged → verified → taken`.
+#[cfg(feature = "wallet")]
 pub struct SeedBackup {
     entropy: Option<Zeroizing<Vec<u8>>>,
     state: BackupState,
@@ -679,8 +729,10 @@ pub struct SeedBackup {
 }
 
 /// The capacity of [`SeedBackup::reveal`]'s buffer: 24 words of at most 8 letters, each with its space.
+#[cfg(feature = "wallet")]
 const REVEAL_CAP: usize = 24 * 9;
 
+#[cfg(feature = "wallet")]
 impl SeedBackup {
     fn words(&self) -> Result<bip39::Mnemonic> {
         bip39::Mnemonic::from_entropy(self.entropy.as_deref().ok_or(Error::Argument)?)
@@ -800,6 +852,7 @@ impl SeedBackup {
 /// fn need<T: std::fmt::Debug>() {}
 /// need::<scaas_ua::wallet::Wallet>();
 /// ```
+#[cfg(feature = "wallet")]
 #[cfg_attr(
     not(feature = "vectors"),
     doc = "A release build (no feature `vectors`) has no secret accessor and no RNG or fixed-randomness parameter (F-01):",
@@ -838,6 +891,7 @@ pub struct Wallet {
     vault_id: std::sync::OnceLock<String>,
 }
 
+#[cfg(feature = "wallet")]
 impl Wallet {
     /// A new wallet of 24 words (32 bytes of OS entropy) and no BIP-39 passphrase, and its backup.
     pub fn generate() -> Result<(Wallet, SeedBackup)> {
@@ -1275,6 +1329,7 @@ impl Wallet {
     }
 }
 
+#[cfg(feature = "wallet")]
 impl Drop for Wallet {
     fn drop(&mut self) {
         self.store.lock();
@@ -1288,14 +1343,21 @@ impl Drop for Wallet {
 //   wiped with its store, at the wallet's lock or drop, or, for an ephemeral key's own store, when its last handle drops.
 // - `SeedBackup`: the entropy is `Zeroizing`.
 // - `LinkSession`: its key's store is its own (wiped as above) and `from_link` wipes it whatever the outcome.
+#[cfg(feature = "wallet")]
 impl zeroize::ZeroizeOnDrop for Wallet {}
+#[cfg(feature = "wallet")]
 impl zeroize::ZeroizeOnDrop for UaKey {}
+#[cfg(feature = "wallet")]
 impl zeroize::ZeroizeOnDrop for NativeKey {}
+#[cfg(feature = "wallet")]
 impl zeroize::ZeroizeOnDrop for KemKeyPair {}
+#[cfg(feature = "wallet")]
 impl zeroize::ZeroizeOnDrop for SeedBackup {}
+#[cfg(feature = "wallet")]
 impl zeroize::ZeroizeOnDrop for LinkSession {}
 
 /// A UA key handle: its store, generation and slot; no secret bytes. No `Clone`.
+#[cfg(feature = "wallet")]
 pub struct UaKey {
     kind: u16,
     account: u32,
@@ -1307,6 +1369,7 @@ pub struct UaKey {
     imported: bool,
 }
 
+#[cfg(feature = "wallet")]
 impl UaKey {
     pub fn kind(&self) -> u16 {
         self.kind
@@ -1327,6 +1390,7 @@ impl UaKey {
 }
 
 /// A native key handle; no secret bytes. No `Clone`.
+#[cfg(feature = "wallet")]
 pub struct NativeKey {
     network: Network,
     index: u32,
@@ -1337,6 +1401,7 @@ pub struct NativeKey {
     secret: Handle,
 }
 
+#[cfg(feature = "wallet")]
 impl NativeKey {
     pub fn network(&self) -> Network {
         self.network

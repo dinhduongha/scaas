@@ -43,7 +43,8 @@ pub mod frost;
 mod groups;
 #[cfg(feature = "signers")]
 pub mod musig2;
-#[cfg(feature = "wallet")]
+// the module holds `wallet` and, without it, the key handles alone (`key-handles`, owner 2026-11-27, user-profiles O15)
+#[cfg(any(feature = "wallet", feature = "key-handles"))]
 pub mod wallet;
 /// Test-only (feature `vectors`): the ladder's record of `secret_mul` (the structural test, spec §12).
 #[cfg(feature = "vectors")]

@@ -80,7 +80,8 @@ JOBS = {
     + RT,
     # secret_mul's own tests (ua-rs-sign T3c; T15o closes the gap T20 found: ua-rs and zether-prover only build the crate)
     "scaas-ct": ["clients/scaas-ct/"] + RT,
-    "ua-rs": UARS + ["smartcontracts/"],
+    # the user-profile cell's no-signing gate (CLI-UPR-30) reads scaas-profile's graph too
+    "ua-rs": UARS + ["smartcontracts/"] + PROFILE,
     # the Falcon gate in wasm32 (CLI-UAL-66, Fable audit FR-4): tests/fndsa/wasm over ua-rs and the vectors it compiles in
     "ua-rs-fndsa-wasm": UARS + ["smartcontracts/vectors/"],
     "ua-cxx": ["clients/ua-cxx/", "smartcontracts/vectors/"] + UARS,
@@ -197,6 +198,8 @@ RUNS_READ = {
     "smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt": [
         "node"
     ],  # guard.rs erc1271_floor_covers_forge_minimum
+    # CLI-UPR-30: the ua-rs job's user-profile cell runs it (no signing symbol in the user-profile rlib)
+    "clients/ua-rs/runs/2026-11-27-key-handles-nm.py": ["ua-rs"],
 }
 
 

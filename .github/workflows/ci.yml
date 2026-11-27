@@ -47,7 +47,9 @@
 #                          core (plan T42: wallet with no fam-*: --lib core_only wallet_pairing bls_multi wallet_webauthn bip85 wallet_pq),
 #                          signers (--test groups_verify; tests/groups.rs, the generator, runs in the vectors cell), json (--test json), pq (--test pq --test ua_portable), wallet-mlock (wallet,mlock), zether-only (wallet,zether,mlock: --lib --test facade_zether),
 #                          pqz-n2048 (wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock: --lib --bin pqz-read --test pqz_read facade_pqz_state facade_pqz pqz_backup no_oracle) and the same + vectors
-#                          (facade_pqz_state facade_pqz pqz_backup no_oracle), pqvault (--test pqvault_pass: the Argon2id reproducer of vectors/pqvault/pass.json); the vectors cell also: cargo test --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows; git diff --exit-code (wallet_state.json stays what its generator writes)
+#                          (facade_pqz_state facade_pqz pqz_backup no_oracle), pqvault (--test pqvault_pass: the Argon2id reproducer of vectors/pqvault/pass.json),
+#                          user-profile (--no-default-features --features user-profile, CLI-UPR-30: the profile arena with no signing code; also
+#                          CAP= python3 runs/2026-11-27-key-handles-nm.py: no signing symbol in its rlib, the wallet build's as control); the vectors cell also: cargo test --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows; git diff --exit-code (wallet_state.json stays what its generator writes)
 #   ua-rs-features:        plan T42: in clients/ua-rs, bash runs/fam-sizes.sh: cargo build --locked --release --example fam_size with no family, each
 #                          fam-<row> alone and all on (wallet always), each probe's size printed
 #   ua-rs-targets:         compile only, no run (MD-5, plan T0 / T18), wasm32-unknown-unknown, aarch64-linux-android (NDK clang, API 24), aarch64-apple-ios (macOS): cargo build --locked --lib --target <t> <cell> in ua-rs
@@ -952,6 +954,9 @@ jobs:
           - cell: pqvault
             features: --no-default-features --features pqvault
             tests: --test pqvault_pass
+          # owner 2026-11-27 (user-profiles O15, CLI-UPR-30): the profile arena alone (`key-handles`), no signing code compiled in
+          - cell: user-profile
+            features: --no-default-features --features user-profile
     defaults:
       run:
         working-directory: clients/ua-rs
@@ -982,6 +987,11 @@ jobs:
         run: |
           cargo test --locked --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows
           git diff --exit-code -- ../../smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json
+      # CLI-UPR-30: the user-profile rlib defines no signing symbol, a wallet build does (the control), scaas-profile's graph
+      # enables no signing feature
+      - name: no signing code in the user-profile build
+        if: matrix.cell == 'user-profile'
+        run: CAP= python3 runs/2026-11-27-key-handles-nm.py
       - uses: foundry-rs/foundry-toolchain@v1
         if: matrix.cell == 'default'
         with:
@@ -1072,7 +1082,7 @@ jobs:
         run: |
           for f in "" "--no-default-features" "--no-default-features --features signers" "--no-default-features --features json" \
                    "--no-default-features --features pq" "--no-default-features --features wallet" "--no-default-features --features zether" \
-                   "--no-default-features --features pqz,pqz-set-n2048-kmax1024"; do
+                   "--no-default-features --features pqz,pqz-set-n2048-kmax1024" "--no-default-features --features user-profile"; do
             echo "== ${{ matrix.target }} [$f]"
             # shellcheck disable=SC2086 # $f is a list of flags
             cargo build --locked --lib --target ${{ matrix.target }} $f

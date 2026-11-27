@@ -165,16 +165,33 @@ pqz-set-n2304-kmax4096 = ["pqz-ffi?/set-n2304-kmax4096"]
 pqz-set-n2560-kmax16384 = ["pqz-ffi?/set-n2560-kmax16384"]
 pqz-set-n2816-kmax65536 = ["pqz-ffi?/set-n2816-kmax65536"]
 vectors = ["wallet", "scaas-ct/vectors", "ml-kem/hazmat", "zether-prover?/hazmat"]
-# T10: the arena's chunks `mlock`ed and no-dump (Linux, Android), best effort, reported by `Wallet::memory_protection`; a no-op
-# off Unix (wasm32: compiled out)
-mlock = ["wallet", "dep:libc"]
+# T10: the arena's chunks `mlock`ed and no-dump (Linux, Android), best effort, reported by `Wallet::memory_protection` and
+# `ProfileKeys::memory_protection`; a no-op off Unix (wasm32: compiled out). It locks the arena of `wallet` or `key-handles`,
+# whichever the build has (owner 2026-11-27, user-profiles O15: was `["wallet", "dep:libc"]`; every dependent that enables it
+# names `wallet` too)
+mlock = ["dep:libc"]
 # scaas-sdk T6: roots (c) and (d) (src/wallet/roots.rs): scaas-sdk's `classical-roots`
 roots = ["wallet", "dep:argon2"]
-# scaas-sdk T21: app-core key handles (src/wallet/appkey.rs; spec §12.2, §23.1 item 9)
-app-core = ["wallet", "dep:argon2"]
+# Owner 2026-11-27 (user-profiles spec O15): the key handles with no signing code, no seed and no UA kind: the arena
+# (`SecretStore`, `MemoryProtection`, `mlock`), `KeyHandle`, `KeyUsage`, `AppKeys` over an arena of its own, AEAD / HKDF /
+# HMAC, Argon2id, `seal_key`, the OS RNG, `passphrase_bytes`, `Nonce`, and the profile arena `ProfileKeys` and `ExportKey`
+# (src/wallet/appkey.rs, profile.rs). No `wallet`, `pq`, `signers`, `fam-*`, `zether`, `pqz`; `wallet` does not enable it.
+key-handles = [
+  "dep:hkdf",
+  "dep:zeroize",
+  "dep:unicode-normalization",
+  "dep:aes-gcm",
+  "dep:aes-gcm-siv",
+  "dep:argon2",
+  "rand_core/getrandom",
+  "dep:getrandom",
+]
+# scaas-sdk T21: app-core key handles (src/wallet/appkey.rs; spec §12.2, §23.1 item 9): `key-handles` and what needs a seed
+# or a UA kind (`Wallet::app_keys`, the app root key, the KEM wrap to a UA's key, the PqChat keys, the tree)
+app-core = ["key-handles", "wallet"]
 # user-profiles plan UP2 (spec 2026-11-27-user-profiles §7.1, §7.2, §7.5, §10.1): the profile arena `ProfileKeys` and the export
-# key (src/wallet/profile.rs) over the app-core handles
-user-profile = ["app-core"]
+# key (src/wallet/profile.rs); owner 2026-11-27 (O15): `key-handles` only, no signing code (was `["app-core"]`)
+user-profile = ["key-handles"]
 # user-profiles spec §7.5: the test-only KDF set (8 MiB / 1 / 4), the forced out-of-memory hook and the Argon2id run counter;
 # never in a release build
 test-hooks = ["user-profile"]

@@ -49,3 +49,19 @@ UP5-split | ci_changes self-test | c13846093 + split files | 0 | ok
 UP5-split | fmt rust toml yaml py | c13846093 + split files | 0 | every part ok
 UP5-split | docs | c13846093 + split files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok; paths 0
 UP5-split | mutants up5 (at scaas-profile, one at a time) | 74b860488 (dirty: the runner itself, committed with the record) | 0 | 8 mutants, 8 killed, 0 survived, 0 not loaded, 0 other failure
+KH | red: kh-nm before the split (python3 clients/ua-rs/runs/2026-11-27-key-handles-nm.py) | 72a818399 + KH script | 1 | user-profile 30683 symbols, 2667 signing; scaas-profile enables app-core, pq, signers, wallet
+KH | kh-nm (no signing symbol in the user-profile rlib; wallet control; scaas-profile graph) | 72a818399 + KH files | 0 | user-profile 7540 symbols, 0 signing; wallet 24432 symbols, 5561 signing; scaas-profile: json, key-handles, user-profile
+KH | ua-clippy cells (--all-targets -D warnings: user-profile, key-handles, user-profile+mlock, app-core, wallet, wallet+mlock, default, user-profile+test-hooks+vectors, app-core+vectors) | 72a818399 + KH files | 0 | 9 cells, 0 warnings
+KH | ua-rs wasm32 build (--no-default-features --features user-profile) | 72a818399 + KH files | 0 | builds
+KH | ua-rs readers (app-core,vectors --test app_core; test-hooks,vectors --test profile) | 72a818399 + KH files | 0 | app_core 22 / 22, profile 18 / 18 pass
+KH | ua-vault | 72a818399 + KH files | 0 | 2 + 13 + 8 + 29 pass
+KH | ua-rs user-profile cell (cargo test --no-default-features --features user-profile) | 72a818399 + KH files | 0 | lib 5 pass, 17 integration binaries and the doctests ok, 0 failed
+KH | sdk gates ua-core, ua-appcore, ua-arweave (2026-11-17-scaas-sdk-gates.sh) | 72a818399 + KH files | 0 | 78 / 38 / 34 passed, 0 failed
+KH | vectors unchanged (appcore-vectors.mjs, profile-vectors.mjs into a temp dir, diff -r) | 72a818399 + KH files | 0 | appcore/ and profile/ identical; git status of smartcontracts/vectors clean
+KH | prof (scaas-profile test default / test-hooks, clippy both, deny) | 72a818399 + KH files | 0 | store 14 / 14 and 16 / 16 pass; 0 warnings; advisories, bans, licenses, sources ok
+KH | sdk-up | 72a818399 + KH files | 0 | user_profile 2 / 2 pass; --lib user_profile 0 (144 filtered out)
+KH | sdk-clippy (UPF and default, --all-targets -D warnings) | 72a818399 + KH files | 0 | 0 warnings
+KH | features | 72a818399 + KH files | 0 | check_test_features 72 manifests, 0 findings, every control True; feature_tree 5 / 5
+KH | ci_changes self-test | 72a818399 + KH files | 0 | ok
+KH | fmt rust toml yaml py | 72a818399 + KH files | 0 | every part ok
+KH | docs | 72a818399 + KH files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok; paths 0; facts 0 misses (387 pending)

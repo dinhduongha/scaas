@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! User-profile keys (feature `user-profile`; spec docs/superpowers/specs/2026-11-27-user-profiles.md §7.1, §7.2, §7.5, §10.1):
+//! User-profile keys (feature `key-handles`, which `user-profile` is: no signing code, owner 2026-11-27, O15; spec
+//! docs/superpowers/specs/2026-11-27-user-profiles.md §7.1, §7.2, §7.5, §10.1):
 //! [`ProfileKeys`], an app-core scope over a secret store of its own (an empty arena, no seed: the arena's locked pages and
 //! wipe), holds a profile's `DEK_p` and its sub-keys `K_label`, `K_item`, `K_name` after `create_dek` or an open, until `lock`
 //! or drop; [`ExportKey`] holds an export file's `K_x`. Keys (HKDF-SHA256, salt empty): `KEK_pass = HKDF(Argon2id(OpaqueString

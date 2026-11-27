@@ -5,14 +5,16 @@
 
 **Status (2026-11-27):** PLANNED; wave 1 runs now, wave 2 later. Spec:
 [`2026-11-27-user-profiles.md`](../specs/2026-11-27-user-profiles.md) (SPECIFIED, a frame; Fable reviewed it in three rounds, every
-finding applied, spec §19). Rules: [clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12, CLI-UPR-01 to CLI-UPR-29, recorded in
-[decisions.md](../../decisions.md) §41. Owner rulings O1 to O14 and Q-UP1 to Q-UP11 (spec §1, §16) are fixed and not reopened here.
+finding applied, spec §19). Rules: [clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12, CLI-UPR-01 to CLI-UPR-30, recorded in
+[decisions.md](../../decisions.md) §41. Owner rulings O1 to O15 and Q-UP1 to Q-UP11 (spec §1, §16) are fixed and not reopened here.
 UNAUDITED: every line this plan builds stays UNAUDITED.
 
 **Owner rulings 2026-11-27 after UP5:** (O13, CLI-UPR-02's Change) the store is its own crate `clients/scaas-profile` over `ua-rs`
 only, used by the SDK and by scaas-app's default build; UP5's core moved there (`74b860488`), and UP6 to UP10 build their store
 parts there, the SDK keeping what needs an `Sdk` (each task's **Files** below). (O14, CLI-UPR-29) each profile has its own Matrix
-logins, session, store, crypto keys and device id, sealed in it; wave 1 builds only the Matrix store key as a sealed item.
+logins, session, store, crypto keys and device id, sealed in it; wave 1 builds only the Matrix store key as a sealed item. (O15,
+CLI-UPR-30) `scaas-profile` links `ua-rs` with `user-profile` (= the new feature `key-handles`) and `json` only, no signing code;
+`app-core` = `key-handles` + `wallet`; task KH, checked by `clients/ua-rs/runs/2026-11-27-key-handles-nm.py`.
 
 **Branch:** `user-profiles` from `dev` at `a739cee1f` (it holds `fix-lock-all-hidden`, review A-8, which the lock of spec §10
 relies on), worktree `.claude/worktrees/user-profiles`. Commits local, staged by explicit path; **no push, no merge**.
@@ -75,6 +77,7 @@ Abbreviations: `W` = the worktree root; `cap` = `"$W/scripts/capped"`; `C` = `--
 | `ua-clippy` | `cd clients/ua-rs && $cap cargo clippy C --all-targets -- -D warnings && $cap cargo clippy C --all-targets --features user-profile,test-hooks,vectors -- -D warnings` |
 | `ua-vault` | `cd clients/ua-rs && $cap cargo test C --test wallet_vault --test wallet_custody --test retained_key --test wallet_import_ua` |
 | `prof` | `cd clients/scaas-profile && $cap cargo test C && $cap cargo test C --features test-hooks && $cap cargo clippy C --all-targets -- -D warnings && $cap cargo clippy C --all-targets --features test-hooks -- -D warnings` |
+| `kh-nm` | `python3 clients/ua-rs/runs/2026-11-27-key-handles-nm.py` (CLI-UPR-30: no signing symbol in the `user-profile` rlib, the `wallet` build's as control; `scaas-profile`'s graph) |
 | `sdk-up` | `cd clients/scaas-sdk && $cap cargo test C UPF --test user_profile && $cap cargo test C UPF --lib user_profile` |
 | `sdk-reg` | `cd clients/scaas-sdk && $cap cargo test C --test vault --test keystore_vectors && $cap cargo test C --lib vault` |
 | `sdk-clippy` | `cd clients/scaas-sdk && $cap cargo clippy C --all-targets UPF -- -D warnings && $cap cargo clippy C --all-targets -- -D warnings` |
@@ -218,7 +221,7 @@ Rows (`rnd(name, n)` as `pqvault-vectors.mjs`, prefix `scaas/profile/vectors/`):
 
 **Files:** `clients/ua-rs/src/wallet/profile.rs` (new), `clients/ua-rs/src/wallet/mod.rs` (module, error codes),
 `clients/ua-rs/src/wallet/appkey.rs` (only what `ProfileKeys` reuses: visibility, an explicit-nonce seal), `clients/ua-rs/Cargo.toml`
-(features `user-profile = ["app-core"]`, `test-hooks = ["user-profile"]`), `clients/ua-rs/tests/profile.rs` (new).
+(features `user-profile = ["app-core"]`, since task KH `["key-handles"]` (O15), `test-hooks = ["user-profile"]`), `clients/ua-rs/tests/profile.rs` (new).
 
 `ProfileKeys`: an `AppKeys` scope over a `SecretStore` of its own (an empty arena, no seed: the arena's locked pages and wipe),
 holding `DEK_p` and its sub-keys after `create` or an open; `lock()` wipes it (every later call `WalletLocked`), drop wipes it.

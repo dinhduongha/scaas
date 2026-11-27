@@ -18,8 +18,12 @@
 //! process-wide `PR_SET_DUMPABLE` is never set: a host app that wants it sets it itself. UNAUDITED.
 // the readers of secrets (`Handle::with`, the entropy for the vault) are the signers (T3a–T3d) and the vault (T9)
 #![cfg_attr(not(feature = "vectors"), allow(dead_code))]
+#[cfg(feature = "wallet")]
 use super::manifest::{entry_ua, Manifest};
-use super::{Error, KeyId, Result, Vault};
+use super::{Error, Result};
+#[cfg(feature = "wallet")]
+use super::{KeyId, Vault};
+#[cfg(feature = "wallet")]
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Condvar, Mutex, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use zeroize::{Zeroize, Zeroizing};
@@ -185,53 +189,70 @@ pub(crate) struct Arena {
     chunks: Vec<Chunk>,
     used: usize,  // bytes used in the last chunk
     total: usize, // bytes written, every chunk
+    #[cfg(feature = "wallet")]
     entropy: Slot,
+    #[cfg(feature = "wallet")]
     seed: Slot,
     /// The `substrate-bip39` mini-secret, computed at open from the entropy and the passphrase (ua-rs-native spec §4.3).
+    #[cfg(feature = "wallet")]
     mini: Slot,
+    #[cfg(feature = "wallet")]
     keys: HashMap<KeyId, (Slot, Vec<u8>)>, // a derived key: its slot and its public key data
+    #[cfg(feature = "wallet")]
     tested: HashSet<KeyId>, // the keys whose self-test ran in this store (a KEM key: FIPS 203 §7.3)
-    self_tests: usize,      // self-tests run in this store
+    #[cfg(feature = "wallet")]
+    self_tests: usize, // self-tests run in this store
     /// The DEK of each label vault opened or sealed while this arena is open, and that vault as it stands (its public
     /// envelopes): what `Wallet::reseal_label_vault` re-seals under the same DEK (scaas-sdk spec §6.10). Wiped with the arena.
+    #[cfg(feature = "wallet")]
     deks: HashMap<String, (Slot, Vault)>,
     /// The PRF key-encryption key retained at a passkey or platform unlock (scaas-sdk spec §6.10, owner 2026-11-18 (b)): label
     /// vaults open with it on first use. In the arena's locked pages, so `lock` and drop zero it with them.
+    #[cfg(feature = "wallet")]
     prf_kek: Option<Slot>,
     /// Slots of destroyed app-core key handles, wiped, reused by a secret of the same length (scaas-sdk spec §12.2: a ratchet
-    /// makes and destroys a key per message), and the app-core handles live in this arena (feature `app-core`).
+    /// makes and destroys a key per message), and the app-core handles live in this arena (feature `key-handles`).
     free: Vec<Slot>,
-    #[cfg(feature = "app-core")]
+    #[cfg(feature = "key-handles")]
     app_live: usize,
 }
 
 impl Arena {
     /// An arena with no entropy and no seed (an ephemeral key's store).
     fn empty() -> Arena {
+        #[cfg(feature = "wallet")]
         let empty = Slot {
             chunk: 0,
             start: 0,
             len: 0,
         };
-        let (keys, tested) = (HashMap::new(), HashSet::new());
         Arena {
             chunks: Vec::new(),
             used: 0,
             total: 0,
+            #[cfg(feature = "wallet")]
             entropy: empty,
+            #[cfg(feature = "wallet")]
             seed: empty,
+            #[cfg(feature = "wallet")]
             mini: empty,
-            keys,
-            tested,
+            #[cfg(feature = "wallet")]
+            keys: HashMap::new(),
+            #[cfg(feature = "wallet")]
+            tested: HashSet::new(),
+            #[cfg(feature = "wallet")]
             self_tests: 0,
+            #[cfg(feature = "wallet")]
             deks: HashMap::new(),
+            #[cfg(feature = "wallet")]
             prf_kek: None,
             free: Vec::new(),
-            #[cfg(feature = "app-core")]
+            #[cfg(feature = "key-handles")]
             app_live: 0,
         }
     }
 
+    #[cfg(feature = "wallet")]
     fn new(entropy: &[u8], seed: &[u8; 64], mini: &[u8; 32]) -> Result<Arena> {
         let mut a = Arena::empty();
         a.entropy = a.put(entropy)?;
@@ -283,23 +304,28 @@ impl Arena {
             .ok_or(Error::KeyRevoked)
     }
 
+    #[cfg(feature = "wallet")]
     pub(crate) fn entropy(&self) -> Result<&[u8]> {
         self.get(self.entropy)
     }
 
+    #[cfg(feature = "wallet")]
     pub(crate) fn seed_bytes(&self) -> Result<&[u8]> {
         self.get(self.seed)
     }
 
+    #[cfg(feature = "wallet")]
     pub(crate) fn mini(&self) -> Result<&[u8]> {
         self.get(self.mini)
     }
 
+    #[cfg(feature = "wallet")]
     /// The secret of key `id`, if the arena holds it.
     pub(crate) fn secret(&self, id: KeyId) -> Option<&[u8]> {
         self.get(self.keys.get(&id)?.0).ok()
     }
 
+    #[cfg(feature = "wallet")]
     /// Holds `dek` as the DEK of label vault `vault` (opened or sealed anew), replacing what the label held.
     // ponytail: a replaced DEK's slot stays in the arena (wiped with it at `lock`); 32 bytes per vault opened again.
     pub(crate) fn hold_dek(&mut self, dek: &[u8; 32], vault: Vault) -> Result<()> {
@@ -308,6 +334,7 @@ impl Arena {
         Ok(())
     }
 
+    #[cfg(feature = "wallet")]
     /// Records `vault` (re-sealed under the DEK its label holds) as the label's vault; `Argument` if the label holds none.
     pub(crate) fn resealed(&mut self, vault: Vault) -> Result<()> {
         let (_, v) = self.deks.get_mut(vault.label()).ok_or(Error::Argument)?;
@@ -315,12 +342,14 @@ impl Arena {
         Ok(())
     }
 
+    #[cfg(feature = "wallet")]
     /// Retains `kek` as the PRF key-encryption key (replacing one retained before).
     pub(crate) fn hold_prf_kek(&mut self, kek: &[u8; 32]) -> Result<()> {
         self.prf_kek = Some(self.put(kek)?);
         Ok(())
     }
 
+    #[cfg(feature = "wallet")]
     /// The retained PRF key-encryption key, if any.
     pub(crate) fn prf_kek(&self) -> Option<Zeroizing<[u8; 32]>> {
         Some(Zeroizing::new(
@@ -328,11 +357,13 @@ impl Arena {
         ))
     }
 
+    #[cfg(feature = "wallet")]
     /// Whether label vault `label` is open in this arena (its DEK held).
     pub(crate) fn holds_label(&self, label: &str) -> bool {
         self.deks.contains_key(label)
     }
 
+    #[cfg(feature = "wallet")]
     /// The DEK held for label vault `label` and that vault, if any.
     pub(crate) fn dek(&self, label: &str) -> Option<(Zeroizing<[u8; 32]>, Vault)> {
         let (slot, v) = self.deks.get(label)?;
@@ -340,6 +371,7 @@ impl Arena {
         Some((Zeroizing::new(dek), v.clone()))
     }
 
+    #[cfg(feature = "wallet")]
     /// `secret` (and its public key data) as key `id`, a key not derived from the seed (an imported key).
     pub(crate) fn insert(&mut self, id: KeyId, secret: &[u8], public: Vec<u8>) -> Result<()> {
         let slot = self.put(secret)?;
@@ -351,6 +383,7 @@ impl Arena {
 struct Inner {
     generation: u64,
     arena: Option<Arena>,
+    #[cfg(feature = "wallet")]
     manifest: Manifest,
 }
 
@@ -385,6 +418,7 @@ pub(crate) struct Handle {
     slot: Slot,
 }
 
+#[cfg(feature = "wallet")]
 /// Whether `old` and `new` give every secret the arena holds outside the derivations the same entry: none left out, none
 /// listed under another entry (T21 L29, L74).
 fn keeps_held(a: &Arena, old: &Manifest, new: &Manifest) -> bool {
@@ -402,6 +436,7 @@ fn keeps_held(a: &Arena, old: &Manifest, new: &Manifest) -> bool {
     imports
 }
 
+#[cfg(feature = "wallet")]
 /// `WalletMismatch` if `m` has a first entry and `seed` does not derive its UA; an empty manifest has nothing to compare.
 fn seed_matches(seed: &[u8; 64], m: &Manifest) -> Result<()> {
     match m.entries.first() {
@@ -411,6 +446,7 @@ fn seed_matches(seed: &[u8; 64], m: &Manifest) -> Result<()> {
 }
 
 impl SecretStore {
+    #[cfg(feature = "wallet")]
     pub(crate) fn new() -> Arc<SecretStore> {
         Self::of(Inner {
             generation: 0,
@@ -442,6 +478,7 @@ impl SecretStore {
         self.inner.write().unwrap_or_else(PoisonError::into_inner)
     }
 
+    #[cfg(feature = "wallet")]
     /// The arena from the entropy and its seed, at the current generation; `Argument` while one is open (a second arena would
     /// move the slots of live handles); `WalletMismatch` if the manifest kept by `lock()` has a first entry and `seed` does not
     /// derive its UA (another wallet's seed), checked under the same write lock before the arena is built. An empty manifest
@@ -456,6 +493,7 @@ impl SecretStore {
         Ok(())
     }
 
+    #[cfg(feature = "wallet")]
     /// Replaces the manifest (a `manifest` vault opened). While unlocked, under the write lock and before it moves:
     /// `WalletMismatch` if the open seed does not derive the UA of `m`'s first entry (as [`SecretStore::open`]), or if the
     /// entries of the secrets the arena holds outside the derivations (imports, rebuilt PQZ keys) differ between `m` and the
@@ -490,6 +528,7 @@ impl SecretStore {
         g.generation += 1;
     }
 
+    #[cfg(feature = "wallet")]
     /// The handle of key `id`: its slot if the store has it, else `derive(seed)` → (secret, public key data), the secret
     /// copied into the arena. `WalletLocked` while locked. Derivation runs under the write lock.
     // ponytail: one write lock per derivation (an SLH-DSA keygen blocks signing for its milliseconds); a per-key lock if
@@ -505,6 +544,7 @@ impl SecretStore {
         self.key_in(arena, generation, id, derive)
     }
 
+    #[cfg(feature = "wallet")]
     /// [`SecretStore::key`] with `derive` over the `substrate-bip39` mini-secret in place of the seed (a Polkadot key).
     pub(crate) fn key_from_mini(
         self: &Arc<Self>,
@@ -519,6 +559,7 @@ impl SecretStore {
         self.key_in(arena, generation, id, |_| derive(&mini))
     }
 
+    #[cfg(feature = "wallet")]
     fn key_in(
         self: &Arc<Self>,
         arena: &mut Arena,
@@ -551,6 +592,7 @@ impl SecretStore {
         ))
     }
 
+    #[cfg(feature = "wallet")]
     /// A one-use secret put into the open arena at the store's generation (a FROST session's nonces, spec §8.2), under the
     /// write lock: its handle, revoked by `lock()` as every other. `WalletLocked` while locked.
     pub(crate) fn put(self: &Arc<Self>, bytes: &[u8]) -> Result<Handle> {
@@ -564,9 +606,9 @@ impl SecretStore {
         })
     }
 
-    /// An app-core key handle's secret put into the open arena (scaas-sdk spec §12.2, feature `app-core`): `AppArenaFull` when
+    /// An app-core key handle's secret put into the open arena (scaas-sdk spec §12.2, feature `key-handles`): `AppArenaFull` when
     /// `max` handles are live, `WalletLocked` while locked.
-    #[cfg(feature = "app-core")]
+    #[cfg(feature = "key-handles")]
     pub(crate) fn put_app(self: &Arc<Self>, bytes: &[u8], max: usize) -> Result<Handle> {
         let mut g = self.write();
         let generation = g.generation;
@@ -584,15 +626,17 @@ impl SecretStore {
     }
 
     /// A store of its own with an open, empty arena (no entropy, no seed): the profile arena (user-profiles spec §7.1).
-    #[cfg(feature = "user-profile")]
+    #[cfg(feature = "key-handles")]
     pub(crate) fn empty_open() -> Arc<SecretStore> {
         Self::of(Inner {
             generation: 0,
             arena: Some(Arena::empty()),
+            #[cfg(feature = "wallet")]
             manifest: Manifest::default(),
         })
     }
 
+    #[cfg(feature = "wallet")]
     /// A store of its own holding only `secret` (an ephemeral KEM key, spec §8.2), and the secret's handle.
     pub(crate) fn single(secret: &[u8]) -> Result<Handle> {
         let mut arena = Arena::empty();
@@ -614,6 +658,7 @@ impl SecretStore {
         f(self.read().arena.as_ref().ok_or(Error::WalletLocked)?)
     }
 
+    #[cfg(feature = "wallet")]
     /// `f` over the seed under the read guard (a derivation that stores nothing: discovery); `WalletLocked` while locked.
     pub(crate) fn with_seed<R>(&self, f: impl FnOnce(&[u8; 64]) -> Result<R>) -> Result<R> {
         self.with_arena(|a| {
@@ -623,6 +668,7 @@ impl SecretStore {
         })
     }
 
+    #[cfg(feature = "wallet")]
     /// `f` over the open arena and the manifest under the write lock; `WalletLocked` while locked.
     pub(crate) fn with_all<R>(
         &self,
@@ -647,11 +693,13 @@ impl SecretStore {
             })
     }
 
+    #[cfg(feature = "wallet")]
     /// The manifest (public; kept by `lock`).
     pub(crate) fn manifest(&self) -> Manifest {
         self.read().manifest.clone()
     }
 
+    #[cfg(feature = "wallet")]
     /// `f` over the manifest under the write lock, locked or not.
     pub(crate) fn note(&self, f: impl FnOnce(&mut Manifest)) {
         f(&mut self.write().manifest);
@@ -697,6 +745,7 @@ impl Handle {
         self.store.lease()
     }
 
+    #[cfg(feature = "wallet")]
     /// `f` over this handle's store's manifest (a KEM key written at its first use).
     pub(crate) fn note(&self, f: impl FnOnce(&mut Manifest)) {
         self.store.note(f);
@@ -707,6 +756,7 @@ impl Handle {
         self.store.lock();
     }
 
+    #[cfg(feature = "wallet")]
     /// The handle of key `id` derived from this handle's own store's seed, as [`SecretStore::key`]: `KeyRevoked` once the
     /// store's generation moved (a KEM key of a UA key, spec §6.1: no other wallet can be named).
     pub(crate) fn derive(
@@ -722,6 +772,7 @@ impl Handle {
         self.store.key_in(arena, self.generation, id, derive)
     }
 
+    #[cfg(feature = "wallet")]
     /// `test` over the secret once per store for key `id`, under the write lock; the record is the store's (wiped with its
     /// arena). A failed test records nothing and is returned.
     pub(crate) fn self_test(
@@ -758,9 +809,9 @@ impl Handle {
         })
     }
 
-    /// Wipes an app-core key handle's secret and frees its slot for reuse (feature `app-core`); nothing once the store's
+    /// Wipes an app-core key handle's secret and frees its slot for reuse (feature `key-handles`); nothing once the store's
     /// generation moved (the arena was wiped with it).
-    #[cfg(feature = "app-core")]
+    #[cfg(feature = "key-handles")]
     pub(crate) fn free_app(&self) {
         let mut g = self.store.write();
         if g.generation != self.generation {
@@ -776,7 +827,7 @@ impl Handle {
     }
 
     /// Whether two handles name the same store.
-    #[cfg(feature = "app-core")]
+    #[cfg(feature = "key-handles")]
     pub(crate) fn same_store(&self, store: &Arc<SecretStore>) -> bool {
         Arc::ptr_eq(&self.store, store)
     }

@@ -6,7 +6,7 @@ at `fa51e8275` (round 2: no P1, every round-1 finding fixed or partly fixed, new
 `9f2ee89b7` (round 3: area C approve, areas A and B approve with one P1 each, no P0); every finding of the three rounds is applied as the controller's ruling of the same day (§19). No decryption-oracle path was found in either round, and no owner
 ruling was reopened. Branch `user-profiles-spec` (from `dev` `644ea61a8`), worktree `.claude/worktrees/user-profiles-spec`. Rule ids
 (SPECIFIED, defined once in [clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12, recorded in [decisions.md](../../decisions.md)
-§41): CLI-UPR-01 to CLI-UPR-29. No contract, signed byte format, chain profile or node rule changes; no on-chain byte changes. The
+§41): CLI-UPR-01 to CLI-UPR-30. No contract, signed byte format, chain profile or node rule changes; no on-chain byte changes. The
 `ua-rs` calls and the two file formats of §7 and §10.1, and the keystore's new vault label of §7.4, are new and need vector rows in
 clientkeys and `ua-rs` before code. UNAUDITED.
 
@@ -38,6 +38,7 @@ ARCH-POS-15. Order of sources: AGENTS.md "Which source wins".
 | O12 | 2026-11-27 | Q-UP10, Q-UP11 as recommended (§16.1): a hidden profile with a lost passphrase is removed by hand, no call deletes unlisted directories; an export leaves out `keystore.prev`, the PqChat store and credential references. | CLI-UPR-15, CLI-UPR-18 |
 | O13 | 2026-11-27 | The user-profile store is its own crate, `scaas-profile`, over `ua-rs` only, so scaas-app's default build (no SDK) holds a profile (its Matrix session key, its settings) with `scaas-matrix`; the SDK depends on it and adds what needs the SDK (§11). | CLI-UPR-02 (Change) |
 | O14 | 2026-11-27 | Each profile has its own Matrix: its own logins, session, store, crypto keys and device id, sealed in that profile (the Matrix store key a sealed item); nothing Matrix-side is shared between profiles; one `scaas-matrix` client per open profile; switching profiles closes the current client first. | CLI-UPR-29 |
+| O15 | 2026-11-27 | scaas-app's default build links `ua-rs` only with the profile-crypto features; no signing code is compiled into it: `scaas-profile` takes `ua-rs`'s `user-profile` (the new feature `key-handles`: the arena, key handles, AEAD, HKDF, HMAC, Argon2id, `ProfileKeys`, `ExportKey`) and `json`, never `wallet`, `pq`, `signers`, `fam-*`, `zether` or `pqz` (§11). Source: "Owner ruling 2026-11-27 (chat): scaas-app's default build links ua-rs only with the profile-crypto features; no signing code is compiled into it." | CLI-UPR-30 |
 
 Standing rules applied: secrets never leave the SDK and every KDF, AEAD and MAC runs in `ua-rs` (CLI-SDK-01, CLI-SDK-02); fail closed
 with named errors; no decryption oracle (ARCH-POS-13); every RPC consumer takes a list of nodes (ARCH-POS-15); the node is open and
@@ -617,7 +618,8 @@ payload = be32(len) ‖ label JSON ‖ be32(len) ‖ settings JSON ‖ be16(item
 
 ## 11. SDK surface (CLI-UPR-02, CLI-UPR-22; SPECIFIED; a sketch for the plan)
 
-Two layers (owner O13). **`scaas-profile`**, a crate over `ua-rs` only (`ua-rs`'s existing `argon2` 0.6.0 path), synchronous (its
+Two layers (owner O13). **`scaas-profile`**, a crate over `ua-rs` only (`ua-rs`'s existing `argon2` 0.6.0 path; `ua-rs` without its
+defaults, features `user-profile` and `json` only, so no signing code is compiled in: owner O15, CLI-UPR-30), synchronous (its
 calls run on a blocking thread), with its own `Error` whose codes carry the SDK's names: the profile root, the index, the envelope,
 the instance lock, the sealed store with its journal, generations, manifests and anchor, hidden profiles, delete, migration, export
 and import, the storage of settings, and the `ProfileKeychain` interface. **The SDK**, module `user_profile` (feature `user-profile`:
@@ -957,6 +959,7 @@ Each negative test has its positive control and its named mutant, which must tur
 | CLI-UPR-27 | import in two calls: a preview of every setting held in memory, then the import of the user's choices, sealed from its first byte | no |
 | CLI-UPR-28 | the anchor is compared as the keystore's: ahead is a crash and the anchor follows; below, or another hash at the same rev, is a rollback; the envelope has a `rev` | no |
 | CLI-UPR-29 | each profile has its own Matrix (logins, session, store, crypto keys, device id) sealed in it; nothing shared; one `scaas-matrix` client per open profile, closed first at a switch | yes (O14) |
+| CLI-UPR-30 | scaas-app's default build links `ua-rs` with the profile-crypto features only (`user-profile` = `key-handles`, and `json`); no signing code compiled in; checked on the rlib's symbols | yes (O15) |
 
 ## 19. Review response (Fable, 2026-11-27; the controller's rulings, owner may veto)
 

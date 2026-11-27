@@ -18,8 +18,10 @@ default = []
 test-hooks = ["scaas-ua/test-hooks"]
 
 [dependencies]
-# default-features = false: scaas-ua's defaults carry the Zether and PQZ facades
-scaas-ua = { path = "../ua-rs", default-features = false, features = ["user-profile"] }
+# default-features = false: scaas-ua's defaults carry the Zether and PQZ facades; `user-profile` is the profile arena with no
+# signing code (owner 2026-11-27, user-profiles O15; clients/ua-rs/runs/2026-11-27-key-handles-nm.py checks it), `json` the
+# bounded-depth scan of every JSON this crate parses (`scaas_ua::json::depth_within`; it came with `wallet` before)
+scaas-ua = { path = "../ua-rs", default-features = false, features = ["user-profile", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # base64 (an encoding) for the sealed items (plan pinned format 6); zeroize the plaintexts, the pin of scaas-ua

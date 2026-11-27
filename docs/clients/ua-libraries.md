@@ -185,7 +185,11 @@ Claude), no external audit.
 | `zether` | `wallet` and the Zether facade (`zether-prover`, BLS12-381 only) | yes |
 | `pqz` | `wallet` and the PQZ facade (`pqz-ffi` with `prove`; the Rust PQZL backend, PQZH where the set has it) | yes |
 | `pqz-set-<set>` | exactly one with `pqz` (a const assert): `n2048-kmax1024`, `n2304-kmax4096`, `n2560-kmax16384`, `n2816-kmax65536`; a wallet serving two sets ships two builds; another set is `PqzSetMismatch` | `n2304-kmax4096` |
-| `mlock` | arena protection ([CLI-UAL-10](#CLI-UAL-10)); compiled out off Unix | yes (owner 2026-11-06) |
+| `mlock` | arena protection ([CLI-UAL-10](#CLI-UAL-10)) of the arena `wallet` or `key-handles` holds; compiled out off Unix; enables neither (owner 2026-11-27: was `wallet`'s) | yes (owner 2026-11-06) |
+| `key-handles` | the key handles with no signing code, no seed and no UA kind (owner 2026-11-27, [CLI-UPR-30](scaas-sdk.md#CLI-UPR-30)): the arena (`SecretStore`, `MemoryProtection`), `KeyHandle`, `KeyUsage`, `AppKeys` over an arena of its own, AEAD / HKDF / HMAC, Argon2id, `seal_key`, the OS RNG, `passphrase_bytes`, `Nonce`, `ProfileKeys`, `ExportKey`; no `wallet`, `pq`, `signers`, `fam-*`, `zether`, `pqz` | no |
+| `app-core` | `key-handles` and `wallet`: what needs a seed or a UA kind (`Wallet::app_keys`, the app root key, the KEM wrap, the PqChat keys, the tree, the file seal) | no |
+| `user-profile` | `key-handles` only: the profile arena of `scaas-profile` (owner 2026-11-27: was `app-core`); `clients/ua-rs/runs/2026-11-27-key-handles-nm.py` checks that its rlib holds no signing symbol | no |
+| `test-hooks` | `user-profile` and the test KDF set, the forced out-of-memory hook, the Argon2id run counter; `compile_error!` without `debug_assertions` ([CLI-UAL-25](#CLI-UAL-25)'s rule for test features) | no |
 | `pq`, `signers`, `json` | the identity layer's own: PQ verifiers, group signers, JSON shims | through `wallet` |
 | `vectors` | test-only entry points; never in a production artifact ([CLI-UAL-25](#CLI-UAL-25)) | no |
 | `fam-<row>` | one per row of chain-support, only that chain's transaction format (decisions CLI-SDK-33 (31), (37); plan T42): `fam-evm` (RLP, `EvmTx`, `evm`, `hedera_ecdsa`), `fam-hedera` (`hedera_ed25519`), `fam-near`, `fam-algorand`, `fam-cosmos`, `fam-aptos`, `fam-solana`, `fam-soroban` (`stellar`), `fam-sui`, `fam-ton`, `fam-dot` (sr25519, SS58, `polkadot`), `fam-btc` (the two Bitcoin networks), `fam-arweave`; a network whose row is off is `FeatureMissing`; the core (`wallet`) keeps every UA kind and the seed standards | yes (all) |

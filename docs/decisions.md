@@ -12661,7 +12661,7 @@ Change (controller calls, 2026-11-23, T26 area A part b (custody), branch `sdk-t
 
 Change (owner 2026-11-23, "agreed, add it", relayed by the coordinator; owner: yes; status: BUILT on branch `sdk-t26-b`, UNAUDITED; numbered (161) on its branch, renumbered (169) at the merge `t26-merge`, where area A part b holds (160) to (167); B-21 alike, (160) to (168)): (169) **B-20, wasm32 reads a body chunk by chunk to its cap, as natively (CLI-RPC-07).** `scaas-rpc` turns on reqwest's `stream` feature for the wasm32 target only; its `bytes_stream` needs the new dependency **`wasm-streams` 0.4.2** (licence `MIT OR Apache-2.0`, already allowed by every `deny.toml`), pinned exactly (`=0.4.2`) in `clients/scaas-rpc/Cargo.toml` and added to every lockfile that resolves `scaas-rpc` (no other version moved). Why: the fetch backend without streams reads the whole body before it can be bounded, so an endpoint announcing no length could exhaust a page's memory. One bounded read (`http::read_capped`) now serves both targets and both readers (the capped answer and the hashed object): it stops at the first chunk that would pass the cap, before the rest is read, with the same `AnswerTooLarge` as before.
 
-**User profiles (CLI-UPR-\*).** The rules are in [clients/scaas-sdk.md](clients/scaas-sdk.md#12-user-profiles) §12; the design is the [user-profiles spec](superpowers/specs/2026-11-27-user-profiles.md), a frame; the owner ruled every open point of its §16 on 2026-11-27. Entries 01 to 09, 17, 23 and 29 carry the owner's rulings of 2026-11-27; 10 to 16, 18 to 22 and 24 to 28 are the controller's means (owner may override), with the owner's §16 rulings and the controller's rulings on the three rounds of the Fable review of 2026-11-27 recorded as Changes on the entries they touch.
+**User profiles (CLI-UPR-\*).** The rules are in [clients/scaas-sdk.md](clients/scaas-sdk.md#12-user-profiles) §12; the design is the [user-profiles spec](superpowers/specs/2026-11-27-user-profiles.md), a frame; the owner ruled every open point of its §16 on 2026-11-27. Entries 01 to 09, 17, 23, 29 and 30 carry the owner's rulings of 2026-11-27; 10 to 16, 18 to 22 and 24 to 28 are the controller's means (owner may override), with the owner's §16 rulings and the controller's rulings on the three rounds of the Fable review of 2026-11-27 recorded as Changes on the entries they touch.
 
 ### CLI-UPR-01 — "Profile" on screen and `UserProfile` in code; a chain's pinned data is a "chain profile"
 - old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-01 · superseded-by: —
@@ -12989,6 +12989,15 @@ Change (controller call 2026-11-27, the round-3 Fable review of `9f2ee89b7`, R3-
 **Why.** Profiles are separate identities (CLI-UPR-03, CLI-UPR-04); a shared Matrix device or store would tie them together on the homeserver and on disk.
 **Cost if wrong.** One profile's chats, keys or device visible to another; a switch that leaves the first profile's client signed in.
 **Source.** Owner ruling 2026-11-27 (chat, through the controller): each profile has its own Matrix logins, session, store, crypto keys and device id, sealed in that profile; nothing Matrix-side is shared; one `scaas-matrix` client per open profile, closed first at a switch; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O14, §5, §7.2, §17.
+
+### CLI-UPR-30 — scaas-app's default build links `ua-rs` only with the profile-crypto features; no signing code is compiled into it
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-30 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-30).) `scaas-profile` takes `ua-rs` without defaults and with `user-profile` and `json` only; `user-profile` is the new feature `key-handles` (arena, key handles, AEAD, HKDF, HMAC, Argon2id, `ProfileKeys`, `ExportKey`), which enables no `wallet`, `pq`, `signers`, `fam-*`, `zether` or `pqz`; `app-core` is `key-handles` and `wallet` and keeps what needs a seed or a UA kind; `mlock` locks either arena.
+**Status.** BUILT (`ua-rs` features `key-handles`, `user-profile`, `app-core`, `mlock`; `clients/ua-rs/runs/2026-11-27-key-handles-nm.py`; CI cell `user-profile`). UNAUDITED.
+**Why.** The app's default build holds a profile without the SDK (CLI-UPR-02's Change); signing code it never calls is attack surface and size it does not need.
+**Cost if wrong.** Signing code, PQ kinds or group signers linked into an app build that signs nothing; a later feature edit pulling `wallet` back in unnoticed.
+**Source.** Owner ruling 2026-11-27 (chat): scaas-app's default build links ua-rs only with the profile-crypto features; no signing code is compiled into it. [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O15, §11.
 
 ## 42. Clients — terminal UI (`scaas-tui`)
 
