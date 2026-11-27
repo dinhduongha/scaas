@@ -194,7 +194,9 @@ impl Local {
                 chain_uid: self.uid.clone(),
                 registry: self.registry.clone(),
                 factory: self.factory.clone(),
-                tree_gas: None,
+                // the chain's TreeKEM gas rows, the release data an app ships (the path-less delta P8: on a node that
+                // counts EIP-8037's state gas, a commit is split into the transactions that fit only with them)
+                tree_gas: Some(include_str!("../../../scaas-sdk/gas/pqchat-tree.json").into()),
             }],
             ..PqChatConfig::default()
         }
@@ -543,6 +545,38 @@ pub async fn land(l: &Local, call: scaas_sdk::app_core::AppCall) -> u64 {
     gas
 }
 
+/// The positive control on a node of Amsterdam (EIP-7825 under EIP-8037, the SDK's M20 run): the cap is on the regular gas,
+/// not on the gas limit, so initcode that loops for ever (JUMPDEST PUSH1 0 JUMP) sent with a 30 M limit stops at 2^24
+/// (status 0, gasUsed 2^24), where anvil's `--enable-tx-gas-limit` refuses the limit itself.
+fn node_positive_control(rpc: &str) {
+    let out = cast_out(&[
+        "send",
+        "--rpc-url",
+        rpc,
+        "--private-key",
+        DEPLOYER,
+        "--gas-limit",
+        "30000000",
+        "--create",
+        "0x5b600056",
+        "--json",
+    ]);
+    let out = String::from_utf8_lossy(&out.stdout).to_string();
+    let r: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let used =
+        u64::from_str_radix(r["gasUsed"].as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
+    assert_eq!(
+        r["status"].as_str(),
+        Some("0x0"),
+        "the loop did not stop: {r}"
+    );
+    assert!(
+        used <= TX_CAP,
+        "the loop used {used} gas: the node does not cap the regular gas at 2^24"
+    );
+    println!("[chain] node {rpc}: a 30 M loop stopped at {used} gas (positive control)");
+}
+
 /// [`local_with_extra`] on the node of `PQCHAT_CHAIN_RPC`: the contracts already deployed by the runner (its book), the
 /// deployer and the seed's EVM key 0 funded by `PQCHAT_CHAIN_FUNDER`; no state reload (the node enforces 2^24 itself, the
 /// positive control says so).
@@ -588,7 +622,7 @@ async fn on_node(
         ]);
     }
     println!("[chain] node {rpc}: registry {registry}, factory {factory}, PqChat {home}");
-    positive_control(&rpc);
+    node_positive_control(&rpc);
     let more = create_instances(&rpc, &factory, instances);
     let (sdk, seed) = sdk_at(
         &rpc,
@@ -598,11 +632,16 @@ async fn on_node(
         extra(&rpc, &uid, &registry, &factory),
     )
     .await;
+    // the tests share the node's chain: each run's UAs from its own accounts (`PQCHAT_ACCOUNT_BASE` + account)
+    let base: u32 = std::env::var("PQCHAT_ACCOUNT_BASE").map_or(0, |b| b.parse().unwrap());
     let mut mes = vec![];
     for (account, kem, kind) in accounts {
-        mes.push(register_kind(&sdk, &seed, *account, *kem, *kind).await);
+        mes.push(register_kind(&sdk, &seed, base + *account, *kem, *kind).await);
     }
-    println!("[chain] {} UAs registered", mes.len());
+    println!(
+        "[chain] {} UAs registered (accounts from {base})",
+        mes.len()
+    );
     let payer = payer_of(&seed);
     (
         Local {

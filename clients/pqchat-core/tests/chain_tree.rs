@@ -614,15 +614,20 @@ async fn chain_tree_pathless_rows() {
     let (r, e, a) = add_all(&l, &pq, &s, &a0, &m[0], &[&m[2]], false).await;
     assert_eq!(r["pathless"], json!(true));
     println!("[rows] plan {e:?}");
-    println!("[rows] path-less, 10 Adds");
-    let ten: Vec<&Me> = m[3..13].iter().collect();
-    let (r, e, a) = add_all(&l, &pq, &s, &a, &m[0], &ten, false).await;
+    // `PQCHAT_ROWS_ADDS` (default 10, at most 10): a run on a node whose quote counts the whole estimate takes fewer
+    let n: usize = std::env::var("PQCHAT_ROWS_ADDS").map_or(10, |v| v.parse().unwrap());
+    println!("[rows] path-less, {n} Adds");
+    let many: Vec<&Me> = m[3..3 + n].iter().collect();
+    let (r, e, a) = add_all(&l, &pq, &s, &a, &m[0], &many, false).await;
     assert_eq!(
         (r["pathless"].clone(), a.replay.since_path),
-        (json!(true), 11)
+        (json!(true), 1 + n as u32)
     );
     println!("[rows] plan {e:?}");
-    println!("[rows] add and refresh, 1 Add (path commit, 13 keys)");
+    println!(
+        "[rows] add and refresh, 1 Add (path commit, {} keys)",
+        3 + n
+    );
     let (r, e, a) = add_all(&l, &pq, &s, &a, &m[0], &[&m[13]], true).await;
     assert_eq!(
         (r["pathless"].clone(), a.replay.since_path),

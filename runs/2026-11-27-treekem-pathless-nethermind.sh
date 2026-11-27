@@ -101,8 +101,11 @@ cp "$BOOK" "$COPY/book.json"
 rm -f "$W"/smartcontracts/evm/deployments/$NAME*.json
 say "deployed: PqChat $(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["pqchat_instance"])' "$COPY/book.json")"
 rc=0
+base=0
 for t in ${P8_TESTS:-chain_tree_pathless_rows chain_tree_bound chain_tree_session}; do
-    (cd clients/pqchat-core && PQCHAT_CHAIN_RPC=$RPC PQCHAT_CHAIN_BOOK=$COPY/book.json PQCHAT_CHAIN_FUNDER=$PK PQCHAT_GAS_ROWS=1 \
+    # each test registers its UAs from its own accounts on the shared chain
+    base=$((base + 100))
+    (cd clients/pqchat-core && PQCHAT_ROWS_ADDS=${P8_ADDS:-10} PQCHAT_ACCOUNT_BASE=$base PQCHAT_CHAIN_RPC=$RPC PQCHAT_CHAIN_BOOK=$COPY/book.json PQCHAT_CHAIN_FUNDER=$PK PQCHAT_GAS_ROWS=1 \
         CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target "$W/scripts/capped" cargo test --locked --offline -j2 \
         --test chain_tree -- --ignored --exact "$t" --nocapture) >>"$LOG" 2>&1 && r=0 || r=$?
     say "$t on the copy: rc=$r"
@@ -117,6 +120,8 @@ print("# entry | gasUsed | regular | state | gas limit; [rows] lines name the ro
 for line in open(sys.argv[1]):
     if line.startswith("[rows]") or line.startswith("[tree]") or line.startswith("[chain]"):
         print(line.rstrip())
+    if "on an `Err` value" in line or line.startswith("test result"):
+        print("[result] " + line.rstrip())
     m = re.match(r"\[gas\] (0x[0-9a-f]{8}) gasUsed (\S+) regular (\S+) state (\S+) gasLimit (\d+)", line)
     if m:
         print(" | ".join([ids.get(m[1], m[1])] + [str(int(x, 16)) if x.startswith("0x") else x for x in m.groups()[1:]]))
