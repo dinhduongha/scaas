@@ -160,7 +160,7 @@ pub struct Profiles {
 
 /// The root's own checks (spec §5 "Modes"): made `0700` when missing; a symlink or not a directory refused; a wider mode
 /// tightened only when it holds `profiles.json` or `p/`, else `ProfileRootUnsafe`; on Unix a root another user owns
-/// `ProfileRootUnsafe` (its owner against the process's uid, read from a probe file it creates).
+/// `ProfileRootUnsafe` (its owner against the process's uid: `/proc/self`'s owner on Linux, else a probe file's).
 fn prepare_root(root: &Path) -> Result<(), Error> {
     let m = match std::fs::symlink_metadata(root) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -203,10 +203,39 @@ fn same_owner(root: u32, process: u32) -> Result<(), Error> {
     }
 }
 
-/// The process's uid, without `unsafe` (review Q5): the owner of a file it creates in `root` (`O_CREAT | O_EXCL`, mode `0600`,
-/// read through its handle), removed again. A root it cannot write in is `ProfileRootUnsafe` (permission) or `VaultIo`.
+/// The process's uid, without `unsafe` (review Q5; owner 2026-11-28): `/proc/self`'s owner where it exists (Linux), else a
+/// probe file's in `root`.
 #[cfg(unix)]
 fn process_uid(root: &Path) -> Result<u32, Error> {
+    uid_of(proc_uid(), root)
+}
+
+/// `/proc/self`'s owner: the process's effective uid (a process the kernel marks not dumpable reads as root's, so its root
+/// is refused: fail closed); `None` when it cannot be read.
+#[cfg(target_os = "linux")]
+fn proc_uid() -> Option<u32> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata("/proc/self").ok().map(|m| m.uid())
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn proc_uid() -> Option<u32> {
+    None
+}
+
+/// The shortcut's uid when given, else the probe file's in `root`.
+#[cfg(unix)]
+fn uid_of(proc: Option<u32>, root: &Path) -> Result<u32, Error> {
+    match proc {
+        Some(uid) => Ok(uid),
+        None => probe_uid(root),
+    }
+}
+
+/// The owner of a file the process creates in `root` (`O_CREAT | O_EXCL`, mode `0600`, read through its handle), removed
+/// again. A root it cannot write in is `ProfileRootUnsafe` (permission) or `VaultIo`.
+#[cfg(unix)]
+fn probe_uid(root: &Path) -> Result<u32, Error> {
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
     let tag: String = random::<8>()?.iter().map(|b| format!("{b:02x}")).collect();
     let probe = root.join(format!(".owner-{tag}"));
@@ -1193,6 +1222,29 @@ impl Profiles {
 
 #[cfg(test)]
 mod tests {
+    /// Owner 2026-11-28 (review Q5): the process's uid from `/proc/self` where it exists (Linux), else the probe file. The
+    /// shortcut's uid is taken as given (a root no probe can be made in: an injected uid, no probe run); without it the probe
+    /// runs (that root refuses it). On Linux the shortcut and the probe agree.
+    #[cfg(unix)]
+    #[test]
+    fn q5_proc_self_shortcut() {
+        let none = std::env::temp_dir().join("scaas-profile-q5-no-such-root");
+        assert_eq!(super::uid_of(Some(4242), &none), Ok(4242));
+        assert!(
+            super::uid_of(None, &none).is_err(),
+            "control: the probe ran"
+        );
+        #[cfg(target_os = "linux")]
+        {
+            let root = std::env::temp_dir();
+            assert_eq!(super::proc_uid(), super::uid_of(None, &root).ok());
+            assert!(
+                super::process_uid(&none).is_ok(),
+                "the shortcut used: no probe"
+            );
+        }
+    }
+
     /// Q5: the root's owner against the process's uid: another owner is `ProfileRootUnsafe`. Control: the same uid passes. (A
     /// test cannot make a directory another uid owns without root, so the comparison is tested with given uids.)
     #[test]

@@ -51,6 +51,7 @@ ARCH-POS-15. Order of sources: AGENTS.md "Which source wins".
 | O20 | 2026-11-28 | Two instances running `create_hidden` with one (name, passphrase) at once may both pass the duplicate search (no lock is held across a KDF): accepted. A hidden open never picks silently: two or more matches is **`ProfileHiddenAmbiguous`**; `hidden_matches(name, passphrase)` lists them as opaque choices (`HiddenMatch { index, created_ms }`: the place among the matches by id order and the creation time from the UUIDv7, never the id), and `open_hidden_match(name, passphrase, choice)` runs the search again and opens the choice that still holds by place and creation time, else `ProfileOpen` (§8). | CLI-UPR-13 |
 | O21 | 2026-11-28 | `ProfileBusy` and `ProfilePartFull` become `StoreError` codes: the store face passes them through by name (they were `Unavailable`), `vault::io` maps each to the `SdkError` of the same name, a foreign or wasm store names them, and every SDK caller sees them (§7.2 "Errors"). | CLI-UPR-22 |
 | O22 | 2026-11-28 | The migration's `migration: pending` is cleared at `set_passphrase`'s commit (the re-seal's new envelope carries none), not as a step of the move: an unprotected `g0` accepts the moved keystore only under `migration: pending`, so the flag stays until the seal (§12's step order fixed to the code). | CLI-UPR-11 |
+| O23 | 2026-11-28 | A root another user owns is refused (`ProfileRootUnsafe`): on Unix its owner is compared with the process's uid without `unsafe`, read from `/proc/self`'s owner on Linux where it exists, else from a probe file the process creates in the root (`O_CREAT | O_EXCL`, mode `0600`) and removes (§5, review Q5). | CLI-UPR-11 |
 
 Standing rules applied: secrets never leave the SDK and every KDF, AEAD and MAC runs in `ua-rs` (CLI-SDK-01, CLI-SDK-02); fail closed
 with named errors; no decryption oracle (ARCH-POS-13); every RPC consumer takes a list of nodes (ARCH-POS-15); the node is open and
@@ -165,6 +166,9 @@ the app supplies only the keychain items (anchors, the `protected` marker, the u
   needs a seed, so a protected profile).
 - **Modes.** The SDK tightens a root to `0700` only when it already holds `profiles.json` or `p/`, or when the SDK made it; a wider
   mode on any other directory given as a root (`--data-dir ~`, a project directory) is refused (`ProfileRootUnsafe`), never changed.
+- **Owner** (owner O23, 2026-11-28). On Unix a root another user owns is `ProfileRootUnsafe`: its owner is compared with the
+  process's uid, read without `unsafe` from `/proc/self`'s owner on Linux where it exists, else from a probe file the process
+  creates in the root (`O_CREAT | O_EXCL`, `0600`) and removes.
 
 **What moves into a profile, from today's single store and config** (CLI-UPR-03):
 

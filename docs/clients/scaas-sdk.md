@@ -712,6 +712,9 @@ profile; a row that points at a hidden envelope is refused and dropped. The gene
 names, their `.lock` files and FileStore's crash-left temporaries (removed at open); the unprotected `g0` holds plain items of part
 `sdk` only. The migration reads `--data-dir` or the default data directory on every OS, under the root lock and the legacy keystore
 lock, only when no profile directory exists; legacy items beside existing profiles are reported. **Change (owner 2026-11-28; BUILT,
+`scaas-profile` `q5_root_owner_compared`, `q5_proc_self_shortcut`):** on Unix a root another user owns is `ProfileRootUnsafe`, its
+owner compared with the process's uid read without `unsafe`: `/proc/self`'s owner on Linux, else a probe file's the process
+creates in the root and removes. **Change (owner 2026-11-28; BUILT,
 `scaas-profile` `migrated_default_sealed_after_commit`, the SDK's `migrated_default_refused_until_sealed`):** `set_passphrase` on a
 migrated "default" holding a keystore needs the user's confirm of the seeds moved: the SDK's `migrated_seeds()` shows their count
 and labels (the keystore's public fields), `set_passphrase` takes `ConfirmMigratedSeeds { seeds }` with that count (the crate
