@@ -11,7 +11,7 @@ UNAUDITED: every line this plan builds stays UNAUDITED.
 
 **Owner rulings 2026-11-27 after UP5:** (O13, CLI-UPR-02's Change) the store is its own crate `clients/scaas-profile` over `ua-rs`
 only, used by the SDK and by scaas-app's default build; UP5's core moved there (`74b860488`), and UP6 to UP10 build their store
-parts there, the SDK keeping what needs an `Sdk` (each task's **Files** below). (O14, CLI-UPR-31) each profile has its own Matrix
+parts there, the SDK keeping what needs an `Sdk` (each task's **Files** below). (O14, CLI-UPR-29) each profile has its own Matrix
 logins, session, store, crypto keys and device id, sealed in it; wave 1 builds only the Matrix store key as a sealed item. (O15,
 CLI-UPR-32) `scaas-profile` links `ua-rs` with `user-profile` (= the new feature `key-handles`) and `json` only, no signing code;
 `app-core` = `key-handles` + `wallet`; task KH, checked by `clients/ua-rs/runs/2026-11-27-key-handles-nm.py`.
@@ -31,7 +31,7 @@ settings' chain-profile meaning; each under its §17 tests with a positive contr
 over the wave-1 core, `Items` made `async`), platform unlock (`enable_platform_unlock`, `disable_platform_unlock`, the SDK's use of
 `K_plat`), the SDK's key-lock calls (`ImportKey.key_passphrase`, `unlock_key`, `lock_key`, `lock_key_separately`, `KeyLocked`, the
 skips in `vault/prf.rs` and `vault/seeds.rs`, the backup and device-link counts), TUI T15, scaas-app's pickers, the bindings of
-the `user_profile` surface, the two-instance PqChat e2e (§17 "end-to-end"), and the per-profile Matrix e2e (CLI-UPR-31, §17
+the `user_profile` surface, the two-instance PqChat e2e (§17 "end-to-end"), and the per-profile Matrix e2e (CLI-UPR-29, §17
 "Matrix per profile": two profiles, two Matrix sessions, no shared state, a switch closing the first client).
 
 ## Global constraints (read before every task)
@@ -163,7 +163,7 @@ These fill only what spec §7 and §10.1 leave open; everything the spec pins st
 | G15 zeroisation | UP2 | — |
 | vectors | UP1, UP2, UP6 (UUIDv7 and `name_key` read by `scaas-profile`) | — |
 | end-to-end | — | two instances, PqChat 1:1 |
-| Matrix per profile (CLI-UPR-31) | UP6 (the Matrix store key, a sealed item of the profile; two profiles, two keys) | two profiles, two Matrix sessions, no shared state; a switch closes the client |
+| Matrix per profile (CLI-UPR-29) | UP6 (the Matrix store key, a sealed item of the profile; two profiles, two keys) | two profiles, two Matrix sessions, no shared state; a switch closes the client |
 
 ## UP0 — Baseline
 

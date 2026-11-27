@@ -821,12 +821,6 @@ other opens ([CLI-PQC-20](../decisions.md#CLI-PQC-20)).
 Complete protection, keychain items `ThisDeviceOnly`); the export ([CLI-UPR-17](#CLI-UPR-17)) is the only way to move a profile:
 [CLI-UPR-30](../decisions.md#CLI-UPR-30).
 
-<a id="CLI-UPR-31"></a>**CLI-UPR-31** — **Each profile has its own Matrix: its logins, session, store, crypto keys and device id;
-nothing Matrix-side is shared between profiles** (owner 2026-11-27; SPECIFIED). A profile's Matrix login or logins, its session, its
-matrix-rust-sdk store (`matrix/`, spec §5), its crypto keys and its device id belong to that profile and are sealed in it: the Matrix
-store key is a sealed item of the profile's store (spec §7.2). No Matrix state, file or key is shared between two profiles. One
-`scaas-matrix` client runs per open profile; switching profiles closes the current profile's client first (CLI-UPR-07).
-
 <a id="CLI-UPR-32"></a>**CLI-UPR-32** — **scaas-app's default build links `ua-rs` only with the profile-crypto features; no signing
 code is compiled into it** (owner 2026-11-27; BUILT). `scaas-profile` takes `ua-rs` without its defaults and with `user-profile` and
 `json` only; `user-profile` is `key-handles` (the arena, `KeyHandle`, `KeyUsage`, `AppKeys` over an arena of its own, AEAD, HKDF,
@@ -834,4 +828,5 @@ HMAC, Argon2id, `seal_key`, the OS RNG, `passphrase_bytes`, `Nonce`, `ProfileKey
 "Features"), which enables no `wallet`, `pq`, `signers`, `fam-*`, `zether` or `pqz`. What needs a seed or a UA kind (`Wallet::app_keys`,
 the app root key, the KEM wrap, the PqChat keys, the tree) stays in `app-core`. `clients/ua-rs/runs/2026-11-27-key-handles-nm.py`
 checks it: the `user-profile` rlib defines no signing symbol (`nm`), a `wallet` build does (the control), and `scaas-profile`'s
-graph enables no signing feature. The verify-only identity layer every `ua-rs` build has (`--no-default-features`) stays in it.
+graph enables no signing feature. Verify-only code (classical kind verification, FROST/MuSig2 key-data and PoP checks)
+stays; revisit only for a measured size need (controller call 2026-11-27).

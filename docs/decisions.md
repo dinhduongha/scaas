@@ -13104,7 +13104,9 @@ Change (controller call 2026-11-27, the round-3 Fable review of `9f2ee89b7`, R3-
 **Rule.** The store key of the Matrix client's store is a sealed item of the user profile that owns that client
 ([CLI-UPR-12](clients/scaas-sdk.md#CLI-UPR-12); the user-profiles spec §5, `matrix_store()`), the one key that leaves the
 profile's arena: `scaas-matrix` ([CLI-PQC-20](#CLI-PQC-20)) holds it until the profile locks, and the lock closes that
-client. It is not kept in the OS secret storage. `pqchat-core`'s local store stays encrypted at rest under the same key
+client. It is not kept in the OS secret storage. Each profile has its own Matrix (logins, session, store, crypto keys,
+device id; nothing shared between profiles; one `scaas-matrix` client per open profile, closed first at a switch):
+[CLI-PQC-20](#CLI-PQC-20). Change 2026-11-27 (controller call): CLI-UPR-31 folded in. `pqchat-core`'s local store stays encrypted at rest under the same key
 ([CLI-PQC-09](clients/pqchat-core.md#CLI-PQC-09)); its device anchor stays in the platform's non-backed-up secret storage.
 scaas-app's contract §11.4, which put the store key in the OS secret storage, is corrected to match (scaas-app's item).
 **Status.** SPECIFIED, nothing built.
@@ -13215,18 +13217,15 @@ another extension (I6, stated).
 **Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, I1 session key (as MetaMask), I2 the SDK only, I3 typed EIP-712 only, never `eth_sign`, UA keys never, I4 top frame only, I5 bridge first, I6 accept for now, document, revisit an origin-bound kind later; [web and extension note](research/2026-11-27-web-extension-wallet.md) §1.1, §1.5, §2.3, §7.4, §7.6.
 
 ### CLI-UPR-31 — Each profile has its own Matrix: its logins, session, store, crypto keys and device id; nothing Matrix-side is shared between profiles
-- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-31 · superseded-by: —
+- old: — · status: superseded · owner: yes · date: 2026-11-27 · normative: — · superseded-by: CLI-UPR-29
 
-**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-31).) A profile's Matrix logins, session, store, crypto keys and device id are its own and sealed in it (the Matrix store key a sealed item); no Matrix state is shared between profiles; one `scaas-matrix` client per open profile; a switch closes the current client first.
-**Status.** SPECIFIED; wave 1 builds the store item only, the two-session test is wave 2. UNAUDITED.
-**Why.** Profiles are separate identities (CLI-UPR-03, CLI-UPR-04); a shared Matrix device or store would tie them together on the homeserver and on disk.
-**Cost if wrong.** One profile's chats, keys or device visible to another; a switch that leaves the first profile's client signed in.
-**Source.** Owner ruling 2026-11-27 (chat, through the controller): each profile has its own Matrix logins, session, store, crypto keys and device id, sealed in that profile; nothing Matrix-side is shared; one `scaas-matrix` client per open profile, closed first at a switch; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O14, §5, §7.2, §17.
+It said: a profile's Matrix logins, session, store, crypto keys and device id are its own and sealed in it; no Matrix state is shared between profiles; one `scaas-matrix` client per open profile, closed first at a switch. Folded into [CLI-UPR-29](#CLI-UPR-29), which links [CLI-PQC-20](#CLI-PQC-20) for it (controller call 2026-11-27: one rule in one place; CLI-PQC-20 already states it; the id is not reused).
+**Source.** Owner ruling 2026-11-27 (chat, through the controller): each profile has its own Matrix logins, session, store, crypto keys and device id, sealed in that profile; nothing Matrix-side is shared; one `scaas-matrix` client per open profile, closed first at a switch; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O14.
 
 ### CLI-UPR-32 — scaas-app's default build links `ua-rs` only with the profile-crypto features; no signing code is compiled into it
 - old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-32 · superseded-by: —
 
-**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-32).) `scaas-profile` takes `ua-rs` without defaults and with `user-profile` and `json` only; `user-profile` is the new feature `key-handles` (arena, key handles, AEAD, HKDF, HMAC, Argon2id, `ProfileKeys`, `ExportKey`), which enables no `wallet`, `pq`, `signers`, `fam-*`, `zether` or `pqz`; `app-core` is `key-handles` and `wallet` and keeps what needs a seed or a UA kind; `mlock` locks either arena.
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-32).) `scaas-profile` takes `ua-rs` without defaults and with `user-profile` and `json` only; `user-profile` is the new feature `key-handles` (arena, key handles, AEAD, HKDF, HMAC, Argon2id, `ProfileKeys`, `ExportKey`), which enables no `wallet`, `pq`, `signers`, `fam-*`, `zether` or `pqz`; `app-core` is `key-handles` and `wallet` and keeps what needs a seed or a UA kind; `mlock` locks either arena. Verify-only code (classical kind verification, FROST/MuSig2 key-data and PoP checks) stays; revisit only for a measured size need (controller call 2026-11-27).
 **Status.** BUILT (`ua-rs` features `key-handles`, `user-profile`, `app-core`, `mlock`; `clients/ua-rs/runs/2026-11-27-key-handles-nm.py`; CI cell `user-profile`). UNAUDITED.
 **Why.** The app's default build holds a profile without the SDK (CLI-UPR-02's Change); signing code it never calls is attack surface and size it does not need.
 **Cost if wrong.** Signing code, PQ kinds or group signers linked into an app build that signs nothing; a later feature edit pulling `wallet` back in unnoticed.
