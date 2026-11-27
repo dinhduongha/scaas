@@ -6,17 +6,19 @@
 //! holds: receipts, read markers, membership, encryption and events from its database, typing and presence requests from
 //! its access log.
 use async_trait::async_trait;
-use pqchat_core::matrix::{HistoryPage, MatrixTransport, RoomEvent, Seen, Witness, EVENT_TYPE};
-use pqchat_core::PqChatError;
+use pqchat_transport::{
+    HistoryPage, MatrixTransport, RoomEvent, Seen, TransportError, Witness, EVENT_TYPE,
+};
 use serde_json::{json, Value};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
-/// The image, pinned by version (pulled once if absent; never the testnet stack).
-pub const IMAGE: &str = "matrixdotorg/synapse:v1.165.0";
-const PASSWORD: &str = "e2e-password-not-a-secret";
+/// The image, pinned by version and digest (pulled once if absent; never the testnet stack).
+pub const IMAGE: &str =
+    "matrixdotorg/synapse:v1.165.0@sha256:673b4223c81a7634fd07d832b939a58f97081cfdaae7cdd2d1664cdcf7611b62";
+pub const PASSWORD: &str = "e2e-password-not-a-secret";
 
 fn docker(args: &[&str]) -> std::process::Output {
     Command::new("docker")
@@ -177,7 +179,8 @@ impl Synapse {
         }
     }
 
-    fn sql(&self, q: &str, args: &[&str]) -> u64 {
+    /// One count from the server's database (`q` a `select count(*)` with `?` parameters).
+    pub fn sql(&self, q: &str, args: &[&str]) -> u64 {
         let py = "import sqlite3,sys; c=sqlite3.connect('/data/homeserver.db'); print(c.execute(sys.argv[1], sys.argv[2:]).fetchone()[0])";
         let mut a = vec!["exec", &self.name, "python3", "-c", py, q];
         a.extend_from_slice(args);
@@ -185,13 +188,18 @@ impl Synapse {
     }
 
     /// The access log's request lines of `user` (its `{user}` field) whose path holds `part`.
-    fn requests(&self, user: &str, part: &str) -> u64 {
+    pub fn requests(&self, user: &str, part: &str) -> u64 {
+        self.requests_where(user, |l| l.contains(part))
+    }
+
+    /// The access log's request lines of `user` that `keep` holds.
+    pub fn requests_where(&self, user: &str, keep: impl Fn(&str) -> bool) -> u64 {
         let o = docker(&["logs", &self.name]);
         let all = [o.stdout, o.stderr].concat();
         let tag = format!("{{{user}}}");
         String::from_utf8_lossy(&all)
             .lines()
-            .filter(|l| l.contains(&tag) && l.contains(part))
+            .filter(|l| l.contains(&tag) && keep(l))
             .count() as u64
     }
 
@@ -205,7 +213,9 @@ impl Synapse {
                 &[room, user],
             ),
             typing: self.requests(user, &format!("{room_enc}/typing/")) + self.requests(user, &format!("{room}/typing/")),
-            presence: self.requests(user, "/presence/") + self.requests(user, "/sync"),
+            // a sync sets the account online unless it says `set_presence=offline`
+            presence: self.requests(user, "/presence/")
+                + self.requests_where(user, |l| l.contains("/sync") && !l.contains("set_presence=offline")),
             joined: self.sql(
                 "select count(*) from local_current_membership where room_id=? and user_id=? and membership='join'",
                 &[room, user],
@@ -227,15 +237,18 @@ pub struct SynapseWitness<'a> {
 
 #[async_trait]
 impl Witness for SynapseWitness<'_> {
-    async fn seen(&self, room: &str, user: &str) -> Result<Seen, PqChatError> {
+    fn user_id(&self) -> String {
+        self.other.user.clone()
+    }
+    async fn seen(&self, room: &str, user: &str) -> Result<Seen, TransportError> {
         Ok(self.s.seen_of(room, user))
     }
-    async fn invite_me(&self, user: &str) -> Result<String, PqChatError> {
+    async fn invite_me(&self, user: &str) -> Result<String, TransportError> {
         let room = self.other.create_room().await?;
         self.other.invite(&room, user).await?;
         Ok(room)
     }
-    async fn post(&self, room: &str, content: Value) -> Result<(), PqChatError> {
+    async fn post(&self, room: &str, content: Value) -> Result<(), TransportError> {
         self.other.send_event(room, content).await
     }
 }
@@ -253,8 +266,8 @@ pub struct Http {
     pub last: Mutex<Option<u16>>,
 }
 
-fn e<T>(_: T) -> PqChatError {
-    PqChatError::MatrixRoom
+fn e<T>(_: T) -> TransportError {
+    TransportError
 }
 
 impl Http {
@@ -280,12 +293,12 @@ impl Http {
             .count()
     }
 
-    async fn go(&self, r: reqwest::RequestBuilder) -> Result<Value, PqChatError> {
+    async fn go(&self, r: reqwest::RequestBuilder) -> Result<Value, TransportError> {
         let r = r.bearer_auth(&self.token).send().await.map_err(e)?;
         let st = r.status();
         if !st.is_success() {
             *self.last.lock().unwrap() = Some(st.as_u16());
-            return Err(PqChatError::MatrixRoom);
+            return Err(TransportError);
         }
         r.json().await.map_err(e)
     }
@@ -330,7 +343,7 @@ impl MatrixTransport for Http {
     fn user_id(&self) -> String {
         self.user.clone()
     }
-    async fn create_room(&self) -> Result<String, PqChatError> {
+    async fn create_room(&self) -> Result<String, TransportError> {
         self.rec("create_room".into());
         let v = self
             .go(self
@@ -341,15 +354,15 @@ impl MatrixTransport for Http {
         v["room_id"]
             .as_str()
             .map(String::from)
-            .ok_or(PqChatError::MatrixRoom)
+            .ok_or(TransportError)
     }
-    async fn joined(&self, room: &str) -> Result<bool, PqChatError> {
+    async fn joined(&self, room: &str) -> Result<bool, TransportError> {
         let v = self.go(self.c.get(self.url(&["joined_rooms"]))).await?;
         Ok(v["joined_rooms"]
             .as_array()
             .is_some_and(|a| a.iter().any(|r| r == room)))
     }
-    async fn members(&self, room: &str) -> Result<Vec<String>, PqChatError> {
+    async fn members(&self, room: &str) -> Result<Vec<String>, TransportError> {
         let v = self
             .go(self.c.get(self.url(&["rooms", room, "members"])))
             .await?;
@@ -361,13 +374,13 @@ impl MatrixTransport for Http {
             .filter_map(|e| e["state_key"].as_str().map(String::from))
             .collect())
     }
-    async fn join(&self, room: &str) -> Result<(), PqChatError> {
+    async fn join(&self, room: &str) -> Result<(), TransportError> {
         self.rec(format!("join {room}"));
         self.go(self.c.post(self.url(&["join", room])).json(&json!({})))
             .await
             .map(|_| ())
     }
-    async fn invite(&self, room: &str, user: &str) -> Result<(), PqChatError> {
+    async fn invite(&self, room: &str, user: &str) -> Result<(), TransportError> {
         self.rec("invite".into());
         self.go(self
             .c
@@ -376,7 +389,7 @@ impl MatrixTransport for Http {
             .await
             .map(|_| ())
     }
-    async fn remove(&self, room: &str, user: &str) -> Result<(), PqChatError> {
+    async fn remove(&self, room: &str, user: &str) -> Result<(), TransportError> {
         self.rec("remove".into());
         self.go(self
             .c
@@ -385,7 +398,7 @@ impl MatrixTransport for Http {
             .await
             .map(|_| ())
     }
-    async fn set_admin(&self, room: &str, user: &str, admin: bool) -> Result<(), PqChatError> {
+    async fn set_admin(&self, room: &str, user: &str, admin: bool) -> Result<(), TransportError> {
         self.rec("set_admin".into());
         let u = self.url(&["rooms", room, "state", "m.room.power_levels", ""]);
         let mut pl = self.go(self.c.get(u.clone())).await?;
@@ -396,7 +409,7 @@ impl MatrixTransport for Http {
         }
         self.go(self.c.put(u).json(&pl)).await.map(|_| ())
     }
-    async fn send_event(&self, room: &str, content: Value) -> Result<(), PqChatError> {
+    async fn send_event(&self, room: &str, content: Value) -> Result<(), TransportError> {
         self.rec("send_event".into());
         let t = format!(
             "pqc{}-{}",
@@ -414,7 +427,7 @@ impl MatrixTransport for Http {
         &self,
         room: &str,
         before: Option<String>,
-    ) -> Result<HistoryPage, PqChatError> {
+    ) -> Result<HistoryPage, TransportError> {
         self.rec("history".into());
         let mut u = self.url(&["rooms", room, "messages"]);
         {
@@ -443,9 +456,10 @@ impl MatrixTransport for Http {
         };
         Ok(HistoryPage { events, before })
     }
-    async fn hold_invite(&self, room: &str, hold: bool) {
+    async fn hold_invite(&self, room: &str, hold: bool) -> Result<(), TransportError> {
         // this client never answers an invite by itself: holding is recording
         self.rec(format!("hold_invite {room} {hold}"));
+        Ok(())
     }
 }
 
@@ -461,35 +475,35 @@ impl MatrixTransport for LastN {
     fn user_id(&self) -> String {
         self.inner.user_id()
     }
-    async fn create_room(&self) -> Result<String, PqChatError> {
+    async fn create_room(&self) -> Result<String, TransportError> {
         self.inner.create_room().await
     }
-    async fn joined(&self, room: &str) -> Result<bool, PqChatError> {
+    async fn joined(&self, room: &str) -> Result<bool, TransportError> {
         self.inner.joined(room).await
     }
-    async fn members(&self, room: &str) -> Result<Vec<String>, PqChatError> {
+    async fn members(&self, room: &str) -> Result<Vec<String>, TransportError> {
         self.inner.members(room).await
     }
-    async fn join(&self, room: &str) -> Result<(), PqChatError> {
+    async fn join(&self, room: &str) -> Result<(), TransportError> {
         self.inner.join(room).await
     }
-    async fn invite(&self, room: &str, user: &str) -> Result<(), PqChatError> {
+    async fn invite(&self, room: &str, user: &str) -> Result<(), TransportError> {
         self.inner.invite(room, user).await
     }
-    async fn remove(&self, room: &str, user: &str) -> Result<(), PqChatError> {
+    async fn remove(&self, room: &str, user: &str) -> Result<(), TransportError> {
         self.inner.remove(room, user).await
     }
-    async fn set_admin(&self, room: &str, user: &str, admin: bool) -> Result<(), PqChatError> {
+    async fn set_admin(&self, room: &str, user: &str, admin: bool) -> Result<(), TransportError> {
         self.inner.set_admin(room, user, admin).await
     }
-    async fn send_event(&self, room: &str, content: Value) -> Result<(), PqChatError> {
+    async fn send_event(&self, room: &str, content: Value) -> Result<(), TransportError> {
         self.inner.send_event(room, content).await
     }
     async fn history(
         &self,
         room: &str,
         _before: Option<String>,
-    ) -> Result<HistoryPage, PqChatError> {
+    ) -> Result<HistoryPage, TransportError> {
         let p = self.inner.history(room, None).await?;
         let skip = p.events.len().saturating_sub(self.n);
         Ok(HistoryPage {
@@ -497,7 +511,10 @@ impl MatrixTransport for LastN {
             before: None,
         })
     }
-    async fn hold_invite(&self, room: &str, hold: bool) {
+    async fn hold_invite(&self, room: &str, hold: bool) -> Result<(), TransportError> {
         self.inner.hold_invite(room, hold).await
+    }
+    async fn bound(&self, room: &str) -> Result<(), TransportError> {
+        self.inner.bound(room).await
     }
 }

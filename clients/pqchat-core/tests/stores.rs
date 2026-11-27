@@ -15,7 +15,7 @@ mod common;
 use async_trait::async_trait;
 use common::sdk::*;
 use pqchat_core::content::{Content, BODY_MAX};
-use pqchat_core::matrix::MatrixTransport;
+use pqchat_core::matrix::{MatrixTransport, TransportError};
 use pqchat_core::message::OpenEpoch;
 use pqchat_core::model::{hex, unhex, Epoch, Member, ZERO32};
 use pqchat_core::reads::SessionRef;
@@ -92,28 +92,28 @@ impl MatrixTransport for Room {
     fn user_id(&self) -> String {
         "@alice:example.org".into()
     }
-    async fn create_room(&self) -> Result<String, PqChatError> {
-        Err(PqChatError::MatrixRoom)
+    async fn create_room(&self) -> Result<String, TransportError> {
+        Err(TransportError)
     }
-    async fn joined(&self, _: &str) -> Result<bool, PqChatError> {
+    async fn joined(&self, _: &str) -> Result<bool, TransportError> {
         Ok(false)
     }
-    async fn members(&self, _: &str) -> Result<Vec<String>, PqChatError> {
+    async fn members(&self, _: &str) -> Result<Vec<String>, TransportError> {
         Ok(vec![])
     }
-    async fn join(&self, _: &str) -> Result<(), PqChatError> {
+    async fn join(&self, _: &str) -> Result<(), TransportError> {
         Ok(())
     }
-    async fn invite(&self, _: &str, _: &str) -> Result<(), PqChatError> {
+    async fn invite(&self, _: &str, _: &str) -> Result<(), TransportError> {
         Ok(())
     }
-    async fn remove(&self, _: &str, _: &str) -> Result<(), PqChatError> {
+    async fn remove(&self, _: &str, _: &str) -> Result<(), TransportError> {
         Ok(())
     }
-    async fn set_admin(&self, _: &str, _: &str, _: bool) -> Result<(), PqChatError> {
+    async fn set_admin(&self, _: &str, _: &str, _: bool) -> Result<(), TransportError> {
         Ok(())
     }
-    async fn send_event(&self, room: &str, content: Value) -> Result<(), PqChatError> {
+    async fn send_event(&self, room: &str, content: Value) -> Result<(), TransportError> {
         self.0.lock().unwrap().push((room.into(), content));
         Ok(())
     }
@@ -121,10 +121,12 @@ impl MatrixTransport for Room {
         &self,
         _: &str,
         _: Option<String>,
-    ) -> Result<pqchat_core::matrix::HistoryPage, PqChatError> {
+    ) -> Result<pqchat_core::matrix::HistoryPage, TransportError> {
         Ok(Default::default())
     }
-    async fn hold_invite(&self, _: &str, _: bool) {}
+    async fn hold_invite(&self, _: &str, _: bool) -> Result<(), TransportError> {
+        Ok(())
+    }
 }
 
 fn review<'a>(s: &'a PqChatSigned, name: &str) -> &'a str {

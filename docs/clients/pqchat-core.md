@@ -33,18 +33,22 @@ Matrix client, and the SDK names no chat** (owner 2026-11-17, the dependency rev
 `scaas-sdk` with the SDK's app-core feature and the feature that carries the SDK's `PqChat` record entries (the SDK spec's App
 cores section, [`2026-11-17-scaas-sdk.md`](../superpowers/specs/2026-11-17-scaas-sdk.md), as rewritten on branch `scaas-sdk`,
 names them `app-core` and `pqchat-records`), and on nothing else that touches a key or a node: no `scaas-ua`, no `scaas-rpc` and no
-Matrix SDK of its own (a `cargo tree` test). It reaches the app's live Matrix client (scaas-app's `app-matrix`) through a small
+Matrix SDK of its own (a `cargo tree` test). It reaches the app's live Matrix client (`scaas-matrix`, [CLI-PQC-20](../decisions.md#CLI-PQC-20)) through a small
 transport trait it defines and the app's Matrix crate implements, so the dependency points from the app to `pqchat-core`, never
 into the app's repository. It holds no cryptography: no KEM, KDF, MAC, AEAD, signature, and no writer, hash or decoder of a
 signed or encrypted byte format (typed digests, ids, `sigHash`, wrap hashes, the envelope's inner ABI bytes, padding, the canonical
 JSON of a content or of `sealedInfo`); those are `ua-rs`'s, reached through the SDK ([CLI-UAL-01](ua-libraries.md#CLI-UAL-01)).
 It owns the state machine: what to build, when, from which reads, and what to show. In scaas-app it is the Cargo feature `pqchat`
-of the one library `app-core-rust` (implying `scaas`), so the SDK, `app-matrix`, `pqchat-core` and `ua-rs` share one process, one
+of the one library `app-core-rust` (implying `scaas`), so the SDK, `scaas-matrix`, `pqchat-core` and `ua-rs` share one process, one
 tokio runtime and one Matrix login ([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12)'s one library per app).
 
-**The Matrix client moves into this repository** (owner 2026-11-27; PLANNED): scaas-app's planned `app-matrix` becomes the crate
-`clients/scaas-matrix` (working name), which implements `MatrixTransport` and is used by scaas-app's front-ends, `scaas-tui` and
-this crate's e2e; this crate's normal graph still holds no Matrix crate (`tests/deps.rs`). **Each user profile has its own Matrix**:
+**The Matrix client moves into this repository** (owner 2026-11-27; BUILT on branch `scaas-matrix`): scaas-app's planned
+`app-matrix` becomes the crate `clients/scaas-matrix` ([scaas-matrix.md](scaas-matrix.md)), which implements `MatrixTransport` and is
+used by scaas-app's front-ends, `scaas-tui` and this crate's e2e (PLANNED there: the e2e still runs its test-only HTTP client). The
+trait, its error `TransportError`, its value types and `conformance` live in the trait-only crate `clients/pqchat-transport`
+([CLI-MTX-01](scaas-matrix.md#CLI-MTX-01)), re-exported here at `pqchat_core::matrix`, so neither crate depends on the other; every bound room is told to the
+transport (`bound`) on each `join_room`, and all of them by `tell_bound_rooms`, which the app calls after `attach_matrix`; this
+crate's normal graph still holds no Matrix crate (`tests/deps.rs`). **Each user profile has its own Matrix**:
 its logins, session, store, crypto keys and device id are sealed in that profile and shared with no other; the app runs one
 `scaas-matrix` client per open profile, not per app, and a profile switch closes it before the other profile's opens. So "the app's
 live Matrix client" below is the open profile's: [CLI-PQC-20](../decisions.md#CLI-PQC-20).
@@ -106,14 +110,14 @@ its form (the send is the confirm): [CLI-SDK-36](../decisions.md#CLI-SDK-36).
 
 ## 3. The Matrix store
 
-Status: **BUILT** on the crate's side (`src/matrix.rs`, the conformance test `tests/matrix_conformance.rs`, the fake
+Status: **BUILT** on the crate's side (`src/matrix.rs` over `clients/pqchat-transport`'s trait, the conformance test `tests/matrix_conformance.rs`, the fake
 `tests/matrix_fake.rs`, the e2e over a local Synapse); scaas-app's contract, its section 11, is the app side, in its own
 repository, held to the trait by the same conformance test.
 
 <a id="CLI-PQC-05"></a>**CLI-PQC-05** — **The Matrix store is the app's live Matrix client: one stack, one client, one login; a
 PqChat session is never a Matrix room to the user; a room and a Matrix id count only when bound** (owner 2026-11-17, option (b);
 the binding rules a controller call after Fable's review, owner may override; BUILT). `pqchat-core` attaches to the app's
-`app-matrix` client after the app's Matrix login and detaches before the app's Matrix logout; it opens no Matrix client, login or
+`scaas-matrix` client (the open profile's, CLI-PQC-20) after the app's Matrix login and detaches before the app's Matrix logout; it opens no Matrix client, login or
 sync loop of its own and links no second Matrix SDK. It sends each envelope as one `net.scaas.pqchat.v1` event `{v, hint, env}`
 (UA-7 P15; `hint` and `env` in RFC 4648 §4 base64 with padding, the `matrixEvent` row's form, and only that form read back).
 **Binding.** A room counts for a session only if this client created it for that session, or joined it through that session's

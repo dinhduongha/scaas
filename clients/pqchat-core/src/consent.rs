@@ -142,7 +142,8 @@ impl PqChat {
     }
 
     /// A pending session as the user looks at it: its latest epoch at home opened locally for `me` (the own wrap, then
-    /// `sealedInfo`), its room handed to the transport to hold the invite unanswered. No store read, no join, no write.
+    /// `sealedInfo`), its room handed to the transport to hold the invite unanswered (`MatrixRoom` when the transport refuses
+    /// it). No store read, no join, no write.
     pub async fn preview(&self, s: &SessionRef, me: &Me) -> Result<Preview, PqChatError> {
         let latest = self.latest_epoch(s).await?;
         let ep = self
@@ -152,7 +153,12 @@ impl PqChat {
         let handle = self.info(&ep)?;
         let info = crate::stores::read_info(&handle)?;
         if let (Some(room), Some(t)) = (room_of(&info.stores), self.matrix()) {
-            t.hold_invite(room, true).await;
+            // a room the transport refuses to hold (scaas-matrix: one the account already uses as a Matrix room) is not
+            // this session's: the preview fails closed
+            // a room the account is already joined to (the user's own session on a fresh device) needs no hold
+            if !t.joined(room).await? {
+                t.hold_invite(room, true).await?;
+            }
         }
         let creator = match ep.epoch.epoch {
             0 => ep.epoch.author.clone(),

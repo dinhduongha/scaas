@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+[package]
+name = "pqchat-transport"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license-file = "../../LICENSE"
+description = "PqChat's Matrix transport trait and its conformance test, shared by pqchat-core and scaas-matrix (CLI-MTX-01). No Matrix crate, no SDK. UNAUDITED."
+
+# docs/clients/scaas-matrix.md CLI-MTX-01: only what both sides share; serde for `RoomEvent`, which pqchat-core stores,
+# serde_json for the trait's `Value`, async-trait for `dyn MatrixTransport`
+[dependencies]
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

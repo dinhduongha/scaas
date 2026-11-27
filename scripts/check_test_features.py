@@ -68,6 +68,9 @@ ARTIFACTS = [
     ("clients/scaas-cli", "shipped"),
     # PqVault's app core (plan V10): every feature it ships; its own test feature `vectors` excepted
     ("clients/pqvault-core", "shipped"),
+    # the Matrix client crate and its trait crate (CLI-MTX-01): no guarded crate in their graphs at all
+    ("clients/scaas-matrix", []),
+    ("clients/pqchat-transport", []),
 ]
 
 

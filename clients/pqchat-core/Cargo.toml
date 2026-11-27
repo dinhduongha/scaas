@@ -26,6 +26,8 @@ tracing = "0.1"
 async-trait = "0.1"
 # a content handle's text in a buffer that wipes itself (review T26 C-10; in the SDK's graph already)
 zeroize = "=1.9.1"
+# the Matrix transport trait, its value types and the conformance test (CLI-MTX-01): no Matrix crate, shared with scaas-matrix
+pqchat-transport = { path = "../pqchat-transport" }
 # the Matrix event's transport encoding (RFC 4648 §4 with padding, CLI-PQC-05; the SDK's version)
 base64 = "0.22"
 # C-1: the hash a remembered epoch id binds in the walk's memory (no key; in the SDK's graph already)

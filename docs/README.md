@@ -210,6 +210,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [scaas-tui.md](clients/scaas-tui.md) | The terminal front-end over `scaas-sdk`: review before signing, terminal secret handling, endpoints, accessibility (SPECIFIED) |
 | [pqchat-core.md](clients/pqchat-core.md) | The PqChat client core, an app core above `scaas-sdk`: key handles only, PqChat records through the SDK's named entries, the app's Matrix client as its store, recovery from contract state (SPECIFIED) |
 | [pqvault-core.md](clients/pqvault-core.md) | The PqVault client core, an app core above `scaas-sdk`: its API, items typed by one secret table (`Plain` / `Secret` fields), every write signed only after the user's confirm, and the PqVault client rules CLI-PQV-01 to CLI-PQV-12 (BUILT, UNAUDITED) |
+| [scaas-matrix.md](clients/scaas-matrix.md) | The Matrix client crate for every chat front-end: one client per open user profile, the store key from the profile, private defaults, Matrix rooms and PqChat rooms apart, the PqChat transport over the same client (BUILT; UNAUDITED) |
 | [integration.md](integration.md) | Connecting any ERP or back office |
 | [integration-odoo-example.md](integration-odoo-example.md) | One worked ERP connector (example only) |
 

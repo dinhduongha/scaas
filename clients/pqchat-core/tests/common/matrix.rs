@@ -10,8 +10,8 @@
     clippy::indexing_slicing
 )]
 use async_trait::async_trait;
+use pqchat_core::matrix::TransportError;
 use pqchat_core::matrix::{HistoryPage, MatrixTransport, RoomEvent, Seen, Witness, EVENT_TYPE};
-use pqchat_core::PqChatError;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -116,6 +116,8 @@ pub struct Client {
     pub held: Mutex<BTreeSet<String>>,
     /// `send_event` fails (`MatrixRoom`): a transport failure for that store only
     pub fail_send: AtomicBool,
+    /// `hold_invite(_, true)` refused, as `scaas-matrix` refuses a room the account uses as a Matrix room
+    pub refuse_hold: AtomicBool,
 }
 
 impl Client {
@@ -126,6 +128,7 @@ impl Client {
             calls: Mutex::new(vec![]),
             held: Mutex::new(BTreeSet::new()),
             fail_send: AtomicBool::new(false),
+            refuse_hold: AtomicBool::new(false),
         })
     }
     fn rec(&self, call: &str, room: &str) {
@@ -147,13 +150,13 @@ impl Client {
             .lock()
             .unwrap()
             .iter()
-            .filter(|(c, _)| !matches!(c.as_str(), "joined" | "members" | "hold_invite"))
+            .filter(|(c, _)| !matches!(c.as_str(), "joined" | "members" | "hold_invite" | "bound"))
             .count()
     }
 }
 
-fn no_room() -> PqChatError {
-    PqChatError::MatrixRoom
+fn no_room() -> TransportError {
+    TransportError
 }
 
 #[async_trait]
@@ -161,7 +164,7 @@ impl MatrixTransport for Client {
     fn user_id(&self) -> String {
         self.user.clone()
     }
-    async fn create_room(&self) -> Result<String, PqChatError> {
+    async fn create_room(&self) -> Result<String, TransportError> {
         let id = self.server.room_id();
         self.rec("create_room", &id);
         let mut r = RoomState {
@@ -173,17 +176,17 @@ impl MatrixTransport for Client {
         self.server.rooms.lock().unwrap().insert(id.clone(), r);
         Ok(id)
     }
-    async fn joined(&self, room: &str) -> Result<bool, PqChatError> {
+    async fn joined(&self, room: &str) -> Result<bool, TransportError> {
         self.rec("joined", room);
         Ok(self.server.is_member(room, &self.user))
     }
-    async fn members(&self, room: &str) -> Result<Vec<String>, PqChatError> {
+    async fn members(&self, room: &str) -> Result<Vec<String>, TransportError> {
         self.rec("members", room);
         let rooms = self.server.rooms.lock().unwrap();
         let r = rooms.get(room).ok_or_else(no_room)?;
         Ok(r.members.iter().chain(&r.invited).cloned().collect())
     }
-    async fn join(&self, room: &str) -> Result<(), PqChatError> {
+    async fn join(&self, room: &str) -> Result<(), TransportError> {
         self.rec("join", room);
         let mut rooms = self.server.rooms.lock().unwrap();
         let r = rooms.get_mut(room).ok_or_else(no_room)?;
@@ -193,14 +196,14 @@ impl MatrixTransport for Client {
         r.members.insert(self.user.clone());
         Ok(())
     }
-    async fn invite(&self, room: &str, user: &str) -> Result<(), PqChatError> {
+    async fn invite(&self, room: &str, user: &str) -> Result<(), TransportError> {
         self.rec("invite", room);
         let mut rooms = self.server.rooms.lock().unwrap();
         let r = rooms.get_mut(room).ok_or_else(no_room)?;
         r.invited.insert(user.into());
         Ok(())
     }
-    async fn remove(&self, room: &str, user: &str) -> Result<(), PqChatError> {
+    async fn remove(&self, room: &str, user: &str) -> Result<(), TransportError> {
         self.rec("remove", room);
         let mut rooms = self.server.rooms.lock().unwrap();
         let r = rooms.get_mut(room).ok_or_else(no_room)?;
@@ -208,7 +211,7 @@ impl MatrixTransport for Client {
         r.invited.remove(user);
         Ok(())
     }
-    async fn set_admin(&self, room: &str, user: &str, admin: bool) -> Result<(), PqChatError> {
+    async fn set_admin(&self, room: &str, user: &str, admin: bool) -> Result<(), TransportError> {
         self.rec("set_admin", room);
         let mut rooms = self.server.rooms.lock().unwrap();
         let r = rooms.get_mut(room).ok_or_else(no_room)?;
@@ -219,7 +222,7 @@ impl MatrixTransport for Client {
         }
         Ok(())
     }
-    async fn send_event(&self, room: &str, content: Value) -> Result<(), PqChatError> {
+    async fn send_event(&self, room: &str, content: Value) -> Result<(), TransportError> {
         self.rec("send_event", room);
         if self.fail_send.load(Ordering::SeqCst) {
             return Err(no_room());
@@ -237,7 +240,7 @@ impl MatrixTransport for Client {
         &self,
         room: &str,
         before: Option<String>,
-    ) -> Result<HistoryPage, PqChatError> {
+    ) -> Result<HistoryPage, TransportError> {
         self.rec("history", room);
         let mut rooms = self.server.rooms.lock().unwrap();
         let r = rooms.get_mut(room).ok_or_else(no_room)?;
@@ -261,14 +264,22 @@ impl MatrixTransport for Client {
             before: (start > 0).then(|| start.to_string()),
         })
     }
-    async fn hold_invite(&self, room: &str, hold: bool) {
+    async fn hold_invite(&self, room: &str, hold: bool) -> Result<(), TransportError> {
         self.rec("hold_invite", room);
+        if hold && self.refuse_hold.load(Ordering::SeqCst) {
+            return Err(no_room());
+        }
         let mut h = self.held.lock().unwrap();
         if hold {
             h.insert(room.into());
         } else {
             h.remove(room);
         }
+        Ok(())
+    }
+    async fn bound(&self, room: &str) -> Result<(), TransportError> {
+        self.rec("bound", room);
+        Ok(())
     }
 }
 
@@ -279,7 +290,10 @@ pub const WITNESS: &str = "@witness:fake.local";
 
 #[async_trait]
 impl Witness for ServerWitness {
-    async fn seen(&self, room: &str, user: &str) -> Result<Seen, PqChatError> {
+    fn user_id(&self) -> String {
+        WITNESS.into()
+    }
+    async fn seen(&self, room: &str, user: &str) -> Result<Seen, TransportError> {
         let rooms = self.0.rooms.lock().unwrap();
         let r = rooms.get(room).ok_or_else(no_room)?;
         let count = |k: &str| {
@@ -305,7 +319,7 @@ impl Witness for ServerWitness {
             events: r.events.iter().filter(|(_, t, _)| t == EVENT_TYPE).count() as u64,
         })
     }
-    async fn invite_me(&self, user: &str) -> Result<String, PqChatError> {
+    async fn invite_me(&self, user: &str) -> Result<String, TransportError> {
         let id = self.0.ordinary(WITNESS, &[], false);
         self.0
             .rooms
@@ -317,7 +331,7 @@ impl Witness for ServerWitness {
             .insert(user.into());
         Ok(id)
     }
-    async fn post(&self, room: &str, content: Value) -> Result<(), PqChatError> {
+    async fn post(&self, room: &str, content: Value) -> Result<(), TransportError> {
         self.0.post_as(room, WITNESS, content);
         Ok(())
     }

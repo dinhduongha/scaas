@@ -1,0 +1,39 @@
+# scaas-matrix plan gate rows (step | commit | rc | counts); full output in git-ignored logs, no machine paths
+T0 | pqc-test | f8391b80b | 0 | every test binary ok (deps.rs, matrix_conformance.rs and the fake included)
+T0 | pqc-clippy | f8391b80b | 0 | --all-targets -D warnings, clean
+T0 | pqc-wasm | f8391b80b | 0 | cargo check --target wasm32-unknown-unknown
+T0 | transport-clippy | f8391b80b | 0 | clients/pqchat-transport --all-targets -D warnings, clean
+T1-T7 | mtx-test | 9f25873a4 | 0 | policy 6 passed, deps 1 passed, profile 6 passed (e2e ignored)
+T1-T7 | mtx-clippy | 9f25873a4 | 0 | --all-targets -D warnings, clean
+T1-T7 | mtx-deny | 9f25873a4 | 0 | advisories ok, bans ok, licenses ok, sources ok (named exceptions in deny.toml)
+T1-T7 | mtx-audit | 9f25873a4 | 0 | 0 vulnerabilities reported; 1 allowed warning (derivative, via a wasm-only crate); 3 ignores named in .cargo/audit.toml
+T1-T7 | mtx-tree | 9f25873a4 | 0 | normal graph 271 crates (328 over every target), lockfile 398; no scaas-sdk, pqchat-core, scaas-ua, scaas-rpc
+T5 | mtx-e2e | 0f1167651 | 0 | 1 passed: two logins, restore from the store key, E2EE message decrypted, SAS both devices Verified, defaults and controls, push and backup on call only, conformance, kinds apart, logout (Synapse v1.165.0 by digest, --memory 1g --cpus 1)
+T8 | ci-changes | 839d7e2e0 | 0 | self-checks ok
+T8 | test-features | 839d7e2e0 | 0 | check_test_features ok (both new graphs 0 findings)
+T8 | format | 839d7e2e0 | 0 | format.sh --check rust py toml yaml lint ok
+T9 | mutants | 0f1167651 | 0 | 13 mutants, 13 killed, 0 survived, 0 not loaded, 0 other failure
+T0 | pqc-e2e | 0f1167651 | 101 | e2e_matrix_conformance passed (the helper by digest, the HTTP transport conforms); e2e_run failed at its mutant 11 fixture (tests/e2e.rs:955: SessionUnknown, expected PqChatContent), not a Matrix path; the same failure on the base d0b3f7f34 without this branch (pre-existing, reported)
+R2-R7 | mtx-test | 69f29bf94 | 0 | lib 14, deps 1, profile 8 passed (--features testing)
+R2-R7 | mtx-clippy | 69f29bf94 | 0 | --all-targets --features testing -D warnings, clean
+R2-R7 | mtx-deny | 82e4c2aab | 0 | advisories ok, bans ok, licenses ok, sources ok (url 2.5.9 kept for RUSTSEC-2026-0592)
+R2-R7 | mtx-audit | 82e4c2aab | 0 | 0 vulnerabilities; 1 allowed warning (derivative, wasm-only)
+R2-R7 | mtx-lock-dates | 82e4c2aab | 0 | no crate published after 2026-11-13 except url 2.5.9 and form_urlencoded 1.2.3 (security fix); syn 1.0.109 not paged by the API (2023)
+R1-R7 | pqc-test | 961fb6eee | 0 | 134 passed, 0 failed; recovery.rs again at 69f29bf94: 10 passed
+R1-R7 | pqc-clippy | 69f29bf94 | 0 | --all-targets -D warnings, clean
+R1-R7 | pqc-wasm | 961fb6eee | 0 | cargo check --target wasm32-unknown-unknown
+R7 | mtx-e2e | 69f29bf94 | 0 | 1 passed (39 s): login, restore, E2EE, defaults + controls, push, recovery/backup never replaced, SAS, conformance, kinds apart, routing by kind, held invite unanswered, R-1 hold refused before the first sync, J-1 release on join, second device MatrixDeviceUnverified then recover then send, bound marking, no Matrix id / homeserver / room id on disk (open and closed), logout
+R7 | mutants-r1 | 69f29bf94 | 0 | 37 mutants, 37 killed, 0 survived, 0 not loaded, 0 other failure (none by timeout; the sealed-length check left out as equivalent)
+R1-R7 | pqc-e2e | bf263712d | 101 | e2e_matrix_conformance passed (the extended conformance over the shared Synapse helper, image by digest); e2e_run failed at its mutant 11 fixture (tests/e2e.rs:955, SessionUnknown for PqChatContent), the same failure as on the base d0b3f7f34 (pre-existing, not a Matrix path)
+merge dev 4fc9c5e2b | pqc-test | c6eb7b806 | 0 | 139 passed, 0 failed, 8 ignored (the chain and e2e runs below)
+merge dev 4fc9c5e2b | pqc-clippy | c6eb7b806 | 0 | --all-targets -D warnings, clean
+merge dev 4fc9c5e2b | pqc-wasm | c6eb7b806 | 0 | cargo check --target wasm32-unknown-unknown
+merge dev 4fc9c5e2b | pqc-chain | c6eb7b806 | 0 | -- --ignored chain_ on anvil: chain_recovery 1, chain_session 2, chain_store 1, chain_topics 1, chain_tree 3 passed
+merge dev 4fc9c5e2b | pqc-e2e | c6eb7b806 | 0 | 2 passed (e2e_matrix_conformance, e2e_run: dev's fixed mutant 11 fixture), Synapse by digest, anvil with --enable-tx-gas-limit
+merge dev 4fc9c5e2b | mtx-test | c6eb7b806 | 0 | 23 passed (lib 14, deps 1, profile 8), --features testing
+merge dev 4fc9c5e2b | mtx-clippy | c6eb7b806 | 0 | --all-targets --features testing -D warnings, clean
+merge dev 4fc9c5e2b | mtx-deny | c6eb7b806 | 0 | advisories ok, bans ok, licenses ok, sources ok
+merge dev 4fc9c5e2b | mtx-audit | c6eb7b806 | 0 | 0 vulnerabilities
+merge dev 4fc9c5e2b | mtx-e2e | c6eb7b806 | 0 | 1 passed (42 s)
+merge dev 4fc9c5e2b | mutants-r1 | c6eb7b806 | - | not rerun: the merge changed none of the mutant target files (clients/scaas-matrix, clients/pqchat-transport, pqchat-core src/consent.rs, src/matrix.rs); record r1 at 69f29bf94 stands (37/37)
+merge dev 4fc9c5e2b | docs + format | c6eb7b806 | 0 | docs_check 0 errors, paths 0, test_docs_check ok; format.sh --check every part ok except tact (tact-fmt not installed in this worktree; the branch changes no file under smartcontracts/); check_test_features ok; ci_changes self-checks ok

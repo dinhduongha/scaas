@@ -3237,6 +3237,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "getrandom 0.2.17",
+ "pqchat-transport",
  "reqwest",
  "scaas-rpc",
  "scaas-sdk",
@@ -3249,6 +3250,15 @@ dependencies = [
  "tracing-core",
  "uuid",
  "zeroize",
+]
+
+[[package]]
+name = "pqchat-transport"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

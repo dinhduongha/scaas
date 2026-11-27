@@ -141,6 +141,10 @@
 #                          python3 -I runs/check_reads.py (gate pqc-reads); python3 -I ../scaas-sdk/gas/pqchat_tree_rows.py
 #                          ../scaas-sdk/gas/pqchat-tree-forge.txt --check; cargo deny check and cargo audit (its deny.toml, .cargo/audit.toml);
 #                          the chain_ and e2e runs (anvil, Docker, Synapse: gates pqc-chain, pqc-e2e) stay local
+#   scaas-matrix:          in clients/scaas-matrix (CLI-MTX-01): cargo test --locked --features testing (tests/deps.rs: no SDK or pqchat-core
+#                          in its graph; the policy, record, profile and store-key tests); cargo clippy --locked --all-targets --features testing -- -D warnings; cargo deny check
+#                          and cargo audit (its deny.toml, .cargo/audit.toml); in clients/pqchat-transport cargo clippy --locked; the e2e
+#                          against Synapse in Docker (cargo test --test e2e -- --ignored) stays local
 #   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
 #                          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js; in clients/scaas-sdk cargo test --locked --test keystore_vectors
 #   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
@@ -267,6 +271,7 @@ jobs:
       scaas_cli: ${{ steps.f.outputs.scaas_cli }}
       pqvault_core: ${{ steps.f.outputs.pqvault_core }}
       pqchat_core: ${{ steps.f.outputs.pqchat_core }}
+      scaas_matrix: ${{ steps.f.outputs.scaas_matrix }}
       keystore_vectors: ${{ steps.f.outputs.keystore_vectors }}
       test_features: ${{ steps.f.outputs.test_features }}
     steps:
@@ -1611,6 +1616,38 @@ jobs:
       - name: the SDK's tree gas rows equal their forge lines (B-14 of the TreeKEM T4-T9 review)
         working-directory: .
         run: python3 -I clients/scaas-sdk/gas/pqchat_tree_rows.py clients/scaas-sdk/gas/pqchat-tree-forge.txt --check
+      - name: cargo deny and cargo audit
+        run: |
+          cargo deny check
+          cargo audit
+
+  # the Matrix client crate (CLI-MTX-01, CLI-PQC-20): its tests, its dependency rule, deny and audit; only when it, the trait
+  # crate or pqchat-core changes. No vendor/: nothing over ua-rs. The Synapse e2e stays local.
+  scaas-matrix:
+    needs: changes
+    if: needs.changes.outputs.scaas_matrix == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-matrix
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-matrix
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20.2,cargo-audit@0.22.2
+      - name: cargo test
+        run: cargo test --locked --features testing
+      - name: cargo clippy
+        run: |
+          cargo clippy --locked --all-targets --features testing -- -D warnings
+          cd ../pqchat-transport && cargo clippy --locked --all-targets -- -D warnings
       - name: cargo deny and cargo audit
         run: |
           cargo deny check

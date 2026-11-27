@@ -134,6 +134,7 @@ JOBS = {
     # PqChat's app core (pqchat-core plan T2, CLI-PQC-01) over the SDK: the same inputs as pqvault-core's, and its own crate
     "pqchat-core": [
         "clients/pqchat-core/",
+        "clients/pqchat-transport/",
         "clients/scaas-sdk/",
         "clients/scaas-rpc/",
         "clients/zether-prover/",
@@ -141,6 +142,9 @@ JOBS = {
         "smartcontracts/vectors/",
     ]
     + UARS,
+    # the Matrix client crate (CLI-MTX-01): its own crate, the trait crate it implements and pqchat-core (whose e2e helper its
+    # e2e includes); no SDK input, it has none
+    "scaas-matrix": ["clients/scaas-matrix/", "clients/pqchat-transport/", "clients/pqchat-core/"] + RT,
     "keystore-vectors": ["clients/scaas-sdk/", "clients/clientkeys/", "smartcontracts/vectors/keystore/"] + UARS,
     # ARCH-POS-13 (ua-rs-sign T15c2): no test feature in a production artifact; every manifest that can reach scaas-ua,
     # zether-prover or pqz-ffi
@@ -161,6 +165,7 @@ GROUPS = {
         "scaas-cli",
         "pqvault-core",
         "pqchat-core",
+        "scaas-matrix",
     ]
     + [j for j in JOBS if j.startswith("scaas-sdk")]
     + [j for j in JOBS if j.startswith("ua-")],
@@ -333,6 +338,7 @@ if __name__ == "__main__":
         "scaas-cli",
         "pqvault-core",
         "pqchat-core",
+        "scaas-matrix",
     }
     # plan T20: the SDK's jobs; its generator under runs/ starts the bindings' drift check, other runs/ files nothing
     sdk = {j for j, r in needed(["clients/scaas-sdk/src/lib.rs"]).items() if r}
@@ -399,7 +405,19 @@ if __name__ == "__main__":
         "scaas-cli",
         "pqvault-core",
         "pqchat-core",
+        "scaas-matrix",
     }
+    # CLI-MTX-01: the Matrix crate's job on its own crate, the trait crate and pqchat-core, never on the SDK alone
+    assert all(
+        needed([p])["scaas-matrix"]
+        for p in (
+            "clients/scaas-matrix/src/lib.rs",
+            "clients/pqchat-transport/src/lib.rs",
+            "clients/pqchat-core/src/matrix.rs",
+        )
+    )
+    assert needed(["clients/pqchat-transport/src/lib.rs"])["pqchat-core"]
+    assert not needed(["clients/scaas-sdk/src/lib.rs"])["scaas-matrix"]
     # the network crate: its own job and the node's (the node builds it); ua-rs (its depth scan) runs it too
     assert {j for j, r in needed(["clients/scaas-rpc/src/evm.rs"]).items() if r} >= {"scaas-rpc", "node"}
     assert needed(["clients/ua-rs/src/json.rs"])["scaas-rpc"] and not needed(["scaas-node/src/chain.rs"])["scaas-rpc"]

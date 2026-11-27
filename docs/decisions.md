@@ -13926,6 +13926,142 @@ seeds are (CLI-UPR-03, CLI-UPR-04).
 reachable from another profile.
 **Source.** Owner rulings 2026-11-27: G6 replaced: `app-matrix` moves into this repository as its own crate `clients/scaas-matrix`, one matrix-rust-sdk client and one login per app, implementing `pqchat-core`'s transport trait, not part of the SDK, used by scaas-app's four front-ends, `scaas-tui` and `pqchat-core`'s e2e, built only where needed in CI; then, the same day: each user profile has its own Matrix, one `scaas-matrix` client per open profile, not per app, switching closes the current profile's client first; [chat UI note](research/2026-11-27-matrix-chat-ui.md) §9.5, §10.
 
+### CLI-MTX-01 — `scaas-matrix` depends on matrix-sdk and the trait-only crate `pqchat-transport`, never on the SDK or `pqchat-core`
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-01 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-01).) `matrix-sdk =0.19.1` without default features (`e2e-encryption`, `sqlite`, `bundled-sqlite`), rustls with `ring`, and `clients/pqchat-transport` (the transport trait, its error and value types, the conformance test; deps `serde`, `serde_json`, `async-trait`), which `pqchat-core` re-exports; no `scaas-sdk`, `pqchat-core`, `scaas-ua` or `scaas-rpc` in its normal graph (`tests/deps.rs`); deny and audit cover the tree.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED. Named exceptions (spec §3): MPL-2.0 for seven hard dependencies of matrix-sdk; RUSTSEC-2026-0459 (bundled SQLite, fixed in matrix-sdk 0.20, pin moves from 2026-12-09), RUSTSEC-2026-0319 and RUSTSEC-2026-0543 (unmaintained).
+**Why.** scaas-app's default build links `scaas-matrix` and no SDK (D32, D34, relayed by the coordinator), and `pqchat-core` pulls no Matrix crate (CLI-PQC-01); a trait-only crate is the one layout with both properties.
+**Cost if wrong.** The SDK in the default app build, or a Matrix crate in `pqchat-core`.
+**Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §3; the coordinator's constraint of 2026-11-27.
+
+Change (owner 2026-11-27; owner: yes; status: BUILT on branch `scaas-matrix`): **the MPL-2.0 licence is accepted for exactly seven crates
+that matrix-sdk 0.19.1 pulls**, `as_variant`, `eyeball`, `eyeball-im`, `imbl`, `imbl-sized-chunks`, `readlock` and `readlock-tokio`, used
+unmodified from crates.io. MPL-2.0 stays off the general licence allow list: `clients/scaas-matrix/deny.toml` names each crate, and any
+other MPL crate fails the check until it is named. A modified MPL-2.0 file would have its changes published under MPL-2.0 (the licence's
+file-level terms). Source: owner ruling 2026-11-27, relayed by the controller.
+
+### CLI-MTX-02 — One `scaas-matrix` client per profile directory, under an OS file lock
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-02 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-02).) A second open of a profile's Matrix directory is refused (`MatrixProfileBusy`) while one is open; `close` stops sync, drops the stores and releases the lock; the switch order is the profile layer's.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
+**Why.** CLI-PQC-20: one client per open profile; two clients on one store would corrupt it and mix sessions.
+**Cost if wrong.** Two clients writing one profile's store, or a profile's Matrix reachable while another is open.
+**Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §4.
+
+Change (controller 2026-11-27, Fable's review of `c414f6eaa` applied; owner: no, owner may override; status: BUILT on branch `scaas-matrix`, UNAUDITED): `close` also ends the update queue and takes the client from the transport's handle, which then fails and holds neither the client nor the lock; `wipe(dir)` deletes a directory's stores under the lock (A-2, A-6, D-4, E-3, F-3).
+
+### CLI-MTX-03 — The Matrix store key comes from the caller and stays in memory
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-03 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-03).) The profile's 32-byte sealed key is the raw key of every SQLite store; held zeroized until `close`; never on disk, in the OS secret storage, a log, an error or `Debug`; the crate makes no key; no key means memory stores.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
+**Why.** CLI-UPR-29: the key is a sealed item of the profile.
+**Cost if wrong.** A profile's chat readable without its passphrase.
+**Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §4.
+
+Change (controller 2026-11-27, Fable's review of `c414f6eaa` applied; owner: no, owner may override; status: BUILT on branch `scaas-matrix`, UNAUDITED): the key reaches matrix-sdk's stores, where HKDF-SHA256 makes it the key that wraps each database's own store cipher (values encrypted, keys hashed, layout and sizes not hidden), and the crate's record cipher; `StoreKey::from_bytes` wipes the caller's copy (F-7, F-10).
+
+### CLI-MTX-04 — The Matrix session is kept in the encrypted store; the homeserver URL is `https`
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-04 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-04).) One session record (homeserver, user, device, access token) in the encrypted state store, read back by `restore`; no refresh token in this version; `logout` invalidates the token and deletes the stores; the password never stored; `http` only for a loopback IP literal.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
+**Why.** Contract §11.3; nothing of a hidden profile in the clear; the local test homeserver runs on loopback.
+**Cost if wrong.** A token or homeserver name readable on disk, or a login over plain HTTP.
+**Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §4.
+
+Change (controller 2026-11-27, Fable's review of `c414f6eaa` applied; owner: no, owner may override; status: BUILT on branch `scaas-matrix`, UNAUDITED): matrix-sdk-sqlite keeps a custom value as given, so the session, settings and marks records are sealed by the crate's record cipher (matrix-sdk-store-encryption's `StoreCipher`, exported under the store key, the record's name inside) before they are stored (F-1, P1); a login on a directory that holds a store is refused (`MatrixSession`), a failure after the server's acceptance logs that device out and deletes what was written; the login's well-known is not followed, a discovered homeserver is `https`; `logout` bounds the server call to 30 s, always deletes the stores, answers whether the server invalidated the token (A-5, D-8, E-4, A-10).
+
+### CLI-MTX-05 — `scaas-matrix` defaults: private receipts, no typing, no presence; nothing ephemeral in a PqChat room
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-05 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-05).) `m.read.private` unless public receipts are turned on; no typing notice unless turned on; `set_presence=offline` on every sync; no `m.fully_read`; no invite answered by itself; none of these ever in a PqChat room.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
+**Why.** CLI-PQC-19 G2, G4.
+**Cost if wrong.** Timing metadata to the homeserver and every member by a default the user never chose.
+**Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §6.
+
+### CLI-MTX-06 — Matrix rooms and PqChat rooms apart in `scaas-matrix`
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-06 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-06).) A room the transport created, joined or holds an invite to is marked PqChat in the encrypted store; the Matrix list never shows it; Matrix actions in it are refused (`MatrixRoomKind`); a PqChat event in a Matrix room is "needs the SCaaS build".
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
+**Why.** CLI-PQC-19 G1; CLI-PQC-05.
+**Cost if wrong.** A PqChat room shown or used as an ordinary room.
+**Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §6.
+
+Change (controller 2026-11-27, Fable's review of `c414f6eaa` applied; owner: no, owner may override; status: BUILT on branch `scaas-matrix`, UNAUDITED): a mark is a room id of at most 255 bytes; an invite is never held for a room the account is joined to as a Matrix room (`MatrixRoomKind`); the trait's `hold_invite` returns a result and `pqchat-core`'s `preview` fails closed on a refusal; the new trait call `bound(room)`, made by `pqchat-core`'s `join_room` on every bound answer, and every write or read the transport makes in a room mark it, so a fresh device, a new login or a profile without a store key learns the bindings; the marks are written only when changed, one write at a time; leaving or declining is allowed in either kind; the scaas build previews pending sessions before it lists Matrix invites (A-1, B-1, D-1, D-2, D-3, D-5, E-1, E-2).
+
+Change (controller 2026-11-27, Fable's re-check of `307474279` applied; owner: no, owner may override; status: BUILT on branch `scaas-matrix`, UNAUDITED): the held invites are a set of their own (at most 256, the oldest dropped, released by `hold_invite(room, false)`), apart from the user's own rooms (at most 4,096); a hold asks the homeserver whether the room is joined and fails closed without an answer; a marked id is printable ASCII; `pqchat-core`'s `tell_bound_rooms` names every bound room to a new login (R-1, R-2, R-3, R-5).
+
+Change (controller 2026-11-27, Fable's re-check of R-1 at `961fb6eee` applied; owner: no, owner may override; status: BUILT on branch `scaas-matrix`, UNAUDITED): a held room the account joins from another client is a Matrix room again (released at the next sync, and a new hold of it refused); `pqchat-core`'s `preview` holds only a room the account is not joined to (J-1, J-2).
+
+### CLI-MTX-07 — `scaas-matrix` encryption: encrypted direct rooms, SAS, cross-signing, backup off
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-07 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-07).) Direct rooms encrypted from the first event, never turned off; room keys only to cross-signed devices; undecryptable shown; cross-signing at first login; SAS with verified, unverified, changed; backup off until turned on; the recovery key returned once.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
+**Why.** scaas-app contract §11.5.
+**Cost if wrong.** Messages to unverified devices, or keys on the server the user never chose.
+**Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §7.
+
+Change (controller 2026-11-27, Fable's review of `c414f6eaa` applied; owner: no, owner may override; status: BUILT on branch `scaas-matrix`, UNAUDITED): a send refused by the share strategy is `MatrixDeviceUnverified`, with `device_verified()` and `reset_identity(password)`; backup download `AfterDecryptionFailure` (keys come from the backup once its key is known, after `recover`); `setup_recovery` refused when secret storage exists or this device lacks the cross-signing keys, `set_key_backup(true)` refused over an existing backup and storing its key in the secret storage; a cleartext event in an encrypted room is `Trust::Unencrypted`; `Step::Confirmed`, finished flows keep their outcome, a mismatched commitment is a `Mismatch`, SAS with emoji only; in-room requests PLANNED (F-2, F-4, F-5, F-6, F-8, F-9, A-9, D-9, E-7).
+
+### CLI-MTX-08 — `scaas-matrix` push: no pusher by default, `event_id_only`, none for a hidden profile
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-08 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-08).) A pusher only on the caller's call, format `event_id_only`, refused for a hidden profile (`MatrixPushHidden`); a `net.scaas.pqchat.v1` push rule only on opt-in.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
+**Why.** CLI-PQC-19 G3.
+**Cost if wrong.** Message text or a hidden profile revealed to a push service.
+**Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §7.
+
+Change (controller 2026-11-27, Fable's review of `c414f6eaa` applied; owner: no, owner may override; status: BUILT on branch `scaas-matrix`, UNAUDITED): a pusher's URL is `https`; removing a pusher or the PqChat rule is allowed in a hidden profile (D-7, E-11).
+
+### CLI-MTX-09 — `scaas-matrix` bounds its own decodes and queues
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-09 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-09).) Session record 8 KiB, settings 4 KiB, 4,096 PqChat marks, text 60,000 bytes, pages of 100 events, PqChat events above 65,536 bytes dropped, an update queue of 1,024 with `Lagged`; server JSON through ruma (depth 128); the answer size of a homeserver not yet bounded (spec O3).
+**Status.** BUILT on branch `scaas-matrix`, the answer-size bound open (matrix-sdk 0.19.1 reads each answer whole; reqwest 0.13's connector hook returns a sealed type; spec §10) (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
+**Why.** AGENTS.md: bound every untrusted decode by length and depth.
+**Cost if wrong.** Memory or stack exhaustion from a hostile homeserver or a damaged store.
+**Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §10.
+
+Change (controller 2026-11-27, Fable's review of `c414f6eaa` applied; owner: no, owner may override; status: BUILT on branch `scaas-matrix`, UNAUDITED): no retry (`disable_retry`), an HTTP client without decompression with 20 s connect and 60 s read timeouts beside the 90 s request timeout, sync rounds at least 1 s apart; `SessionInvalid` and PqChat gaps kept beside the queue (`Update::PqChatGap`, `Update::Gap` for a limited timeline, `Update::SyncFailing`); the reason of the open answer-size gap restated: reqwest 0.13 has no body-size option and its connector hook returns a sealed type, matrix-sdk reads each answer whole (A-3, A-7, A-13, D-12, E-5, E-6, E-8, E-9).
+
+### CLI-MTX-10 — `scaas-matrix`'s `MatrixTransport` rides the profile's one client
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-10 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-10).) `transport()` over the same `matrix_sdk::Client`, one client-server request per call, no second sync loop, rooms created without `m.room.encryption`; `conformance` passes against Synapse.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
+**Why.** CLI-PQC-20, CLI-PQC-05: one login, one sync loop per profile.
+**Cost if wrong.** A second login or sync loop, or an encrypted PqChat room a fresh device cannot read.
+**Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §8.
+
+Change (controller 2026-11-27, Fable's review of `c414f6eaa` applied; owner: no, owner may override; status: BUILT on branch `scaas-matrix`, UNAUDITED): the transport fails once the client is closed; it implements `bound`; `create_room` fails closed when the server encrypted the new room; `members` leaves out departed members; `history` pages on while the token moves (B-3, D-17, D-19, A-17).
+
+### CLI-MTX-11 — `scaas-matrix` is native first; the web build later on IndexedDB
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-11 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-11).) SQLite (bundled) and a file lock natively; matrix-sdk with `js`, `indexeddb` on wasm32 later, the store opened with the profile's key; `pqchat-transport` builds for wasm32 now.
+**Status.** PLANNED. UNAUDITED.
+**Why.** CLI-PQC-19 G5: chat in the web build later.
+**Cost if wrong.** A web build without an encrypted store.
+**Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §11.
+
+### CLI-MTX-12 — `scaas-matrix`'s errors are named and carry nothing secret
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-12 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-matrix.md](clients/scaas-matrix.md#CLI-MTX-12).) Twelve names, the app-core contract's six Matrix and endpoint names among them; `Display` is the name; no token, key, password, text, room id or Matrix id in an error.
+**Status.** BUILT on branch `scaas-matrix` (unit, profile and Synapse e2e tests; mutants in `clients/scaas-matrix/runs/`). UNAUDITED.
+**Why.** Contract §7 and §11.3.
+**Cost if wrong.** A secret or an identifier in a log line.
+**Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §9.
+
+Change (controller 2026-11-27, Fable's review of `c414f6eaa` applied; owner: no, owner may override; status: BUILT on branch `scaas-matrix`, UNAUDITED): `Argument` renamed `MatrixArgument` (scaas-app's §7 has an `Argument` of another meaning), `MatrixDeviceUnverified` added; a homeserver failure of a recovery or backup call is `MatrixSend`, `MatrixStore` stays for local stores (A-14, D-15).
+
 ### CLI-PQC-30 — Owner rulings for `pqchat-core`, 2026-11-17
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-PQC-30 · superseded-by: —
 

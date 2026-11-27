@@ -1,0 +1,15 @@
+# t9 mutants (name | outcome | commit | test | first failure line)
+public receipts by default | killed | 0f1167651 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib policy::tests::defaults_are_private | panicked at src/policy.rs:167:9:
+typing on by default | killed | 0f1167651 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib policy::tests::defaults_are_private | panicked at src/policy.rs:168:9:
+presence online on sync | killed | 0f1167651 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test profile every_sync_says_presence_offline | panicked at tests/profile.rs:223:5:
+a PqChat room in the Matrix list | killed | 0f1167651 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib policy::tests::kinds_never_mix | panicked at src/policy.rs:211:13:
+a held invite not marked PqChat | killed | 0f1167651 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib policy::tests::kinds_never_mix | panicked at src/policy.rs:209:13:
+Matrix actions allowed in a PqChat room | killed | 0f1167651 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib policy::tests::nothing_ephemeral_in_a_pqchat_room_whatever_the_settings | panicked at src/policy.rs:188:13:
+marks unbounded | killed | 0f1167651 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib policy::tests::marks_are_bounded | panicked at src/policy.rs:231:9:
+http to any host | killed | 0f1167651 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib policy::tests::homeserver_https_or_loopback_ip | panicked at src/policy.rs:255:13:
+http to any host, at login | killed | 0f1167651 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test profile login_refuses_plain_http_off_loopback | panicked at tests/profile.rs:200:9:
+no profile lock | killed | 0f1167651 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test profile one_client_per_profile_directory | panicked at tests/profile.rs:47:18:
+the store key written beside the store | killed | 0f1167651 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test profile store_key_on_no_file | panicked at tests/profile.rs:112:9:
+settings not persisted | killed | 0f1167651 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test profile settings_persist_with_private_defaults | panicked at tests/profile.rs:177:5:
+a transport room left unmarked | killed | 0f1167651 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test e2e -- --ignored scaas_matrix_against_synapse | panicked at tests/e2e.rs:367:5:
+13 mutants, 13 killed, 0 survived, 0 not loaded, 0 other failure
