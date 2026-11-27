@@ -14,3 +14,13 @@ T8 | test-features | 839d7e2e0 | 0 | check_test_features ok (both new graphs 0 f
 T8 | format | 839d7e2e0 | 0 | format.sh --check rust py toml yaml lint ok
 T9 | mutants | 0f1167651 | 0 | 13 mutants, 13 killed, 0 survived, 0 not loaded, 0 other failure
 T0 | pqc-e2e | 0f1167651 | 101 | e2e_matrix_conformance passed (the helper by digest, the HTTP transport conforms); e2e_run failed at its mutant 11 fixture (tests/e2e.rs:955: SessionUnknown, expected PqChatContent), not a Matrix path; the same failure on the base d0b3f7f34 without this branch (pre-existing, reported)
+R2-R7 | mtx-test | 69f29bf94 | 0 | lib 14, deps 1, profile 8 passed (--features testing)
+R2-R7 | mtx-clippy | 69f29bf94 | 0 | --all-targets --features testing -D warnings, clean
+R2-R7 | mtx-deny | 82e4c2aab | 0 | advisories ok, bans ok, licenses ok, sources ok (url 2.5.9 kept for RUSTSEC-2026-0592)
+R2-R7 | mtx-audit | 82e4c2aab | 0 | 0 vulnerabilities; 1 allowed warning (derivative, wasm-only)
+R2-R7 | mtx-lock-dates | 82e4c2aab | 0 | no crate published after 2026-11-13 except url 2.5.9 and form_urlencoded 1.2.3 (security fix); syn 1.0.109 not paged by the API (2023)
+R1-R7 | pqc-test | 961fb6eee | 0 | 134 passed, 0 failed; recovery.rs again at 69f29bf94: 10 passed
+R1-R7 | pqc-clippy | 69f29bf94 | 0 | --all-targets -D warnings, clean
+R1-R7 | pqc-wasm | 961fb6eee | 0 | cargo check --target wasm32-unknown-unknown
+R7 | mtx-e2e | 69f29bf94 | 0 | 1 passed (39 s): login, restore, E2EE, defaults + controls, push, recovery/backup never replaced, SAS, conformance, kinds apart, routing by kind, held invite unanswered, R-1 hold refused before the first sync, J-1 release on join, second device MatrixDeviceUnverified then recover then send, bound marking, no Matrix id / homeserver / room id on disk (open and closed), logout
+R7 | mutants-r1 | 69f29bf94 | 0 | 37 mutants, 37 killed, 0 survived, 0 not loaded, 0 other failure (none by timeout; the sealed-length check left out as equivalent)
