@@ -65,3 +65,4 @@ KH | features | 72a818399 + KH files | 0 | check_test_features 72 manifests, 0 f
 KH | ci_changes self-test | 72a818399 + KH files | 0 | ok
 KH | fmt rust toml yaml py | 72a818399 + KH files | 0 | every part ok
 KH | docs | 72a818399 + KH files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok; paths 0; facts 0 misses (387 pending)
+KH | mutants kh (one at a time) | bb00216d6 | 0 | 2 mutants, 2 killed, 0 survived, 0 not loaded, 0 other failure
