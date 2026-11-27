@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="800" viewBox="0 0 1000 800" role="img" aria-labelledby="t d">
+  <title id="t">Client stack</title>
+  <desc id="d">Which client crate depends on which. scaas-app's front-ends use app-core-rust, which links scaas-profile and scaas-matrix in every build and adds scaas-sdk, pqchat-core and pqvault-core with the feature scaas. In this repository scaas-tui and the CLI use the SDK; pqchat-core and pqvault-core sit above the SDK; scaas-matrix and pqchat-core share the trait-only crate pqchat-transport; the SDK depends on scaas-profile, scaas-rpc and ua-rs with all features, the only signer; scaas-profile depends on ua-rs with the user-profile features only, with no signing code. Dashed arrows are data dependencies only.</desc>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
+    </marker>
+    <marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#0969da"/>
+    </marker>
+    <style>
+      text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+      .h { font-size: 22px; font-weight: 700; }
+      .sub { font-size: 12.5px; fill: #57606a; }
+      .grp { font-size: 13px; font-weight: 700; fill: #57606a; }
+      .b { font-size: 14px; font-weight: 700; }
+      .s { font-size: 11px; fill: #424a53; }
+      .lab { font-size: 11px; fill: #0969da; font-weight: 600; }
+      .chip { font-size: 9.5px; font-weight: 700; fill: #ffffff; }
+      .flow { stroke: #57606a; stroke-width: 1.5; fill: none; }
+      .every { stroke: #0969da; stroke-width: 1.8; fill: none; }
+      .data { stroke: #57606a; stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+      .built { fill: #ffffff; stroke: #1a7f37; stroke-width: 1.5; }
+      .wip { fill: #ffffff; stroke: #9a6700; stroke-width: 1.5; }
+      .plan { fill: #ffffff; stroke: #6e7781; stroke-width: 1.5; stroke-dasharray: 6 3; }
+      .ext { fill: #f6f8fa; stroke: #8c959f; stroke-width: 1.2; stroke-dasharray: 3 3; }
+      .signer { fill: #fff8f0; stroke: #bc4c00; stroke-width: 2; }
+    </style>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="999" height="799" rx="16" fill="#f8fafc" stroke="#d0d7de"/>
+  <text class="h" x="24" y="36">Client stack: who depends on whom</text>
+  <text class="sub" x="24" y="56">Owner rulings 2026-11-27 · an arrow reads "depends on" · blue = every scaas-app build · dashed = data only (scaas-tui pins a scaas-app commit)</text>
+
+  <!-- legend -->
+  <rect x="742" y="22" width="12" height="12" rx="3" class="built"/><text class="s" x="760" y="32">built</text>
+  <rect x="800" y="22" width="12" height="12" rx="3" class="wip"/><text class="s" x="818" y="32">being built</text>
+  <rect x="890" y="22" width="12" height="12" rx="3" class="plan"/><text class="s" x="908" y="32">planned</text>
+
+  <!-- scaas-app group -->
+  <rect x="20" y="68" width="960" height="180" rx="12" fill="#eef2f7" stroke="#d0d7de"/>
+  <text class="grp" x="34" y="88">scaas-app (separate repository)</text>
+
+  <rect x="40" y="98" width="520" height="50" rx="10" class="plan"/>
+  <text class="b" x="56" y="119">Qt / QML · Flutter · Dioxus · Tauri + React</text>
+  <text class="s" x="56" y="137">four front-ends; the React UI also as a web build and an MV3 extension</text>
+
+  <rect x="600" y="98" width="360" height="50" rx="10" class="plan"/>
+  <text class="b" x="616" y="119">app-viewmodel</text>
+  <text class="s" x="616" y="137">one Rust source: TS (ts-rs) · Dart (FRB) · Qt (cbindgen + JSON)</text>
+
+  <rect x="300" y="180" width="400" height="52" rx="10" class="plan"/>
+  <text class="b" x="316" y="201">app-core-rust</text>
+  <text class="s" x="316" y="219">default build: no SDK, no SCaaS signing code</text>
+
+  <path class="flow" d="M300 148 L420 178" marker-end="url(#ah)"/>
+  <path class="flow" d="M560 123 L598 123" marker-end="url(#ah)"/>
+
+  <!-- this repository group -->
+  <rect x="20" y="268" width="960" height="514" rx="12" fill="#eef7ee" stroke="#d0d7de"/>
+  <text class="grp" x="34" y="288">this repository (scaas)</text>
+
+  <!-- row: front ends of this repo -->
+  <rect x="40" y="298" width="180" height="50" rx="10" class="wip"/>
+  <text class="b" x="56" y="319">scaas-tui</text>
+  <text class="s" x="56" y="337">also uses scaas-sdk</text>
+  <rect x="240" y="298" width="160" height="50" rx="10" class="built"/>
+  <text class="b" x="256" y="319">CLI scaas</text>
+  <text class="s" x="256" y="337">thin client of scaas-sdk</text>
+
+  <!-- row: app cores, trait, matrix -->
+  <rect x="40" y="390" width="200" height="50" rx="10" class="built"/>
+  <text class="b" x="56" y="411">pqchat-core</text>
+  <text class="s" x="56" y="429">pulls no Matrix crate</text>
+  <rect x="260" y="390" width="170" height="50" rx="10" class="built"/>
+  <text class="b" x="276" y="411">pqvault-core</text>
+  <text class="s" x="276" y="429">above the SDK</text>
+  <rect x="470" y="390" width="200" height="50" rx="10" class="plan"/>
+  <text class="b" x="486" y="411">pqchat-transport</text>
+  <text class="s" x="486" y="429">the MatrixTransport trait only</text>
+  <rect x="720" y="390" width="240" height="50" rx="10" class="plan"/>
+  <text class="b" x="736" y="411">scaas-matrix</text>
+  <text class="s" x="736" y="429">one client per open user profile</text>
+
+  <!-- row: sdk, matrix-sdk -->
+  <rect x="40" y="480" width="390" height="50" rx="10" class="built"/>
+  <text class="b" x="56" y="501">scaas-sdk</text>
+  <text class="s" x="56" y="519">the one API apps call; names no chat</text>
+  <rect x="720" y="480" width="240" height="50" rx="10" class="ext"/>
+  <text class="b" x="736" y="501">matrix-sdk</text>
+  <text class="s" x="736" y="519">matrix-rust-sdk, third party</text>
+
+  <!-- row: rpc, profile -->
+  <rect x="40" y="570" width="180" height="50" rx="10" class="built"/>
+  <text class="b" x="56" y="591">scaas-rpc</text>
+  <text class="s" x="56" y="609">node lists, failover, majority</text>
+  <rect x="470" y="570" width="250" height="50" rx="10" class="wip"/>
+  <text class="b" x="486" y="591">scaas-profile</text>
+  <text class="s" x="486" y="609">envelope, seals, lock, export</text>
+
+  <!-- row: ua-rs twice -->
+  <rect x="40" y="660" width="390" height="50" rx="10" class="signer"/>
+  <text class="b" x="56" y="681">ua-rs, all features</text>
+  <text class="s" x="56" y="699">the only signer: wallet, PQ, signers, every UA kind</text>
+  <rect x="470" y="660" width="250" height="50" rx="10" class="wip"/>
+  <text class="b" x="486" y="681">ua-rs, user-profile only</text>
+  <text class="s" x="486" y="699">key-handles: no wallet / pq / signers</text>
+
+  <!-- vectors -->
+  <rect x="40" y="732" width="680" height="36" rx="10" class="ext"/>
+  <text class="s" x="56" y="755">clientkeys (JS reference) and smartcontracts/vectors: both ua-rs builds read the same rows</text>
+
+  <!-- app-core-rust: every build -->
+  <path class="every" d="M695 232 L695 568" marker-end="url(#ahb)"/>
+  <text class="lab" x="618" y="300">every build</text>
+  <path class="every" d="M700 206 L860 206 L860 388" marker-end="url(#ahb)"/>
+  <text class="lab" x="768" y="200">every build</text>
+  <!-- app-core-rust: feature scaas -->
+  <path class="flow" d="M450 232 L450 505 L432 505" marker-end="url(#ah)"/>
+  <path class="flow" d="M450 415 L432 415" marker-end="url(#ah)"/>
+  <text class="lab" x="458" y="314">feature scaas:</text>
+  <text class="lab" x="458" y="329">SDK, pqchat-core, pqvault-core</text>
+
+  <!-- scaas-tui -->
+  <path class="flow" d="M120 348 L120 388" marker-end="url(#ah)"/>
+  <path class="flow" d="M200 348 L300 388" marker-end="url(#ah)"/>
+  <path class="flow" d="M210 348 L210 366 L800 366 L800 388" marker-end="url(#ah)"/>
+  <path class="data" d="M60 298 L60 258 L780 258 L780 150" marker-end="url(#ah)"/>
+
+  <!-- app cores to sdk and trait -->
+  <path class="flow" d="M140 440 L140 478" marker-end="url(#ah)"/>
+  <path class="flow" d="M345 440 L345 478" marker-end="url(#ah)"/>
+  <path class="flow" d="M220 440 L220 460 L540 460 L540 442" marker-end="url(#ah)"/>
+  <path class="flow" d="M720 415 L672 415" marker-end="url(#ah)"/>
+  <path class="flow" d="M840 440 L840 478" marker-end="url(#ah)"/>
+
+  <!-- sdk down -->
+  <path class="flow" d="M130 530 L130 568" marker-end="url(#ah)"/>
+  <path class="flow" d="M300 530 L300 658" marker-end="url(#ah)"/>
+  <path class="flow" d="M420 530 L500 568" marker-end="url(#ah)"/>
+  <path class="flow" d="M130 620 L130 658" marker-end="url(#ah)"/>
+  <path class="flow" d="M595 620 L595 658" marker-end="url(#ah)"/>
+
+  <!-- vectors -->
+  <path class="data" d="M235 710 L235 730" marker-end="url(#ah)"/>
+  <path class="data" d="M595 710 L595 730" marker-end="url(#ah)"/>
+
+  <!-- the rule of the default build -->
+  <rect x="740" y="560" width="220" height="150" rx="10" fill="#ffffff" stroke="#d0d7de"/>
+  <text class="b" x="754" y="582">Rules kept</text>
+  <text class="s" x="754" y="602">· default build: no SDK, no</text>
+  <text class="s" x="754" y="617">  SCaaS signing code (D32, D34)</text>
+  <text class="s" x="754" y="635">· scaas-matrix pulls neither the</text>
+  <text class="s" x="754" y="650">  SDK nor pqchat-core</text>
+  <text class="s" x="754" y="668">· the SDK names no chat</text>
+  <text class="s" x="754" y="686">· scaas-app → this repo only</text>
+  <text class="s" x="754" y="704">· ua-rs is the only signer</text>
+</svg>

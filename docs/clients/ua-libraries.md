@@ -995,5 +995,15 @@ home's when its signature equals the home's with the `msig` version tags strippe
 the replica registry's current version, every other byte the home's). Controller calls 2026-11-26, BUILT in `pqvault-core`
 `vault.rs`, `tests/exits.rs`, UNAUDITED.
 
+**The PqVault UI** (owner 2026-11-27; SPECIFIED, nothing built; [CLI-PQV-16](../decisions.md#CLI-PQV-16)): the redacting item
+layer lives in `pqvault-core` (fields typed plain or `SecretBytes`; BUILT-gap: items come out as plain `serde_json::Value` today),
+with the `card` and `identity` fields and the secret table per type pinned there and in the spec; a note's body plain by default
+with a per-item "hide body"; a TOTP code reveal-gated, copyable with the 30-s clear except in the TUI; breach checks only on the
+user's action over the user's own latest versions, padded k-anonymity; "decide later" writes nothing; autofill after v1 (Android
+in-process first, then the extension on the user's action, iOS later); no passkeys in vaults; offline reads from the profile's
+sealed cache, no offline writes; the web build and the extension after the core runs on wasm32 and after the native front-ends.
+Every record is signed only after the user's confirm ([CLI-SDK-36](../decisions.md#CLI-SDK-36); BUILT-gap: the core signs when it
+builds a record).
+
 **Not here.** Per-kind derivation and clientkeys' API ([signers-clientkeys](signers-clientkeys.md)), group vectors, the registry contract, the UA ledger.
 Not built yet: the FRB layer as a Flutter plugin and its Android and iOS builds (no web build: `SecretBytes` needs `dart:ffi`), the wasm-bindgen browser binding of `ua-rs` (the library compiles for wasm32), and Qt packaging for Windows and macOS.

@@ -63,8 +63,9 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 
 - **Repo public.** Before any push: scan the outgoing diff for secrets, including JSON and `runs/`, read the hits, then push as a separate
   step, by explicit SHA. No gitleaks in CI. A pushed secret is burned: rotate it, do not just delete it.
-- Never commit `.env`, keys, keystores, mnemonics, passwords, machine paths or email addresses. No built binaries on GitHub: source and
-  build scripts only.
+- Never commit `.env`, keys, keystores, mnemonics, passwords, machine paths or email addresses. No built binaries on GitHub
+  ([ARCH-POS-27](docs/decisions.md#ARCH-POS-27)): source, build and verify scripts only; CI publishes text and JSON. Stores and
+  channels outside GitHub are allowed.
 - No `/tmp` path or other machine path in a committed file: scripts make temp dirs at run time (`mktemp -d`, `tempfile`),
   logs and notes write `<tmp>`. CI refuses a temp path outside `legacy/` and `docs/history/`.
 - Never `git add -f`: an ignored file is ignored on purpose, and a forced report stays in public history.
@@ -116,15 +117,19 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 
 - Do not hand-edit `params/sets/*/PqzSet.sol`, generated headers or vectors. Change `set.toml` or the generator and regenerate.
 - Any change to a transcript or relation means a new `proofSystemId`, new vectors in every client, and a full gate.
-- Full gate (`PQZ_SET=<set> scripts/capped pqz-core/gate.sh`, hours per set): only when `pqzl`, `pqzh/ligero/src`, `stmt`, `ffi/src` or set
-  parameters change (code compiled only under feature `test-hooks` excepted: its affected steps, owner 2026-11-16). It resumes
-  per step; read `runs/gate/last` first. Otherwise run the affected steps.
+- Full gate: the CI workflow `pqz-gate.yml` (every step at the four sets, [ARCH-POS-26](docs/decisions.md#ARCH-POS-26); push the
+  commit to `pqz-gate/<name>`, or run it by hand), only when `pqzl`, `pqzh/ligero/src`, `stmt`, `ffi/src` or set parameters change
+  (code compiled only under feature `test-hooks` excepted: its affected steps, owner 2026-11-16). It is a post-check: it blocks no
+  merge and nothing waits for it; the affected steps and CI's `pqz` job do. A red run is a finding, fixed after. Record its table
+  and URL in `runs/<date>-pqz-gate-<sets>-summary.txt`. Fallback: `PQZ_SET=<set> scripts/capped pqz-core/gate.sh` (resumes per
+  step; read `runs/gate/last` first). Otherwise run the affected steps.
 - A format-only commit (formatter output only, no hand edit) in those paths never needs the full gate: run the affected steps
   (kat, tbox, sv, fnv, rust, fuzz, `pqz-vectors --check`, `pqz_kat.py --check`) and require outputs byte-identical to the
   baseline (owner 2026-11-17). Rust is formatted at rustfmt's default width (100), the other languages at 120.
 - **Gate once, on the final core tree.** Any edit to the paths above, the gate scripts or the files its steps read (harnesses, vectors,
-  `negative.json`) restarts the gate. Before starting it, walk every remaining step of the plan and pull those edits forward, gate-script
-  counts included (e.g. the relation count). Contract, client and node work runs beside it. A run on an older tree is only a scout.
+  `negative.json`) restarts the gate. Before asking for the CI run, walk every remaining step of the plan and pull those edits forward,
+  gate-script counts included (e.g. the relation count). Contract, client and node work runs beside it and does not wait for it. A run
+  on an older tree is only a scout.
 - The C core is an oracle, not production; `pqz-ffi` defaults to Rust.
 - No timing or gas calibration without asking: other heavy work skews it.
 - Reproducing a digest in a client means zeroing unbound `relayer` / `feeRecipient` like `MetaTxLib.canon`. Vectors already canonical do not

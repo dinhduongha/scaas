@@ -170,6 +170,14 @@ allow-list; an undecoded call exists only behind its own feature and marker, fla
 ([CLI-SGN-29](signers-clientkeys.md#CLI-SGN-29)); no EIP-7702 authorization or type-4 transaction is built
 ([CLI-SGN-40](signers-clientkeys.md#CLI-SGN-40); `TxTypeRefused`). The review lists every token or market the operation touches, with its address and its listed or unlisted mark (owner 2026-11-17, "OK, all four points as proposed").
 
+**The `SignReview` model** (owner 2026-11-27; SPECIFIED, nothing built): the review above becomes the raw section (rows still
+`ReviewField`) of one `SignReview` the
+SDK emits for every operation, record and app call, built from descriptors compiled into the SDK (one per `(struct, domain kind)`,
+keyed by the pinned typehash, none fetched at run time), with typed rows, steps, the payer, warnings by severity and stable code, a
+third party's descriptor only as hash-pinned release data under a Caution, and a pre-sign simulation of opaque and app calls as
+supporting evidence with its basis shown; every front-end renders it and passes one review vector set:
+[CLI-SDK-35](../decisions.md#CLI-SDK-35).
+
 <a id="CLI-SDK-09"></a>**CLI-SDK-09** — **An operation is quoted and confirmed, written ahead, then sent to a gateway that takes it
 or relayed by the holder** (BUILT on EVM: plan T10, T10b, T12, T13, T38, T41.evm, `src/op/tests.rs`, `tests/wallet_ops.rs`,
 `handoff.rs`, `l1_fee.rs`, the `sdk-e2e` tests; on Soroban: plan T41.soroban, `tests/soroban_ops.rs`; the other families after the
@@ -426,6 +434,10 @@ portable path). One key handle twice in one app-core call is `Argument`, before 
 KEM key rotation is `Account::prepare_set_kem_key` (`setKemKey` at a version ≥ 1, checked by `ua-rs`'s `check_kem_record`
 first). Same entry: BUILT, UNAUDITED.
 
+**Sign after confirm** (owner 2026-11-27; SPECIFIED; BUILT-gap in `pqchat-core` and `pqvault-core`, which sign when they build a
+record): an app core builds the typed record and its quote for the review and calls the SDK's signing entry only on the user's
+confirm; a review left makes no signing call: [CLI-SDK-36](../decisions.md#CLI-SDK-36).
+
 <a id="CLI-SDK-21"></a>**CLI-SDK-21** — **`seal_for_arweave`, `upload_file`, `fetch_file` and `open_file` put an app core's
 file on Arweave and read it back; the upload key signs only the item `ua-rs` built; the client keeps the signed bytes until
 the item is settled; the free tier carries the smallest bucket, the operator payer the rest, and the client never holds an
@@ -547,6 +559,12 @@ whose API version or feature bits differ from what it was generated against, or 
 (`AbiMismatch`), in Rust at the library's opening on every binding, FRB's `sdk_open` included (review T26 C-2,
 `the_opening_runs_the_load_check`). `ua-rs`'s existing wrappers stay as they
 are for clients that use the signer without the SDK ([the wallet surface](ua-libraries.md#the-wallet-surface-of-ua-rs-built)).
+
+**In the browser** (owner 2026-11-27; PLANNED): scaas-app's web build and extension sign only through the SDK, a native EOA signs a
+dApp's typed EIP-712 data only (never `eth_sign` or `personal_sign`), the provider sits in the top frame only, bridge mode to the
+native app comes before a wasm key host, Firefox and Safari re-open from a session key in `storage.session`, and the passkey
+residual of a `webauthn-p256` key under another extension's host permissions is an accepted risk:
+[CLI-SDK-37](../decisions.md#CLI-SDK-37).
 
 ## 10. Chain profiles and native chains
 
@@ -792,6 +810,16 @@ manifest's revision and hash, and the envelope's revision (a new envelope field)
 and the anchor's, or a write by a client that could not reach this anchor) moves the anchor forward; a value below it, or another
 hash at the same revision, is `ProfileRollback`. Every client writes the anchor file; a client with a keychain also writes the
 keychain item, and both are compared by this rule, so the CLI and the desktop app taking turns raise no event.
+
+**The Matrix store key** (owner 2026-11-27; SPECIFIED): a sealed item of the profile that owns the Matrix client, not an OS
+secret-storage item; `scaas-matrix` holds it until the profile locks: [CLI-UPR-29](../decisions.md#CLI-UPR-29). Each profile has its
+own Matrix (logins, session, store, keys, device id), one `scaas-matrix` client per open profile, closed at a switch before the
+other opens ([CLI-PQC-20](../decisions.md#CLI-PQC-20)).
+
+**Mobile backup** (owner 2026-11-27; SPECIFIED): the profile root is excluded from every cloud backup and device-to-device transfer
+(Android `getNoBackupFilesDir()` plus a `<cross-platform-transfer>` exclusion; iOS `isExcludedFromBackup` on the root at every start,
+Complete protection, keychain items `ThisDeviceOnly`); the export ([CLI-UPR-17](#CLI-UPR-17)) is the only way to move a profile:
+[CLI-UPR-30](../decisions.md#CLI-UPR-30).
 
 <a id="CLI-UPR-31"></a>**CLI-UPR-31** — **Each profile has its own Matrix: its logins, session, store, crypto keys and device id;
 nothing Matrix-side is shared between profiles** (owner 2026-11-27; SPECIFIED). A profile's Matrix login or logins, its session, its

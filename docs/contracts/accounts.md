@@ -902,7 +902,10 @@ subdomains, WebAuthn related origins) can request a signature. Deployment rule: 
 the app's origins, and no untrusted content is served under it (an ERP portal origin under it is part of the trusted
 computing base). The verifier still enforces the clientDataJSON grammar (type, challenge, `crossOrigin` absent or false)
 but compares no origin. A sorted origins root was rejected: origins are fixed at id creation, so a later origin would
-still need a new UA.
+still need a new UA. **Accepted residual** (owner 2026-11-27, [CLI-SDK-37](../decisions.md#CLI-SDK-37) (I6)): any browser
+extension with host permissions over the `rpId`'s domain can ask the authenticator for an assertion over a challenge it chose, and
+the platform prompt shows the `rpId`, not the operation; the deployment rule does not cover it. An origin-bound passkey kind may be
+revisited later.
 
 **Closed kind sets (enforced).**
 

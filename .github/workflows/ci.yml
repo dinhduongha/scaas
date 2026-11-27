@@ -28,6 +28,8 @@
 #                  at PQZ_SET n2304-kmax4096: pqzl/build.sh native, kat/check.py (KAT); pqzl/check_tbox_fixes.sh, sv/check_sv_fixes.sh;
 #                  ffi pqz-vectors --check, smartcontracts/vectors/pqz/pqz_kat.py --check, ffi/vectors/tamper.py; cargo test --release (stmt, pqzh/ligero, ffi);
 #                  fuzz smoke (fuzz/run.sh precompile, mutate, codec: 60 s each on the committed corpora)
+#   pqz-gate.yml:  a workflow of its own, not a job here (decisions ARCH-POS-26): pqz-core/gate.sh, every step, at the four sets,
+#                  on demand only (a push to pqz-gate/<name> or a manual run), a post-check no job needs and no merge waits for
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths; ... consumer;
 #                  ! git grep -nE '(^|[^[:alnum:]_.-])/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' (no temp path, AGENTS.md Security; a URL segment such as npm's package `tmp` is not a path)
 #                  python3 -I smartcontracts/evm/script/pqz/gas-inputs.py --check (the PQZ gas table's inputs = the calibrated or
@@ -763,13 +765,14 @@ jobs:
 
   # P6e Task 10 / gate A / gate B, at one parameter set (PQZ_SET below) — KAT, the tbox / SV fix checks, the vectors byte for byte
   # (Rust generator and the independent Python checker), the crates' tests, a fuzz smoke on the committed corpora.
-  # The full gate (differential, wasm32 replay, 2 h campaigns) is pqz-core/gate.sh, run on the owner's machine.
+  # The full gate (every step of pqz-core/gate.sh at the four sets) is the workflow pqz-gate.yml, on demand, a post-check
+  # (ARCH-POS-26): this job does not wait for it; locally pqz-core/gate.sh stays the fallback.
   pqz:
     needs: changes
     if: needs.changes.outputs.pqz == 'true'
     runs-on: ubuntu-24.04
     # one parameter set end to end (pqz-ffi's default; plan 5h Task 8d: the Rust generator and the Python checker on the
-    # same files, review 8d1 M2); the other sets: pqz-core/gate.sh
+    # same files, review 8d1 M2); the other sets: pqz-gate.yml (pqz-core/gate.sh)
     env:
       PQZ_SET: n2304-kmax4096
     defaults:

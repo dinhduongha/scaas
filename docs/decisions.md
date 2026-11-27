@@ -617,6 +617,82 @@ proof the verifier refuses. The vectors and KATs catch it; none moved.
 **Source.** Owner ruling 2026-11-26 (chat, through the coordinator): the direct RustCrypto uses move to the next generation
 before the pre-freeze tag; it was planned for after the freeze, TODO 8b-2b.
 
+<a id="ARCH-POS-26"></a>
+### ARCH-POS-26 — The pqz-core full gate runs on CI, only when asked, as a post-check
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#ARCH-POS-26 · superseded-by: —
+
+**Rule.** The pqz-core full gate (`pqz-core/gate.sh`, every step, at the four parameter sets) runs on CI in the workflow
+`.github/workflows/pqz-gate.yml`, **only when asked**: a push to a branch `pqz-gate/<name>` or a manual run
+(`workflow_dispatch`, input `sets`), never on a push to `dev` or `main`, a pull request, a schedule or a path filter. It is a
+**post-check**: no other job `needs` it, it is not a required status, and merges and other work do not wait for it. What
+blocks a merge stays as before: the affected steps (AGENTS.md "Cryptography": kat, tbox, sv, fnv, rust, fuzz, `pqz-vectors
+--check`, `pqz_kat.py --check`) and the `pqz` job of `ci.yml`. A red full gate is a finding, fixed after; it does not stop
+other streams. "Gate once on the final core tree" still holds (every later core change pulled forward first): the CI run on
+that tree is the gate; the local `scripts/capped pqz-core/gate.sh` stays usable as a fallback. A run's step table and URL are
+recorded in `runs/<date>-pqz-gate-<sets>-summary.txt`.
+**Status.** BUILT on branch `pqz-gate-ci`, UNAUDITED tooling; no CI run yet. Two jobs per set (part `a`: kat tbox sv ct ub
+diff; part `b`: fnv vectors ffi rust cargo xcheck fuzz), since one set's gate does not fit a hosted runner's 6 h; the parts
+are selected through `gate.sh`'s own resume state, `gate.sh` and `resume.sh` unchanged ([pqz-core/README.md](../pqz-core/README.md),
+"The full gate on CI").
+**Why.** A full gate takes hours per set on the owner's machine and holds its slots; the four sets at once compete with
+every other stream there, and the 2026-11-27 run stopped three sets at about 25 % to free it.
+**Cost if wrong.** A finding of the full gate arrives after a merge rather than before; the affected steps still block a
+merge. Runner minutes, and a 6 h limit per job.
+**Source.** Owner ruling 2026-11-27 (chat): the pqz-core full gate runs on CI, only when needed, as a post-check; other
+work does not wait on it.
+
+<a id="ARCH-POS-27"></a>
+### ARCH-POS-27 — No built binaries on GitHub; stores and build-from-source channels are allowed
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#ARCH-POS-27 · superseded-by: —
+
+**Rule.** Nothing built is published on GitHub, from this repository or scaas-app's: no binary committed, attached to a
+GitHub Release, served by GitHub Pages or pushed as a container image. GitHub carries source, build scripts and verify scripts;
+CI publishes text and JSON results only (a provenance attestation or a digest is text; the binary it names is not uploaded).
+The scope is **GitHub only**: a channel where a third party builds from our source (Flathub, AUR, a Homebrew tap formula, the
+user) and a store or repository outside GitHub to which we upload a binary we built (Google Play, the App Store, Firefox AMO,
+the Chrome Web Store, our own F-Droid-format repository) are allowed, under [ARCH-POS-28](#ARCH-POS-28). A browser demo runs
+from a local `--serve`.
+**Status.** SPECIFIED as a register entry; the rule itself has been followed since the owner's wording of 2026-10-13 (AGENTS.md,
+"Security"), and this entry anchors it and fixes its scope.
+**Why.** The repository is public and holds no artifact whose bytes a reader cannot rebuild from it; a store that signs and
+ships our build is a distribution channel, not a publication on GitHub, and the apps need one.
+**Cost if wrong.** Read too wide, no mobile or extension release is possible; read too narrow, an unreproducible binary sits in
+the public history beside the source.
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, A3 left open; A1: the rule's scope is GitHub only, stores and build-from-source channels allowed, anchored in the register; owner wording 2026-10-13 (source-only publication packages, CI text and JSON results only); [app-distribution note](research/2026-11-27-app-distribution.md) §1.1, §8 Q1.
+
+<a id="ARCH-POS-28"></a>
+### ARCH-POS-28 — Releases of scaas-app, `scaas-tui` and the CLI: own channels for a non-FLOSS licence, store updates only, a signed release manifest
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#ARCH-POS-28 · superseded-by: —
+
+**Rule.** Within [ARCH-POS-27](#ARCH-POS-27):
+- **Licence and FLOSS channels (A2).** `LicenseRef-Vegan-Community-1.0` restricts a field of endeavour, so the channels that
+  require FLOSS under the OSD or DFSG reading (F-Droid's main repository, `homebrew/core`, Debian main) are closed; this is
+  accepted and the licence stays. Android builds go to our own F-Droid-format repository, formulae to our own Homebrew tap.
+- **Publisher and keys (A3): open.** The legal entity that holds the store accounts and the signing identities, and the custody
+  of every release key, are the owner's to decide; nothing that needs them starts before.
+- **Android developer verification (A4).** Package names and signing-certificate fingerprints are registered, once A3 is ruled.
+- **No hosted web wallet (A5)** for now: the web build and the extension run from a local build (`--serve`, load unpacked);
+  revisited after the pre-freeze tag.
+- **No self-updater (A6)** in any front-end, `scaas-tui` or the CLI: updates come only from the store or package manager that
+  installed the build, or by a rebuild.
+- **Play App Signing (A7)** with our own app signing key uploaded, not one Google generates, so our F-Droid-format repository
+  and other Android channels ship under the same certificate.
+- **Extension stores (A9)** in this order: Firefox AMO, then the Chrome Web Store (verified uploads), then Safari.
+- **The release manifest (A10).** Each release has one text manifest committed to the repository, with named fields `app`,
+  `version`, `sequence` (strictly increasing), `source_commit`, `toolchains`, `artifacts` (per target, the sha256 of the unsigned
+  payload), `sbom_sha256`, `profiles_sha256` (the release chain profiles, [CLI-TUI-11](clients/scaas-tui.md#CLI-TUI-11)),
+  `min_supported` and `expires`. It carries two signatures: an Ed25519 signature by an offline key and, beside it, a UA PQ
+  signature made through `ua-rs`. A verifier keeps the highest `sequence` seen and refuses a lower one and an expired manifest.
+
+**Status.** PLANNED: no release tooling exists in either repository. A3 open. The Qt fork's upstream `fdroid/` and `fastlane/`
+(A8) are scaas-app's item.
+**Why.** The licence is the owner's choice and the FLOSS channels follow from it; a self-updater turns one key into a push
+channel to every install; the manifest lets anyone check a binary from any channel without our hosting one, and the PQ
+signature beside the Ed25519 one keeps a verifier without `ua-rs` able to check.
+**Cost if wrong.** A store listing refused for the licence; an update channel whose key compromise reaches every install; a
+release whose binaries no one can tie to a commit.
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, A3 (publishing entity, key custody) left open; A2 accept, A4 register once A3, A5 not now, A6 none, A7 upload our own key, A9 AMO then Chrome then Safari, A10 Ed25519 offline plus a UA PQ signature beside it; [app-distribution note](research/2026-11-27-app-distribution.md) §1.2, §3, §5, §7, §8.
+
 ## 2. Node — General
 
 ### NODE-GEN-01 — Node holds no subject funds or keys
@@ -11842,6 +11918,46 @@ Change (controller calls 2026-11-22, the coordinator; owner may override; status
 **Why.** The V10e rows that waited for the SDK (a rotated KEM key, an `msig` admin with a native member in both modes) now run; a generated passphrase without a new list.
 **Source.** Owner 2026-11-22 (chat, through the coordinator): (1) do both now; (2) BIP-39, 6 words; (3) in scaas-app; (4) not now.
 
+<a id="CLI-PQV-16"></a>
+### CLI-PQV-16 — Owner rulings 2026-11-27 on the PqVault UI: the redacting item layer in `pqvault-core`, the secret table, TOTP, breach checks, autofill, offline reads
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#CLI-PQV-16 · superseded-by: —
+
+**Rule.** For every PqVault front-end (scaas-app's four, the web build and the extension, `scaas-tui`):
+- **(H1) The redacting item layer lives in `pqvault-core`.** Items come out as summaries and handles (`ItemSummary`,
+  `ItemHandle`, `reveal(field)`, `copy(field)`, the spec's §8) whose fields are typed `Plain(text)` or `Secret(SecretBytes)`;
+  an unknown field is an opaque part kept byte for byte; the canonical JSON is built and parsed inside zeroizing buffers; a
+  secret field's earlier values (an item's `history`) are secret too. No front-end decides which field is secret.
+- **(H2) The `card` and `identity` fields and the secret table per type** are pinned in one place, the spec and the core, read by
+  every front-end through H1: a card's number, security code and PIN secret; an identity's document numbers secret; names and
+  addresses plain; beside the existing secrets (a login's `password` and `totp`, a `totp`'s `secret`, an `sshKey`'s
+  `privateKey` and `passphrase`).
+- **(H3) A note's body is plain by default,** with a per-item "hide body" choice stored in the item.
+- **(H4) A TOTP code** (RFC 6238, computed in the core from the secret field and returned as a secret) is reveal-gated like a
+  password, and copyable with the 30-s clear of [CLI-PQV-04](clients/ua-libraries.md#CLI-PQV-04), except in `scaas-tui`,
+  which copies no secret ([CLI-TUI-14](clients/scaas-tui.md#CLI-TUI-14)).
+- **(H5) Breach checks** run only on the user's action, only over items whose latest version the user wrote, as a padded
+  k-anonymity range request; nothing is sent about a version another member wrote ([ARCH-POS-13](#ARCH-POS-13)). Weak and
+  reused passwords are found on the device only.
+- **(H6) "Decide later"** on an invitation writes nothing; a decline stays the written choice that follows the user to other
+  devices.
+- **(H7) Autofill after v1,** in this order: an Android autofill service in the app's own process; then the browser extension,
+  filling on the user's action from its own instance; iOS after the app-extension question of the user profiles (an app
+  extension is refused while the app holds the profile open, [CLI-UPR-14](clients/scaas-sdk.md#CLI-UPR-14)).
+  [CLI-PQV-04](clients/ua-libraries.md#CLI-PQV-04)'s exact-host rule applies when it is built.
+- **(H8) Passkeys stay out of vaults.**
+- **(H9) Offline reads** come from a cache of verified records and ciphertexts inside the profile's sealed store
+  ([CLI-UPR-12](clients/scaas-sdk.md#CLI-UPR-12)); there are no offline writes.
+- **(H10) The web build and the extension** come after `pqvault-core` builds and is tested on wasm32, and after the Flutter, Qt
+  and Dioxus front-ends.
+
+Every write signs only after the user's confirm ([CLI-SDK-36](#CLI-SDK-36)).
+**Status.** SPECIFIED, nothing built. BUILT-gap for H1: `pqvault-core` returns an item version's value as a plain
+`serde_json::Value`, every field's text in heap buffers that are not zeroized. UNAUDITED.
+**Why.** One secret table and one zeroizing path in the core, rather than five front-ends each re-deriving which fields are
+secret in memory they cannot wipe; a breach check over another member's version would tell a server whether it opened.
+**Cost if wrong.** A card number drawn in the clear by one front-end; a breach request that acts as a decryption oracle.
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, H1 to H10 as proposed; [PqVault UI note](research/2026-11-27-pqvault-ui.md) §1, §8 rows 23 to 25, §9, §11 Q1 to Q10.
+
 <a id="CLI-UAL-62"></a>
 ### CLI-UAL-62 — Owner rulings of the native round, 2026-11-17
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-UAL-62 · superseded-by: —
@@ -12981,6 +13097,123 @@ Change (controller call 2026-11-27, the round-3 Fable review of `9f2ee89b7`, R3-
 **Cost if wrong.** False rollbacks in normal use, which teach the user to accept a real one.
 **Source.** Controller call 2026-11-27 on the round-3 Fable review of the user-profiles spec at `9f2ee89b7` (R3-A-1, B N-1); SDK spec §6.3; [spec](superpowers/specs/2026-11-27-user-profiles.md) §7.2, §19.
 
+<a id="CLI-UPR-29"></a>
+### CLI-UPR-29 — The Matrix store key is a sealed item of the user profile, not an OS secret-storage item
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#CLI-UPR-29 · superseded-by: —
+
+**Rule.** The store key of the Matrix client's store is a sealed item of the user profile that owns that client
+([CLI-UPR-12](clients/scaas-sdk.md#CLI-UPR-12); the user-profiles spec §5, `matrix_store()`), the one key that leaves the
+profile's arena: `scaas-matrix` ([CLI-PQC-20](#CLI-PQC-20)) holds it until the profile locks, and the lock closes that
+client. It is not kept in the OS secret storage. `pqchat-core`'s local store stays encrypted at rest under the same key
+([CLI-PQC-09](clients/pqchat-core.md#CLI-PQC-09)); its device anchor stays in the platform's non-backed-up secret storage.
+scaas-app's contract §11.4, which put the store key in the OS secret storage, is corrected to match (scaas-app's item).
+**Status.** SPECIFIED, nothing built.
+**Why.** A profile holds its own chat state (CLI-UPR-03), and every secret of it opens only with the profile; a store key in
+the OS secret storage would open one profile's Matrix store without that profile's passphrase.
+**Cost if wrong.** One profile's chat history readable while that profile is locked, or from another profile.
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, G7: a sealed profile item, scaas-app's contract §11.4 fixed; [chat UI note](research/2026-11-27-matrix-chat-ui.md) §10.
+
+<a id="CLI-UPR-30"></a>
+### CLI-UPR-30 — On mobile the profile root is excluded from cloud backup and device transfer; the export is the only move
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#CLI-UPR-30 · superseded-by: —
+
+**Rule.** A mobile client keeps the profile root out of every cloud backup and device-to-device transfer. Android: the root under
+`getNoBackupFilesDir()`, with an explicit exclusion in the `<cross-platform-transfer>` section of the backup rules. iOS: the root
+under Application Support, `isExcludedFromBackup` set on the root directory at every start, created with Complete protection
+(Class A); keychain items `ThisDeviceOnly`, never synchronizable. A profile moves to a new device only by its export
+([CLI-UPR-17](clients/scaas-sdk.md#CLI-UPR-17)); seeds restore from their sealed backup or their words. With Class A a
+write while the device is locked is impossible, which a later push-driven chat sync takes into account.
+**Status.** SPECIFIED, nothing built (the profile layer is SPECIFIED).
+**Why.** A backup copy is the stolen-disk case plus rollback material; the `platform` wrap cannot survive the move anyway, and
+PqChat's store is a device-bound cache recovered from chain state.
+**Cost if wrong.** A new phone starts without profiles until the user imports them; the other way, sealed profiles and their
+older revisions sit in a cloud account open to offline guessing.
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, C1: exclude; [mobile key storage note](research/2026-11-27-mobile-key-storage.md) §4, §7 item 6.
+
+<a id="CLI-SDK-35"></a>
+### CLI-SDK-35 — One `SignReview` model in the SDK, from descriptors compiled into it; third-party descriptors pinned by hash; simulation as supporting evidence only
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#CLI-SDK-35 · superseded-by: —
+
+**Rule.**
+- **(E1) One `SignReview` model, one source.** For every operation, record and app call the SDK emits one `SignReview`: typed rows
+  (amounts with decimals and symbol, UAs with kind and book name, chains, times, durations, hashes and the length and sha256 of
+  crypto bytes), each with its source (signed, request, derived, simulated) and visibility (public, encrypted on chain, local
+  only); the steps (the "N transactions" line); the payer and the cost path; alternatives and deferred costs; and warnings
+  with three severities (Info shown, Caution shown beside its rows, Block disables confirm) and stable codes, computed in the
+  SDK. Today's flat list of every signed field ([CLI-SDK-08](clients/scaas-sdk.md#CLI-SDK-08)) stays as the model's raw
+  section, its rows still `ReviewField`. The model is built from **descriptors compiled into the SDK**, one per `(struct, domain kind)` of
+  `smartcontracts/vectors/typed/typed_ops.json`, keyed by the pinned typehash; a test holds that every row has exactly one
+  descriptor and that every field of the struct is in it. The contract a review names is bound through the chain profile's
+  curated contracts, then the factory (`isRegisteredToken`, `versionOf`, `isTokenDeprecated`); a token of an unregistered
+  release is a Block outside dev builds. **No descriptor is fetched at run time**, from a dApp, a node or a registry. Every
+  front-end (scaas-app's four, the web build and the extension, `scaas-tui`) renders every section, row and warning, and passes
+  one golden vector set of review JSON. The warnings of [CLI-APP-09](clients/app.md#CLI-APP-09) become codes of this model.
+  Descriptors are display only: no signed byte, typehash or contract changes.
+- **(E2) A third party's descriptor** enters only as release data pinned by hash, reviewed like the token list, and is shown
+  with its origin and a Caution; without one, the call is shown raw (its entry and the named arguments of the app core's ABI).
+- **(E3) An ERC-7730 export** for outside signers, generated from the same descriptors: later, optional; nothing depends on it.
+- **(E4) A pre-sign simulation** of opaque and inner calls (an `mtxExecute` inner call, an app call) is built, as supporting
+  evidence only: its rows are marked simulated and carry their basis (one endpoint, or the strict majority of
+  [ARCH-POS-15](#ARCH-POS-15) with how many agreed of how many); nodes that disagree raise a Caution; a simulation never lowers
+  a severity a descriptor set, and a discovered endpoint alone never clears a warning. First-party structs get none (the
+  decoded struct is the effect); the post-sign simulation stays as built. No simulation vendor in the SDK. No review line is
+  computed from decrypting a ciphertext someone else chose ([ARCH-POS-13](#ARCH-POS-13)).
+
+**Names** (owner 2026-11-27): the model is `scaas_sdk::SignReview` (never a bare "Review", which in this repository means a code or
+spec review); a raw row stays `ReviewField`; a warning is `ReviewWarning` (stable code, severity Info / Caution / Block); a
+descriptor is `SignDescriptor`, keyed by the typehash.
+
+**Status.** SPECIFIED, nothing built; built after the pre-freeze tag, before the freeze, with scaas-app and the extension
+(owner 2026-11-27); the model's field names are fixed by the SDK spec, not here. UNAUDITED.
+**Why.** Six front-ends writing the warnings six times drift (CLI-APP-09 already exists for one); a descriptor fetched at run
+time adds a party the user must trust and lets whoever serves it change what the user is shown.
+**Cost if wrong.** A front-end that omits a warning another shows; a display a registry or a node can alter.
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, E1 one review model from SDK descriptors, no run-time fetch, the single source; E2 hash-pinned with a Caution; E3 later; E4 build it, as supporting evidence only, its majority basis shown; [clear-signing note](research/2026-11-27-clear-signing.md) §4 to §8. Name (owner 2026-11-27): the model is `SignReview`, not "Review", to keep it apart from code and spec reviews; `ReviewField` keeps its name.
+
+<a id="CLI-SDK-36"></a>
+### CLI-SDK-36 — An app core signs a record only after the user's confirm
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#CLI-SDK-36 · superseded-by: —
+
+**Rule.** An app core (`pqchat-core`, `pqvault-core`, a third party's) builds the typed record and its quote (from the record's
+sizes and the SDK's gas rows) for the review, and calls the SDK's signing entry for that record only on the user's confirm of
+that review; a review the user leaves produces no signature call. The simulation follows the signature, as today. A PqChat
+message keeps [CLI-PQC-04](clients/pqchat-core.md#CLI-PQC-04)'s form: the user's send is its confirm. A test per core: a review
+left makes zero signing calls, its confirmed twin one.
+**Status.** SPECIFIED. BUILT-gap: today both cores sign when they build a record, before the review (`pqchat-core` for its
+session, epoch and topic records; `pqvault-core` for its vault records), found in `scaas-tui`'s plan work.
+**Why.** A signature made before the confirm exists whether or not the user agrees; a relayer or a bug may then submit it.
+**Cost if wrong.** A signed record the user declined, valid on chain.
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, F4: sign after the user's confirm, everywhere, PqVault included; [public topics note](research/2026-11-27-public-topics-ui.md) §8 G6; [PqVault UI note](research/2026-11-27-pqvault-ui.md) §8 row 23, §9 G16.
+
+<a id="CLI-SDK-37"></a>
+### CLI-SDK-37 — scaas-app in the browser: one signer, typed EOA messages only, the top frame, bridge mode first, the passkey residual accepted
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#CLI-SDK-37 · superseded-by: —
+
+**Rule.** For scaas-app's web build and browser extension over the SDK's JS binding:
+- **(I1) Re-open after suspension** on Firefox and Safari desktop: at unlock the key host draws a random 32-byte session key,
+  seals the SDK's re-open state under it in IndexedDB and keeps the session key in `storage.session`; a restarted event page
+  re-opens from them; the idle lock deletes both.
+- **(I2) One browser signer: the SDK.** The SCaaS app SPA's clientkeys key worker is not a second signer in the web build or
+  the extension.
+- **(I3) dApp messages:** a native EOA signs a dApp's typed EIP-712 data only, with a decoded review; never `eth_sign` or
+  `personal_sign`. A UA key never signs a message a dApp chose ([CLI-SGN-29](clients/signers-clientkeys.md#CLI-SGN-29)).
+- **(I4) The provider** is injected in the top frame only.
+- **(I5) Bridge mode first:** the extension forwards requests to the installed native app by native messaging, keys in the
+  native SDK; the wasm key host in the extension comes after it.
+- **(I6) Accepted risk, documented.** A `webauthn-p256` UA key binds `rpIdHash` and no origin
+  ([accounts](contracts/accounts.md), "Passkey id without origin (decided)"), so any browser extension with host permissions
+  over the `rpId`'s domain can ask the user's authenticator for an assertion over a challenge it chose, and the platform prompt
+  shows the `rpId`, not the operation. Accepted for now; an origin-bound passkey kind may be revisited later.
+
+Chat in the web build and the extension is [CLI-PQC-19](#CLI-PQC-19)'s (G5); PqVault there is [CLI-PQV-16](#CLI-PQV-16)'s (H10).
+**Status.** PLANNED: neither the web build nor the extension is built; the SDK's JS binding is BUILT
+([CLI-SDK-12](clients/scaas-sdk.md#CLI-SDK-12)).
+**Why.** One signer keeps one review and one key path; an untyped message is a blind signature; a subframe is another origin
+the user did not choose; the native SDK holds keys with its own memory protection, which an extension's wasm cannot match.
+**Cost if wrong.** A session key in browser memory outside the SDK (I1, stated); a dApp that phishes an assertion through
+another extension (I6, stated).
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, I1 session key (as MetaMask), I2 the SDK only, I3 typed EIP-712 only, never `eth_sign`, UA keys never, I4 top frame only, I5 bridge first, I6 accept for now, document, revisit an origin-bound kind later; [web and extension note](research/2026-11-27-web-extension-wallet.md) §1.1, §1.5, §2.3, §7.4, §7.6.
+
 ### CLI-UPR-31 — Each profile has its own Matrix: its logins, session, store, crypto keys and device id; nothing Matrix-side is shared between profiles
 - old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-31 · superseded-by: —
 
@@ -13200,6 +13433,20 @@ Change (owner 2026-11-24, the answer to spec §16 Q-T7, on the Source line; owne
 
 **Cost if wrong.** A key that quits or confirms by mistake; a TUI unusable inside tmux.
 **Source.** Owner 2026-11-24: agreed to the controller's proposal (no tmux keys, Vim as an option, a basic modeless map by default); the [chat TUI survey](research/2026-11-24-chat-tui-survey.md).
+
+<a id="CLI-TUI-19"></a>
+### CLI-TUI-19 — The view-model link: the TUI pins a scaas-app commit and replays its fixtures; Qt keeps the C ABI and JSON
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#CLI-TUI-19 · superseded-by: —
+
+**Rule.** (B1) `scaas-tui` follows scaas-app's view-model contract (`app-common/viewmodel/`) by a pinned scaas-app commit whose
+flow fixtures it replays in its own tests; it takes no git or crate dependency on scaas-app (this repository never depends on
+scaas-app). A contract change reaches the TUI by moving the pin, and the replay is the check. (B2) scaas-app's Qt front-end keeps
+its C ABI with named-field JSON values and does not use cxx-qt (scaas-app's own item; recorded here because the view-model link
+is shared).
+**Status.** SPECIFIED, nothing built.
+**Why.** The fixtures hold the TUI to the same flows as the other front-ends without inverting the dependency direction.
+**Cost if wrong.** A TUI that drifts from the contract unnoticed, or a build of this repository that needs scaas-app.
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, B1 pinned commit and fixtures, B2 no cxx-qt, keep the C ABI and JSON; [view-model note](research/2026-11-27-viewmodel-codegen.md) §5, §7.
 
 ### CLI-TUI-30 — Owner rulings of the TUI spec, 2026-11-09 to 2026-11-17
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-TUI-30 · superseded-by: —
@@ -13498,6 +13745,88 @@ Change (2026-11-23, plan T1b and T2; controller calls confirmed by the controlle
 Change (2026-11-23, plan T2's signing operations and record check; controller calls, owner: no; status: `ua-rs` BUILT, UNAUDITED): (1) **the tree's signed records** `PqChatCommit`, `PqChatTreeLeave`, `PqChatTreeRemove` are `pqchat::TREE_RECORDS`, signed only through prepare → review → sign (the SDK's T26 A-5): `AppKeys::tree_prepare_commit` builds the commit inside the boundary and returns `PreparedCommit`, `tree_prepare_leave` / `tree_prepare_remove` rebuild their record from named fields and return `TreePrepared`; the review is every field in the type's order, then `adminsChanged` and `sessionInfo` (a commit) or `cannotComeBack` (a leave or removal); `sign` opens the key and signs exactly that record under the scope's purpose. `pqchat::sign` and `pqchat::verify` keep refusing them (not in `RECORDS`). (2) **The registry KEM record check** (spec §8 step 5) is `tree_public::kem_record_key(ua, version, KemRecord)` over the record the caller read (`kemKeyAt` with its signature, or `registrationOf` for version 0; no read in `ua-rs`); creation and every Add take a `KemRecord`, a target leaf of an epoch-0 head comes as `TargetKey::Record`, every other target as bytes under the hash that entered the root, all checked before an encapsulation; a record that does not authenticate is `TreeKemRecord`, a key another hash names `TreeKeyHash`.
 Change (2026-11-24, E-1 (P0), C-1, B-1, F-1 (P1), C-3, F-2, E-2, F-3 (P2) of Fable's code review of 2026-11-24; controller calls; owner: no; status: SPECIFIED, `ua-rs` and clientkeys follow): **C25** old, a device took the roster of each epoch from the served head snapshot with the later commits undone, anchored to the head's signed `treeHash`, and read records from its join's parent; new, it **verifies the chain forward** from the cold tree rebuilt from the session record's signed `members` (or from the public tree it verified itself at its pin): for each record the id at its number, `treeId`, the signature for the signer's kind, the parent's id and the walk's tree hash, the author's live leaf, not gone, and its right on the tree built so far, and the tree after it against its signed `treeHash`; a device with no verified tree, a commit joiner included, reads every record from the session record. A served snapshot is only compared. **C26:** a record that fails the walk is a lying read, never followed, pinned or built on; the commit-signing operation builds on the walk's tree only, at an epoch-0 head on the rebuilt cold tree, every leaf position compared. **Rights (F-2, E-2):** dropping a `gone` admin from `admins` is plain, and a non-admin's `admins` is the parent's less every UA gone at the parent, as the contract judges it. **Signers (F-3):** every tree record's signature is verified for the signer's kind (single key, `msig`, WebAuthn). **Evidence (E-3):** an exit is found under the epoch it was applied at, its signer an admin of that epoch. Why: a snapshot is bound only to the head record its own author signs, so an endpoint with any registered key forged a followed head. Cost: one record per epoch since the device's verified tree, every record since creation for a fresh restore. Source: Fable code review 2026-11-24, areas B, C, E, F; the spec's §8, §10, §17.
 Change (2026-11-24, the spec check of 2026-11-24 (Fable, `sc-F-n` and `sc-E-n`); controller calls; owner: no; status: SPECIFIED, `ua-rs` and clientkeys follow): the exit evidence is judged order-free as the contract could accept it (above, CTR-CHAT-27's Change of the same round), from the fixed exit lists of every epoch; the pin keeps the verified exits; the walk bounds before it allocates and applies every acceptance check on its inputs; a device with no verified tree writes its first pin only from a strict-majority read over at least 3 named endpoints, else it shows the head as "unconfirmed"; a head with `owed > 0` is shown as "removal pending", the honouring commit offered next; a fresh restore costs every record since creation and up to 256 authenticated registry key reads. Source: Fable spec check 2026-11-24 (sc-E-1, sc-E-7, sc-E-8, sc-F-1 to sc-F-4, sc-F-7 to sc-F-9, sc-F-11).
+
+<a id="CLI-PQC-18"></a>
+### CLI-PQC-18 — Public topics on the client: relayed writes by default, local drafts, window sorts and the fold; time and batch views for the next `PqChat` release
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#CLI-PQC-18 · superseded-by: —
+
+**Rule.**
+- **(F3) Relayed topic writes by default.** `pqchat-core` sends the six topic records (`PqTopic`, `PqTopicUpdate`,
+  `PqTopicWriter`, `PqTopicEntry`, `PqTopicEdit`, `PqTopicVote`) through a gateway over the node's PqChat rows
+  ([job-api](node/job-api.md)) as the default path, a fee of 0 allowed or a `RelayFeeRouter` fee
+  ([CTR-MTX-27](contracts/metatx.md#CTR-MTX-27)); the payer's own transaction stays an option
+  ([CTR-CHAT-19](contracts/pqchat.md#CTR-CHAT-19)).
+- **(F4)** Each record is signed only after the user's confirm ([CLI-SDK-36](#CLI-SDK-36)).
+- **(F5) Drafts** are local only, kept in the profile's sealed store ([CLI-UPR-12](clients/scaas-sdk.md#CLI-UPR-12)), never
+  synced or sent.
+- **(F6) Sorts, pages and the fold.** New (the default, the list read from its end) and Old; Top (`up − down`) and
+  Controversial over the newest 256 ids of a list, Best (the Wilson lower bound, z = 1.2816) over the first 256 replies of a
+  parent, a longer list labelled "scored among the latest 256"; pages of 16 to 32 ids against a snapshot total (the crate clips
+  at 64); an entry with `down − up` of 5 or more folds, never silently: a "hidden by your filter" row stays and reveals it. Hot
+  and Active are not offered until entries carry a time.
+- **(F1, F2) Contract additions, for the next `PqChat` release** (EVM, where topics are built; a family port takes the same
+  views when it is built): `postedAt` (`uint64`, `block.timestamp`) packed into the entry's slot and `editedAt` beside each
+  version pointer, no new slot, returned by `entryOf` and `versionAt` (G1); a batched view `entryRows(bytes32[] ids, bytes32
+  viewer)` giving per id the entry without its body, the body's length, `up`, `down`, the viewer's vote and the direct reply
+  count (G2); the version's `nonce` in `entryOf` and `versionAt`, so a `ref`'s pinned `contentHash` can be checked (G5). The
+  layout and gas pins move with their old and new figures; record typehashes and vectors stay.
+
+**Status.** F3 to F6 SPECIFIED, nothing built (today a topic write goes only by the payer's own transaction, and the record is
+signed before the review); F1 and F2 PLANNED for the next contract release. UNAUDITED.
+**Why.** A UA with no gas can post; a page of 16 posts costs about 65 reads today and about 2 with G2; Hot needs a time no
+entry carries.
+**Cost if wrong.** Posting only for funded UAs; feeds slow enough that clients add an indexer the state rule does not need.
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, F1 yes with the next contract release, F2 yes, F3 yes with a fee of 0 allowed, F4 yes everywhere, F5 local only in the profile's sealed store, F6 as proposed (a 256-id window); [public topics note](research/2026-11-27-public-topics-ui.md) §6, §7.3, §8, §10.
+
+<a id="CLI-PQC-19"></a>
+### CLI-PQC-19 — Chat in the front-ends: Matrix rooms and PqChat sessions as two row kinds, private Matrix defaults, PqChat pushes on opt-in, chat in the web build later
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#CLI-PQC-19 · superseded-by: —
+
+**Rule.**
+- **(G1) Two row kinds that never mix,** in every chat front-end, `scaas-tui` included: a Matrix room is marked as Matrix with
+  classical end-to-end encryption, a PqChat session as PQ with its mode, epoch and members by UA; the room that carries a
+  session's envelopes is never listed as a Matrix room and its held invite never as a Matrix invite
+  ([CLI-PQC-05](clients/pqchat-core.md#CLI-PQC-05), [CLI-PQC-08](clients/pqchat-core.md#CLI-PQC-08)). The TUI chats over plain
+  Matrix too, through `scaas-matrix` ([CLI-PQC-20](#CLI-PQC-20)), with its device verification and recovery; every secret
+  there (a recovery key) is entered in a secret field.
+- **(G2) Matrix rooms:** read receipts private (`m.read.private`), public on opt-in; typing notices off, on opt-in; presence off.
+- **(G3) PqChat pushes:** none by default; on the user's opt-in, `event_id_only` pushes for `net.scaas.pqchat.v1` with a generic
+  text, no sender and no session name; none for a hidden profile.
+- **(G4) PqChat typing:** off; a bound room carries no Matrix ephemeral event (CLI-PQC-05, as built), and the in-session
+  `typing` content is off by default.
+- **(G5) Chat in the web build:** yes, later; in the browser extension: no.
+
+**Status.** SPECIFIED; G2 to G4 are defaults of `scaas-matrix` and `pqchat-core`, nothing of them built beyond CLI-PQC-05's
+transport rule; G1 in the TUI and the apps; G5 scaas-app's.
+**Why.** A public receipt, a typing notice and presence are timing metadata to the homeserver and every member; a push
+reaches the seed while it may be locked and its text reaches the push service.
+**Cost if wrong.** A PqChat room shown as an ordinary room, or chat metadata leaked by a default the user never chose.
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, G2 to G5; G1 changed by the owner the same day: the TUI also chats over plain Matrix, Matrix rooms and PqChat sessions as two row kinds that never mix; [chat UI note](research/2026-11-27-matrix-chat-ui.md) §1, §8, §9.4, §9.5, §12.
+
+<a id="CLI-PQC-20"></a>
+### CLI-PQC-20 — `scaas-matrix`: one Matrix client crate in this repository, one client per open user profile
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#CLI-PQC-20 · superseded-by: —
+
+**Rule.** scaas-app's planned `app-matrix` (not built) moves into this repository as its own crate `clients/scaas-matrix`
+(working name). It runs the matrix-rust-sdk client: login, sync, Matrix end-to-end encryption and device verification, and the
+privacy defaults of [CLI-PQC-19](#CLI-PQC-19) (G2 to G4). It implements `pqchat-core`'s transport trait (`MatrixTransport`,
+`src/matrix.rs`) and passes its conformance test (`tests/matrix_conformance.rs`). `pqchat-core` still pulls no Matrix crate
+into its normal dependency graph (`tests/deps.rs` stands); it uses `scaas-matrix` in its e2e only. `scaas-matrix` is not part of
+`scaas-sdk`, which names no chat ([CLI-SDK-14](clients/scaas-sdk.md#CLI-SDK-14)). scaas-app's four front-ends, `scaas-tui` and
+`pqchat-core`'s e2e all use it, so this repository never depends on scaas-app. CI builds it only where it is needed; cargo-deny,
+cargo audit and the licence allow-list cover its dependency tree.
+**Each user profile has its own Matrix:** its own Matrix login or logins, session, store, crypto keys and device id, sealed in
+that profile (the store key [CLI-UPR-29](#CLI-UPR-29)); nothing Matrix-side is shared between profiles. There is one
+`scaas-matrix` client per open profile, not per app, and a profile switch closes the current profile's client before the other
+opens ([CLI-UPR-07](clients/scaas-sdk.md#CLI-UPR-07)).
+**Status.** PLANNED, nothing built; it replaces scaas-app's `app-matrix` (its contract §11, plan M1 to M7) as the Matrix client
+those apps link.
+**Why.** The TUI and `pqchat-core`'s e2e need a real Matrix client inside this repository without depending on scaas-app; one
+crate keeps one Matrix stack for every front-end. A profile's Matrix identity is part of that profile's local identity, as its
+seeds are (CLI-UPR-03, CLI-UPR-04).
+**Cost if wrong.** Two Matrix stacks that drift, or a dependency into the app repository; one profile's Matrix account or keys
+reachable from another profile.
+**Source.** Owner rulings 2026-11-27 (chat, through the coordinator): G6 replaced: `app-matrix` moves into this repository as its own crate `clients/scaas-matrix`, one matrix-rust-sdk client and one login per app, implementing `pqchat-core`'s transport trait, not part of the SDK, used by scaas-app's four front-ends, `scaas-tui` and `pqchat-core`'s e2e, built only where needed in CI; then, the same day: each user profile has its own Matrix, one `scaas-matrix` client per open profile, not per app, switching closes the current profile's client first; [chat UI note](research/2026-11-27-matrix-chat-ui.md) §9.5, §10.
 
 ### CLI-PQC-30 — Owner rulings for `pqchat-core`, 2026-11-17
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-PQC-30 · superseded-by: —
