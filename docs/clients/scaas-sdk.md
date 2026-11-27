@@ -436,7 +436,9 @@ first). Same entry: BUILT, UNAUDITED.
 
 **Sign after confirm** (owner 2026-11-27): an app core builds the typed record and its quote for the review and calls the
 SDK's signing entry only on the user's confirm; a review left makes no signing call: [CLI-SDK-36](../decisions.md#CLI-SDK-36).
-The quote before the signature is `AppCore::quote_app_call(chain, contract, entry, args, payer, signer)` (BUILT, UNAUDITED):
+The quote before the signature is `AppCore::quote_app_call(chain, contract, entry, args, payer, signer)` (BUILT, UNAUDITED;
+the payer checked first, an app row's `per_item` counting the one argument array of its name, the record's `sig` not
+counted, [CLI-PQV-17](../decisions.md#CLI-PQV-17) (7)):
 `prepare_app_call`'s review and contract checks over the arguments with the record's `UASig` empty, and the payer's quote from
 the gas tables alone, never a simulation: the base row `(entry's name, "app", not fresh)` and the signer kind's verify row (its
 `sig_bytes` at the calldata price), the transaction row with the unsigned calldata, in the lookup order chain → module →

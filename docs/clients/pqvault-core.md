@@ -63,7 +63,7 @@ Status: **BUILT** (`src/item.rs`; `tests/vectors.rs`), except the TOTP code (H4)
 calls, **SPECIFIED** ([CLI-PQV-16](../decisions.md#CLI-PQV-16) H4 to H10).
 
 An `Item` is `{ ty, fields, history }`: each field a `Field` of the kind one table gives it, `Plain(value)`,
-`Secret(SecretBytes)` (a text), `Custom([...])` (the custom fields, each declaring itself secret) or `Opaque(SecretBytes)` (a
+`Secret(SecretBytes)` (a text), `Custom([...])` (the custom fields, each declaring itself secret) or `Opaque(bytes)` (a
 field this client does not know, its canonical JSON kept byte for byte, never shown); `history` holds the merge's losing
 values, typed as their field is, so a secret's earlier value stays a secret. The table, the `card` and `identity` fields,
 `hideBody` and the custom fields are pinned in [spec §6.8](../superpowers/specs/2026-11-17-pqvault.md#68-the-item-plaintext)
@@ -92,8 +92,16 @@ returns `Confirmed`: the signed record whatever the call did. A refused simulati
 `PqVaultVersion`) sends nothing; the front-end then offers `resolve`. A node that did not answer sends nothing either;
 `prepare_signed` calls the same signed record again, with no second signature. A `Prepared` does not track the vault: a
 front-end drops its open ones when it locks the vault (a stale one is refused by the contract, after its signature). What a
-front-end does with `Confirmed.call`'s quote before it sends (send when within the reviewed quote, else a second confirm)
-is an open point for the owner (review D-6). The rule is [CLI-SDK-36](../decisions.md#CLI-SDK-36); the SDK's side is
+front-end does with `Confirmed.call`'s quote before it sends is [CLI-PQV-18](#CLI-PQV-18); a `Confirmed` it abandons is
+a valid signed record still, and it drops it.
+
+<a id="CLI-PQV-18"></a>**CLI-PQV-18** — **After the confirm, a front-end sends the call on that confirm only when the fresh
+quote is within the reviewed one: the same payer and a `max_cost` at most the reviewed `max_cost`; otherwise it shows the
+fresh quote and asks a second confirm, and nothing is sent without one** (owner 2026-11-27; BUILT, UNAUDITED).
+`Confirmed::within_review()` decides it in `pqvault-core` (`Confirmed.reviewed` holds the quote the user saw): `true`
+sends on the first confirm; `false` (a higher cost, another payer, no payer named, an unquoted review, a failed call, a
+figure that does not parse) asks the second. Tests `tests/devices.rs`
+`a_fresh_quote_within_the_review_needs_no_second_confirm`. The rule is [CLI-SDK-36](../decisions.md#CLI-SDK-36); the SDK's side is
 [scaas-sdk.md](scaas-sdk.md) ("Sign after confirm").
 
 ## 5. Stores

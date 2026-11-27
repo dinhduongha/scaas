@@ -11969,23 +11969,45 @@ secret in memory they cannot wipe; a breach check over another member's version 
 does not know (a secret that is no text, a custom list or a history of another shape) and a `null` are kept as they were
 read and written back on an edit; a kept part must itself be canonical JSON, the whole item nesting at most 8 (else
 `Unreadable`). (2) **The merge retypes.** Values compare by their canonical JSON; every merged value, history included, is
-retyped by the merged item's table, so a body hidden on either side stays hidden and a secret's earlier value stays secret;
-a tombstone on one side against an edit on the other keeps the edit whole, `deleted` recorded in its history as a conflict
-on `type`; against no edit the tombstone stands. (3) **At most 64 secrets per item read** (`Unreadable` above); a kept part
-is a zeroizing heap buffer, not a locked block. (4) **`Item`'s `Debug` prints counts only** (CLI-PQV-03). (5)
+retyped by the merged item's table, so a secret's earlier value stays secret; a merge never un-hides a note's body (hidden
+on either side, the merged note is hidden, a conflict on `hideBody` when the other side un-hid it); a tombstone on one
+side against an edit on the other keeps the edit whole, `deleted` recorded in its history as a conflict on `type`; against
+no edit the tombstone stands; a losing value too deep for the history, or one beside a history kept in a newer client's
+shape, is not recorded (its version stays on chain). (3) **At most 64 secrets per item**, read (`Unreadable` above) and
+written (`Shape` above); the merge drops the oldest history entries while the item holds more (every version stays on
+chain); a custom list kept as it was counts none; a kept part is a zeroizing heap buffer, not a locked block, and stands
+only where a reader would keep one (a secret's text or a plain value given as a kept part is `Shape`); a kept `null` is
+no value to bound. (4) **`Item`'s `Debug` prints counts only** (CLI-PQV-03). (5)
 **`confirm` returns `Confirmed { signed, wraps, call }`**: once signed, the record comes back whatever the call did, so a
 node that did not answer costs no second signature (`prepare_signed` calls it again); `Err` only when nothing was signed.
-(6) `Prepared`'s fields are read-only; a front-end drops its open `Prepared`s when it locks the vault. (7) The SDK's
-`quote_app_call` checks the payer first, counts an app row's `per_item` as the one argument array of its name (top level
-or one level down), and quotes a native or imported signer; an `msig`, a group or a stored key stays unquoted.
+(6) `Prepared`'s fields are read-only; a front-end drops its open `Prepared`s when it locks the vault, and an abandoned
+`Confirmed`. (7) The SDK's `quote_app_call` checks the payer first, counts an app row's `per_item` as the one argument
+array of its name (top level or one level down; the record's signature `sig` not counted), and quotes a native or
+imported signer; an `msig`, a group or a stored key stays unquoted. (8) `Merge`'s `Debug` prints counts only.
 **Status.** BUILT, UNAUDITED (branch `pqvault-ui-rules`; `src/item.rs`, `src/vault.rs`, the SDK's `app_core.rs`).
-**Why.** The findings of the Fable review of 2026-11-27 (C-1 to C-5, D-5, D-12, A-1, A-2, B-1, B-2): an item a newer
+**Why.** The findings of the Fable review of 2026-11-27 (C-1 to C-5, D-5, D-12, A-1, A-2, B-1, B-2) and of its re-check
+(R-1 to R-8): an item a newer
 client wrote stays editable, a merge never moves a hidden body or a secret into plain, a member's item cannot ask for
 unbounded locked memory, a transient node error never costs a second signature.
 **Cost if wrong.** (2): a delete on one device is undone by an edit on another until the user deletes again; (3): an
 honest item with more than 64 secrets (history included) is unreadable on this client.
-**Source.** The review `scratchpad/pqvault-ui-rules-review-20261127-1556/` (local), [CLI-PQV-16](#CLI-PQV-16),
-[CLI-SDK-36](#CLI-SDK-36).
+**Source.** The review `scratchpad/pqvault-ui-rules-review-20261127-1556/` and its re-check
+`scratchpad/pqvault-ui-rules-recheck-20261127-1918/` (local), [CLI-PQV-16](#CLI-PQV-16), [CLI-SDK-36](#CLI-SDK-36).
+
+### CLI-PQV-18 — After the confirm, the call is sent on that confirm only within the reviewed quote; else a second confirm
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/pqvault-core.md#CLI-PQV-18 · superseded-by: —
+
+**Rule.** (Summary; normative [pqvault-core.md](clients/pqvault-core.md#CLI-PQV-18).) After `confirm`, a front-end sends
+the signed record's call if the fresh quote is within the reviewed quote (the same payer, a `max_cost` at most the reviewed
+`max_cost`); otherwise it shows the fresh quote and asks a second confirm before sending. Nothing is sent without one.
+**Status.** BUILT, UNAUDITED: `pqvault-core` `Confirmed::within_review()` and `Confirmed.reviewed`; front-ends hold the
+second confirm.
+**Why.** The user agreed to a cost; a simulation after the signature can find a higher one or another payer, which the user
+has not seen.
+**Cost if wrong.** A payment above what the user reviewed; or a second confirm the user finds needless (only when the cost
+rose, the payer changed or the review was unquoted).
+**Source.** Owner ruling 2026-11-27 on the open point D-6 of the Fable review of `pqvault-ui-rules` (relayed by the
+coordinator); [CLI-SDK-36](#CLI-SDK-36).
 
 <a id="CLI-UAL-62"></a>
 ### CLI-UAL-62 — Owner rulings of the native round, 2026-11-17
