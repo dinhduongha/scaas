@@ -948,13 +948,12 @@ fn row(up: u128, down: u128) -> EntryRow {
 }
 
 fn order(rows: &[(u128, u128)], sort: Rank) -> Vec<u64> {
-    let mut v: Vec<(u64, EntryRow)> = rows
+    let v: Vec<(u64, EntryRow)> = rows
         .iter()
         .enumerate()
         .map(|(i, (u, d))| (i as u64, row(*u, *d)))
         .collect();
-    rank(&mut v, sort);
-    v.into_iter().map(|(i, _)| i).collect()
+    rank(v, sort).into_iter().map(|(i, _)| i).collect()
 }
 
 /// F6: each sort's order, ties by the lower index, the same whatever order the rows come in (every client alike): Top by
@@ -971,14 +970,13 @@ fn window_sorts_are_deterministic() {
     assert_eq!(order(&best, Rank::Best), vec![2, 1, 0, 4, 3, 5]);
     // the same rows reversed: the same order by index
     for sort in [Rank::Top, Rank::Controversial, Rank::Best] {
-        let mut v: Vec<(u64, EntryRow)> = rows
+        let v: Vec<(u64, EntryRow)> = rows
             .iter()
             .enumerate()
             .map(|(i, (u, d))| (i as u64, row(*u, *d)))
             .rev()
             .collect();
-        rank(&mut v, sort);
-        let got: Vec<u64> = v.into_iter().map(|(i, _)| i).collect();
+        let got: Vec<u64> = rank(v, sort).into_iter().map(|(i, _)| i).collect();
         assert_eq!(got, order(&rows, sort), "{sort:?}");
     }
     let big = [(u128::MAX, u128::MAX - 1), (u128::MAX, 0), (2, 1)];

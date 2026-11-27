@@ -831,8 +831,7 @@ impl PqChat {
         let rows = self.entry_rows(on, &names, viewer, fold_at).await?;
         // whole only when every index of the list was read, each a distinct id (reviews A-9, E-8)
         let read = ids.len() as u64;
-        let mut rows: Vec<(u64, EntryRow)> = ids.into_iter().map(|(i, _)| i).zip(rows).collect();
-        rank(&mut rows, sort);
+        let rows = rank(ids.into_iter().map(|(i, _)| i).zip(rows).collect(), sort);
         Ok(Ranked {
             rows,
             total: snapshot,
@@ -883,8 +882,9 @@ fn big(v: &Value) -> Result<u128, PqChatError> {
 }
 
 /// `rows` (each with its list index) in `sort`'s order, highest first, ties by the lower index (F6). Integer arithmetic only
-/// but Best's: `+ − × ÷ √` on `f64`, correctly rounded under IEEE 754 on every target, so every client orders alike.
-pub fn rank(rows: &mut [(u64, EntryRow)], sort: Rank) {
+/// but Best's: `+ − × ÷ √` on `f64`, correctly rounded under IEEE 754 on every target, so every client orders alike. By
+/// value: the bindings take no mutable slice.
+pub fn rank(mut rows: Vec<(u64, EntryRow)>, sort: Rank) -> Vec<(u64, EntryRow)> {
     match sort {
         Rank::Top => rows.sort_by(|a, b| net(&b.1).cmp(&net(&a.1)).then(a.0.cmp(&b.0))),
         Rank::Controversial => rows.sort_by(|a, b| {
@@ -896,6 +896,7 @@ pub fn rank(rows: &mut [(u64, EntryRow)], sort: Rank) {
             rows.sort_by(|a, b| wilson(&b.1).total_cmp(&wilson(&a.1)).then(a.0.cmp(&b.0)))
         }
     }
+    rows
 }
 
 /// `up − down` as an ordered pair: the sign (up ≥ down), then the magnitude, larger better when positive.
