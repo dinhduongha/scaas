@@ -47,6 +47,7 @@ ARCH-POS-15. Order of sources: AGENTS.md "Which source wins".
 | O16 | 2026-11-28 | The label's associated data binds the envelope's revision: `lp("scaas.profile.label") ‖ be16(1) ‖ lp(id) ‖ be64(rev)` (§7.1), and the label is re-sealed at every envelope write. An older envelope written back with its `rev` raised opens its wrap and fails its label at that `rev`: `ProfileRollback` (review F-2). A pinned-format change: clientkeys and the vectors first, then `ua-rs`, `scaas-profile` and the SDK; no old-format reader (test-only chains). | CLI-UPR-12, CLI-UPR-19 |
 | O17 | 2026-11-28 | A deleted id keeps a permanent tombstone marker, `p/.tombstones/<id>` (an empty file), written by a delete before its rename and by start before it finishes a tombstone, kept until the user purges the markers (`purge_tombstones` with a confirm). A profile directory under a marked id is refused at start (`Event::ProfileRollback`) and at open (`ProfileRollback`): never listed, searched or opened, its keychain items never used. It closes the two-step put-back of review G-1 (the live directory renamed to its tombstone, start removes it with its keychain items, an old copy put back). | CLI-UPR-15, CLI-UPR-20 |
 | O18 | 2026-11-28 | `set_passphrase` on a migrated "default" (`migration: pending`, a keystore moved in) shows the seeds being moved and needs the user's confirm: the SDK's `migrated_seeds()` gives their count and labels from the keystore's public fields, and `set_passphrase(…, Some(ConfirmMigratedSeeds { seeds }))` requires that count; without it, or with another count, `ConfirmationMissing`, nothing written (the crate takes `ConfirmMigratedKeystore` for the same refusal). It answers review G-3: `migration: pending` is not authenticated, so a keystore a root writer planted is never sealed unseen. | CLI-UPR-11, CLI-UPR-12 |
+| O19 | 2026-11-28 | The reverse of a strengthening counts as weakening and needs the profile passphrase: a chain profile's `strict_majority` turned off, a lowered cap raised or removed (per chain profile and global), alongside the list's turning the idle lock off or lengthening it and turning the clipboard on (§7.7); the import's filter keeps only what strengthens the defaults (review G-5, A-15). | CLI-UPR-26 |
 
 Standing rules applied: secrets never leave the SDK and every KDF, AEAD and MAC runs in `ua-rs` (CLI-SDK-01, CLI-SDK-02); fail closed
 with named errors; no decryption oracle (ARCH-POS-13); every RPC consumer takes a list of nodes (ARCH-POS-15); the node is open and
@@ -464,9 +465,13 @@ only after the commit.
 ### 7.7 Settings changes (CLI-UPR-26)
 
 A settings change that **could weaken** the profile needs the **profile passphrase typed** (checked against the `pass` wrap; a
-platform unlock does not count): adding an endpoint, marking one `first`, adding a credential reference, turning the idle lock off or
-lengthening it, turning the clipboard opt-in on. A change that only strengthens (a stronger RPC policy, a lowered cap, a shorter idle
-lock, the clipboard off, removing an endpoint) or picks the default chain profile needs no passphrase. So a session left open, or
+platform unlock does not count): adding an endpoint (a new label, list, chain profile or URL), marking one `first`, adding a
+credential reference, turning the idle lock off or lengthening it, turning the clipboard opt-in on, and **the reverse of any
+strengthening** (owner O19, 2026-11-28): turning a chain profile's `strict_majority` off (dropping that chain profile's settings
+included), raising or removing a lowered cap, per chain profile or global (decimal values compared by value; one that is no
+decimal counts as raised). A change that only strengthens (a stronger RPC policy, a cap lowered or lowered further, a shorter idle
+lock, the clipboard off, removing an endpoint, a `first` mark or a credential reference) or picks the default chain profile needs
+no passphrase. An import keeps without a confirm only what strengthens the defaults (§10.1). So a session left open, or
 anyone enrolled on a shared OS account (O11), cannot plant an endpoint that decides the reads.
 
 ## 8. Hidden profiles (CLI-UPR-08, CLI-UPR-13; SPECIFIED)

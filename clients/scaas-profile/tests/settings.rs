@@ -111,6 +111,81 @@ const STRENGTHEN: [(&str, Change); 7] = [
     }),
 ];
 
+/// `base()` strengthened: the policy `strict_majority` and lowered caps, global and of its chain.
+fn strong() -> ProfileSettings {
+    let mut s = base();
+    s.caps = Caps {
+        max_fee_per_gas: Some("50".into()),
+        max_gas: Some(1000),
+        max_cost: Some("9".into()),
+    };
+    let c = chain(&mut s);
+    c.strict_majority = true;
+    c.caps.max_cost = Some("5".into());
+    s
+}
+
+/// The reverse of each strengthening of [`strong`] (owner 2026-11-28, review G-5 / A-15): a weakening.
+const REVERSE: [(&str, Change); 9] = [
+    ("strict_majority off", |s| chain(s).strict_majority = false),
+    ("the chain with strict_majority dropped", |s| {
+        s.chains.clear()
+    }),
+    ("a lowered gas cap raised", |s| s.caps.max_gas = Some(1001)),
+    ("a lowered gas cap removed", |s| s.caps.max_gas = None),
+    ("a lowered fee cap raised (one digit more)", |s| {
+        s.caps.max_fee_per_gas = Some("100".into())
+    }),
+    ("a lowered fee cap removed", |s| {
+        s.caps.max_fee_per_gas = None
+    }),
+    ("a lowered cost cap raised", |s| {
+        s.caps.max_cost = Some("10".into())
+    }),
+    ("a chain's lowered cap raised", |s| {
+        chain(s).caps.max_cost = Some("6".into())
+    }),
+    ("a chain's lowered cap removed", |s| {
+        chain(s).caps.max_cost = None
+    }),
+];
+
+/// What keeps or adds to a strengthening of [`strong`]: no weakening.
+const KEEP: [(&str, Change); 4] = [
+    ("a cap lowered further", |s| s.caps.max_gas = Some(999)),
+    ("a fee cap lowered by a digit", |s| {
+        s.caps.max_fee_per_gas = Some("9".into())
+    }),
+    ("the same cap with a leading zero", |s| {
+        chain(s).caps.max_cost = Some("05".into())
+    }),
+    ("a chain's cap where none was", |s| {
+        chain(s).caps.max_gas = Some(7)
+    }),
+];
+
+/// Review G-5 / A-15 (owner 2026-11-28): the reverse of a strengthening counts as weakening (needs the passphrase); the
+/// import keeps nothing that weakens the defaults.
+#[test]
+fn reverse_of_a_strengthening_weakens() {
+    let s = strong();
+    assert!(!weakens(&s, &s), "no change");
+    for (what, f) in REVERSE {
+        let mut n = s.clone();
+        f(&mut n);
+        assert!(weakens(&s, &n), "{what}");
+    }
+    for (what, f) in KEEP {
+        let mut n = s.clone();
+        f(&mut n);
+        assert!(!weakens(&s, &n), "{what}");
+    }
+    assert!(
+        !weakens(&ProfileSettings::default(), &filter(&s, &[])),
+        "an import's kept settings only strengthen"
+    );
+}
+
 /// Spec §7.7: each weakening change is one, each strengthening change none (the pure rule).
 #[test]
 fn weakening_rule() {

@@ -7,7 +7,8 @@
 //! - **Canonical JSON**, the fields in the struct's order, `rev` first (the store's revision, `rev_of`); a missing field takes
 //!   its default; an unknown field is refused.
 //! - **Weakening** (spec §7.7): adding an endpoint (a new label, list, chain profile or URL), marking one `first`, adding a
-//!   credential reference, turning the idle lock off or lengthening it, turning the clipboard on. Nothing else needs the
+//!   credential reference, turning the idle lock off or lengthening it, turning the clipboard on, and the reverse of a
+//!   strengthening (owner 2026-11-28): `strict_majority` turned off, a lowered cap raised or removed. Nothing else needs the
 //!   passphrase.
 //! - **Import** (spec §10.1): a stronger policy, lowered caps and the default chain profile kept; each endpoint, each `first`
 //!   mark, the idle lock and the clipboard choice kept only when confirmed by its item id; credential references always
@@ -180,10 +181,46 @@ impl ProfileSettings {
     }
 }
 
+/// A lowered cap of `old` that `new` raises or removes (owner 2026-11-28, review G-5): decimal strings compared by value; a
+/// value that is no decimal counts as raised.
+fn raised(old: &Option<String>, new: &Option<String>) -> bool {
+    let value = |v: &str| {
+        v.bytes()
+            .all(|b| b.is_ascii_digit())
+            .then(|| v.trim_start_matches('0').to_string())
+    };
+    match (old, new) {
+        (None, _) => false,
+        (Some(_), None) => true,
+        (Some(a), Some(b)) => match (value(a), value(b)) {
+            (Some(a), Some(b)) => (b.len(), b) > (a.len(), a),
+            _ => true,
+        },
+    }
+}
+
+/// Whether `new`'s caps raise or remove one `old` lowered.
+fn caps_raised(old: &Caps, new: &Caps) -> bool {
+    let gas = match (old.max_gas, new.max_gas) {
+        (Some(_), None) => true,
+        (Some(a), Some(b)) => b > a,
+        (None, _) => false,
+    };
+    gas || raised(&old.max_fee_per_gas, &new.max_fee_per_gas)
+        || raised(&old.max_cost, &new.max_cost)
+}
+
 /// Whether `new` could weaken the profile against `old` (spec §7.7): an endpoint of `new` that `old` does not hold (by chain
 /// profile, list, label and URL) or holds without its `first` mark; a credential reference `old` does not hold; the idle lock
-/// off or longer; the clipboard turned on.
+/// off or longer; the clipboard turned on; and the reverse of a strengthening (owner 2026-11-28, review G-5 / A-15): a chain
+/// profile's `strict_majority` turned off (its chain dropped included), a lowered cap raised or removed, global or per chain.
 pub fn weakens(old: &ProfileSettings, new: &ProfileSettings) -> bool {
+    let none = ChainSettings::default();
+    let reversed = caps_raised(&old.caps, &new.caps)
+        || old.chains.iter().any(|(k, o)| {
+            let n = new.chains.get(k).unwrap_or(&none);
+            (o.strict_majority && !n.strict_majority) || caps_raised(&o.caps, &n.caps)
+        });
     let held = |k: &str, e: &Endpoint| {
         old.chains.get(k).is_some_and(|c| {
             c.endpoints.iter().any(|o| {
@@ -201,7 +238,7 @@ pub fn weakens(old: &ProfileSettings, new: &ProfileSettings) -> bool {
         (Some(a), Some(b)) => b > a,
         (None, _) => false,
     };
-    endpoint || credential || idle || (new.clipboard && !old.clipboard)
+    endpoint || credential || idle || (new.clipboard && !old.clipboard) || reversed
 }
 
 /// One setting of an import review (spec §10.1); every string passed the name helper.

@@ -867,7 +867,9 @@ write; a re-seal takes it from before its journal to its commit, so writers wait
 (controller call; BUILT: `scaas-profile` `weakening_rule`, `set_settings_needs_the_passphrase_to_weaken`, the SDK's
 `settings_weakening_needs_the_passphrase`). Adding an endpoint, a `first` mark or a credential reference, turning the idle lock off or lengthening
 it, and turning the clipboard opt-in on need the passphrase, checked against the envelope (a platform unlock does not count); a change
-that only strengthens, or picks the default chain profile, does not.
+that only strengthens, or picks the default chain profile, does not. **Change (owner 2026-11-28; BUILT, `scaas-profile`
+`reverse_of_a_strengthening_weakens`):** the reverse of a strengthening counts as weakening: a chain profile's `strict_majority`
+turned off, a lowered cap raised or removed, per chain profile and global.
 
 <a id="CLI-UPR-27"></a>**CLI-UPR-27** — **An import is two calls: a preview of everything in the file, then the import of the user's
 choices** (controller call; BUILT: `scaas-profile` `preview_then_import`, `import_temporary_directory`, the SDK's
