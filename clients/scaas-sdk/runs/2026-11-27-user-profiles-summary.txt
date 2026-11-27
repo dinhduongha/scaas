@@ -73,3 +73,4 @@ UP6a | sdk-clippy (UPF and default, --all-targets -D warnings) | 9ab7b83ea + UP6
 UP6a | features | 9ab7b83ea + UP6a files | 0 | check_test_features ok, every control True; feature_tree 5 / 5
 UP6a | fmt rust js toml py | 9ab7b83ea + UP6a files | 0 | every part ok
 UP6a | docs | 9ab7b83ea + UP6a files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
+UP6a | mutants up6 (one at a time) | aa921c1f7 | 0 | 9 mutants, 9 killed, 0 survived, 0 not loaded, 0 other failure
