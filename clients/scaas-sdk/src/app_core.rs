@@ -411,6 +411,16 @@ pub struct AppCall {
     pub quote: crate::wallet::NativeQuote,
 }
 
+/// A call of an app's own contract quoted before its record is signed ([`AppCore::quote_app_call`], CLI-SDK-36): the review
+/// of `prepare_app_call` with the signature empty, and the payer's quote from the gas rows (`None`: unquoted). Nothing in it
+/// can be sent: the signed record's call is `prepare_app_call`'s.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AppQuote {
+    pub review: Vec<ReviewField>,
+    pub quote: Option<crate::op::SubmitQuote>,
+}
+
 /// One registry record as [`AppCore::verify_app_record`] reads it: `(kind, keyData)` of `registrationOf`, an `msig`'s current
 /// structure with its `enabled` word (`None`: never updated) and `version`, the structures of the versions the record's tags
 /// name (`msigAt`, CTR-UA-74: [`tagged_versions`]) and its accepted bits (`msigStateOf.accepted`: acceptance is per slot and
@@ -1017,6 +1027,8 @@ impl AppCore {
         aad: Vec<u8>,
         pt: Vec<u8>,
     ) -> Result<Vec<u8>, SdkError> {
+        // the plaintext the app core gave is wiped when it is dropped here (CLI-PQV-16 H1: an item's canonical JSON)
+        let pt = zeroize::Zeroizing::new(pt);
         match &nonce {
             AppNonce::FromHandle(n) => self.with(&[&key, n], |s, hs| {
                 s.seal(
@@ -1808,6 +1820,81 @@ impl AppCore {
             })
             .await?;
         Ok(AppCall { review, quote })
+    }
+
+    /// The quote of a call of the app's own contract before its record is signed (CLI-SDK-36): `entry`, `args` and `payer` as
+    /// [`Self::prepare_app_call`]'s, the record's `UASig` in `args` empty (`keyData`, `signature` `0x`, no members), `signer`
+    /// the key that will sign the record. Its gas from the gas tables alone, never a simulation (the simulation follows the
+    /// signature, in `prepare_app_call`): the base row `(entry's name, "app", not fresh)` and `signer`'s verify row (its
+    /// `sig_bytes` at the calldata price), the transaction row with the unsigned calldata, in the lookup order chain → module
+    /// → reference, with the margin; `quote` none (unquoted) without them. The review is `prepare_app_call`'s; the contract
+    /// checks are its (`AppDomainRefused`, `Argument`). Not a transaction: nothing here can be sent.
+    pub async fn quote_app_call(
+        self: &Arc<Self>,
+        chain: String,
+        contract: String,
+        entry: String,
+        args: String,
+        payer: KeyRef,
+        signer: KeyRef,
+    ) -> Result<AppQuote, SdkError> {
+        let (f, o, data) = entry_call(&entry, &args)?;
+        let mut review = vec![
+            field("contract", contract.to_ascii_lowercase(), Source::Derived),
+            field("entry", f.signature(), Source::Derived),
+        ];
+        for p in &f.inputs {
+            let v = o.get(&p.name).ok_or(SdkError::Argument)?;
+            flatten(&format!("args.{}", p.name), v, &mut review);
+        }
+        let (profile, _, pool) = crate::op::evm(&self.sdk, &chain)?;
+        self.refuse_contract(&profile, &pool, &contract).await?;
+        let kind = match &signer {
+            KeyRef::Ua { kind, .. } => *kind,
+            KeyRef::Native { .. } => crate::op::gas::NATIVE_EVM,
+            // an `msig`'s verify gas depends on its members: no row answers it
+            _ => u16::MAX,
+        };
+        // the rows read before any await: `OpGas` is not `Send`
+        let fig = {
+            let len = data.len();
+            let op = crate::op::gas::OpGas {
+                len: &|i| (i == "calldata").then_some(len as u64),
+                count: &|_| None,
+                saves: false,
+                fee: false,
+                attached: None,
+                holder: false,
+                registry: profile.registry.as_deref(),
+            };
+            crate::op::gas::quoted(
+                &profile.gas,
+                &profile.gas_opt_in,
+                &self.sdk.gas_tables,
+                None,
+                (&f.name, "app", kind, false),
+                len,
+                &op,
+            )?
+        };
+        let quote = match fig {
+            Some(fig) => Some(
+                crate::op::quote::self_relay(
+                    &self.sdk,
+                    &chain,
+                    &payer,
+                    addr20(&contract.to_ascii_lowercase())?.into(),
+                    alloy::primitives::U256::ZERO,
+                    Bytes::from(data),
+                    "0".into(),
+                    false,
+                    Some(fig),
+                )
+                .await?,
+            ),
+            None => None,
+        };
+        Ok(AppQuote { review, quote })
     }
 
     /// Whether `ua`'s single key (`kind`, `key_data`, read by the caller from the UA's record) signs `typed_json` on `path`.
