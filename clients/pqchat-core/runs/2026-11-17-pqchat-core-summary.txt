@@ -141,3 +141,20 @@ confirm | docs | f670c8a87 | 0 | -
 confirm | mutants-check | f670c8a87 | 1 | -
 confirm | pqc-test | f670c8a87 | 0 | 151 passed, 0 failed, 8 ignored (23 binaries)
 confirm | bind | f670c8a87 | 1 | -
+confirm-merged | pqc-reads | 5feb86838 | 0 | reads 60 (49 trusted), writes 19, R2 49; 0 refused
+confirm-merged | pqc-tree | 5feb86838 | 0 | 2 passed, 0 failed, 0 ignored (1 binaries)
+confirm-merged | docs | 5feb86838 | 0 | -
+confirm-merged | mutants-check | 5feb86838 | 0 | -
+confirm-merged | pqc-wasm | 5feb86838 | 0 | -
+confirm-merged | pqc-vectors | 5feb86838 | 0 | 8 passed, 0 failed, 0 ignored (1 binaries)
+confirm-merged | pqc-clippy | 5feb86838 | 0 | -
+confirm-merged | pqc-test | 5feb86838 | 0 | 151 passed, 0 failed, 8 ignored (23 binaries)
+confirm-merged | sdk-clippy | 5feb86838 | 0 | -
+confirm-merged | pqc-chain | 5feb86838 | 0 | 8 passed, 0 failed, 0 ignored (23 binaries)
+confirm-merged | pqc-e2e | 5feb86838 | 0 | 2 passed, 0 failed, 0 ignored (1 binaries)
+confirm-merged | bind | 5feb86838 | 0 | -
+# confirm-merged, by hand from local logs at 5feb86838 (steps outside this runner): scaas-node cargo test 912 lib passed, every
+# test binary green (the algorand adapter tests read smartcontracts/algorand/out, copied as a real directory); scaas-node
+# clippy --all-targets clean; scaas-node e2e --ignored 27 passed (zether-cli built --release --features hazmat); scaas-sdk
+# app_core 15 passed; scaas-cli cargo test 11 + 13 (dev-profiles) and clippy --all-targets --features dev-profiles clean at
+# 3252b5b2b; format.sh --check every part but tact (unchanged from dev) clean.
