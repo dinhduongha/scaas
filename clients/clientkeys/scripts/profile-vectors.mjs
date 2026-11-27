@@ -45,6 +45,11 @@ const write = (name, comment, body) =>
   writeFileSync(join(OUT, name), JSON.stringify({ _comment: `${COMMON} ${comment}`, ...body }, null, 2) + "\n");
 
 const MS_2026 = Date.UTC(2026, 10, 27, 12, 0, 0, 123);
+/** The Unicode version the name rows assume (review D-6): scaas-profile names.rs's Cf table. */
+const UNICODE = "16.0";
+const version = (v) => v.split(".").map(Number);
+const atLeast = (a, b) => version(a)[0] * 1000 + version(a)[1] >= version(b)[0] * 1000 + version(b)[1];
+must(atLeast(process.versions.unicode, UNICODE), `Node's Unicode ${process.versions.unicode} below ${UNICODE}`);
 const idOf = (name) => p.uuid7(MS_2026, rnd(`profile-id/${name}`, 10));
 
 // ------------------------------------------------------------------ ids.json
@@ -61,46 +66,95 @@ const idOf = (name) => p.uuid7(MS_2026, rnd(`profile-id/${name}`, 10));
       ["rnd", rnd(`uuid7/${mName}`, 10)],
     ])
       uuid7.push({ case: `ms ${mName}, random ${rName}`, ms, random: hex(r), uuid: p.uuid7(ms, r) });
-  const nameKey = [
+  const nameKeyIn = [
     ["plain ASCII", "Default"],
-    ["e-acute NFC", "Café"],
-    ["e-acute NFD", "Café"],
-    ["no-break space", "Anna Lee"],
-    ["dz-caron title case", "ǅana"],
-    ["dz-caron upper case", "ǄANA"],
-    ["sharp s", "Straße"],
-    ["dotted capital I", "İstanbul"],
-    ["full-width A", "Ａlice"],
-    ["final sigma", "ΟΔΟΣ"],
-  ].map(([c, input]) => {
+    ["e-acute NFC", "Caf\u{e9}"],
+    ["e-acute NFD", "Cafe\u{301}"],
+    ["no-break space", "Anna\u{a0}Lee"],
+    ["dz-caron title case", "\u{1c5}ana"],
+    ["dz-caron upper case", "\u{1c4}ANA"],
+    ["sharp s", "Stra\u{df}e"],
+    ["dotted capital I", "\u{130}stanbul"],
+    ["full-width A", "\u{ff21}lice"],
+    ["final sigma", "\u{39f}\u{394}\u{39f}\u{3a3}"],
+  ];
+  const nameKey = nameKeyIn.map(([c, input]) => {
     const k = p.nameKey(input);
     return { case: c, input, input_utf8: utf8Hex(input), name_key: k, name_key_utf8: utf8Hex(k) };
   });
-  const checkName = [
+  const checkNameIn = [
     ["ASCII accepted", "Alice"],
-    ["NFD accepted as NFC", "Café"],
+    ["NFD accepted as NFC", "Cafe\u{301}"],
     ["64 bytes accepted", "a".repeat(64)],
-    ["64 bytes of two-byte letters accepted", "é".repeat(32)],
-    ["96 bytes of NFD, 64 after NFC, accepted", "é".repeat(32)],
+    ["64 bytes of two-byte letters accepted", "\u{e9}".repeat(32)],
+    ["96 bytes of NFD, 64 after NFC, accepted", "e\u{301}".repeat(32)],
     ["empty", ""],
     ["65 bytes", "a".repeat(65)],
-    ["65 bytes after NFC", "é".repeat(32) + "a"],
+    ["65 bytes after NFC", "\u{e9}".repeat(32) + "a"],
     ["a control character (U+0007)", "Al\u0007ice"],
-    ["a format character (U+200B)", "Al​ice"],
-    ["a bidi override (U+202E)", "Al‮ice"],
-  ].map(([c, input]) => {
+    ["a format character (U+200B)", "Al\u{200b}ice"],
+    ["a bidi override (U+202E)", "Al\u{202e}ice"],
+  ];
+  const checkName = checkNameIn.map(([c, input]) => {
     const e = refused(() => p.checkName(input));
     return e
       ? { case: c, input, input_utf8: utf8Hex(input), error: e }
       : { case: c, input, input_utf8: utf8Hex(input), nfc: p.checkName(input) };
   });
   must(checkName.filter((r) => r.error).length === 6, "checkName refusals");
+  // review D-7: the NFD inputs are not their NFC (an editor normalising the source would make these rows test nothing)
+  for (const [c, input] of [...nameKeyIn, ...checkNameIn].filter(([c]) => c.includes("NFD")))
+    must(input.normalize("NFC") !== input, `${c}: NFD`);
+  // review D-6: both ends of every range of the Cf table (scaas-profile names.rs, Unicode 16.0) refused, and code points
+  // beside them that are not Cf accepted
+  const CF = [
+    [0xad, 0xad],
+    [0x600, 0x605],
+    [0x61c, 0x61c],
+    [0x6dd, 0x6dd],
+    [0x70f, 0x70f],
+    [0x890, 0x891],
+    [0x8e2, 0x8e2],
+    [0x180e, 0x180e],
+    [0x200b, 0x200f],
+    [0x202a, 0x202e],
+    [0x2060, 0x2064],
+    [0x2066, 0x206f],
+    [0xfeff, 0xfeff],
+    [0xfff9, 0xfffb],
+    [0x110bd, 0x110bd],
+    [0x110cd, 0x110cd],
+    [0x13430, 0x1343f],
+    [0x1bca0, 0x1bca3],
+    [0x1d173, 0x1d17a],
+    [0xe0001, 0xe0001],
+    [0xe0020, 0xe007f],
+  ];
+  const u = (c) => `U+${c.toString(16).toUpperCase().padStart(4, "0")}`;
+  const edge = (c, accepted) => {
+    const input = `Al${String.fromCodePoint(c)}ice`;
+    const e = refused(() => p.checkName(input));
+    must(!e === accepted, `${u(c)} ${accepted ? "accepted" : "refused"}`);
+    const row = {
+      case: `${accepted ? "beside the Cf table" : "the Cf table's edge"}: ${u(c)}`,
+      input,
+      input_utf8: utf8Hex(input),
+    };
+    return e ? { ...row, error: e } : { ...row, nfc: p.checkName(input) };
+  };
+  checkName.push(
+    ...[...new Set(CF.flat())].map((c) => edge(c, false)),
+    ...[0xac, 0xae, 0x606, 0x61b, 0x180f, 0x2065, 0xfffc, 0x13440, 0xe0000, 0xe0002, 0xe0080].map((c) => edge(c, true)),
+  );
   write(
     "ids.json",
     "ids.json: uuid7 rows (uuid 1.23.0 Builder::from_unix_timestamp_millis(ms, random), pinned format 10); name_key rows " +
       "(NFKC, then Unicode lower case: Rust str::to_lowercase, JavaScript toLowerCase); check_name rows (NFC, 1 to 64 UTF-8 " +
-      "bytes, no Cc or Cf character, else ProfileNameInvalid). Strings are JSON strings; *_utf8 their UTF-8 bytes.",
-    { uuid7, name_key: nameKey, check_name: checkName },
+      "bytes, no Cc or Cf character, else ProfileNameInvalid; both ends of every range of the Cf table and code points " +
+      "beside them). unicode: the Unicode version the name rows assume (the Cf table of scaas-profile names.rs); a " +
+      "reader's tables (Node's ICU, Rust's char, unicode-normalization) are at that version or later. Strings are JSON " +
+      "strings; *_utf8 their UTF-8 bytes.",
+    { unicode: UNICODE, uuid7, name_key: nameKey, check_name: checkName },
   );
 }
 
@@ -108,7 +162,12 @@ const idOf = (name) => p.uuid7(MS_2026, rnd(`profile-id/${name}`, 10));
 const PROFILES = [
   { case: "default set", set: "default", passphrase: "correct horse battery staple", gen: 1 },
   { case: "test set, ASCII", set: "test", passphrase: "correct horse battery staple", gen: 1 },
-  { case: "test set, NFD and a no-break space", set: "test", passphrase: "Một hai ba bốn", gen: 2 },
+  {
+    case: "test set, NFD and a no-break space",
+    set: "test",
+    passphrase: "Mo\u{302}\u{323}t\u{a0}hai ba bo\u{302}\u{301}n",
+    gen: 2,
+  },
 ].map((r) => {
   const id = idOf(r.case);
   const salt = rnd(`envelope/${r.case}/salt`, 16);
@@ -207,6 +266,27 @@ const ENV_HIDDEN = p.envelopeJson({
   label: LABELS[2].sealed_b64,
 });
 const ENV_PLAIN = p.envelopeJson({ id: idOf("unprotected"), state: "unprotected", rev: 1, gen: 0, name: "default" });
+// review D-4: a protected file at the default set (a build without test-hooks parses it), and `migration` in its place
+const DEFAULT = PROFILES[0];
+const ENV_DEFAULT = p.envelopeJson({
+  id: DEFAULT.id,
+  state: "protected",
+  rev: 2,
+  gen: DEFAULT.gen,
+  name: LABELS[1].label_name,
+  kdf: DEFAULT.kdf,
+  pass: DEFAULT.pass_b64,
+  label: LABELS[1].sealed_b64,
+});
+const ENV_MIGRATION = p.envelopeJson({
+  id: idOf("migration pending"),
+  state: "unprotected",
+  rev: 1,
+  gen: 0,
+  migration: "pending",
+  name: "default",
+});
+must(ENV_MIGRATION.includes('"gen":0,"migration":"pending","name":"default"'), "migration's place");
 {
   const files = [
     {
@@ -219,6 +299,14 @@ const ENV_PLAIN = p.envelopeJson({ id: idOf("unprotected"), state: "unprotected"
     },
     { case: "protected, hidden", file: ENV_HIDDEN, public_json: NFD.public_json, kek_pass: NFD.kek_pass, dek: NFD.dek },
     { case: "unprotected, visible", file: ENV_PLAIN },
+    {
+      case: "protected, visible, the default set",
+      file: ENV_DEFAULT,
+      public_json: DEFAULT.public_json,
+      kek_pass: DEFAULT.kek_pass,
+      dek: DEFAULT.dek,
+    },
+    { case: "unprotected, migration pending", file: ENV_MIGRATION },
   ];
   const otherSalt = p.b64(rnd("refusal/other-salt", 16));
   const asciiEnv = { id: ASCII.id, state: "protected", gen: ASCII.gen, kdf: ASCII.kdf };
@@ -274,6 +362,7 @@ const ENV_PLAIN = p.envelopeJson({ id: idOf("unprotected"), state: "unprotected"
     ["alg argon2i", k(65536, 3, { alg: "argon2i" }), false],
     ["v 2", k(65536, 3, { v: 2 }), false],
     ["salt of 15 bytes", k(65536, 3, { salt: p.b64(rnd("kdf-bounds/salt", 15)) }), false],
+    ["a field more", k(65536, 3, { x: 1 }), false],
     ["test set without test-hooks", k(8192, 1), false],
     ["test set under test-hooks", k(8192, 1), true],
     ["m 8192, t 3 under test-hooks (not the test set)", k(8192, 3), true],
@@ -289,7 +378,8 @@ const ENV_PLAIN = p.envelopeJson({ id: idOf("unprotected"), state: "unprotected"
       'lp("scaas.profile.wrap") ‖ public JSON, pass = nonce ‖ AES-256-GCM-SIV(KEK_pass, nonce, DEK_p, AD), 60 bytes); one ' +
       "row at the default set 64 MiB / 3 / 4, the others at the test set; the platform wrap (K_plat from the platform " +
       "secret, domain scaas.profile.platform); sub_keys K_label, K_item, K_name; labels (AD lp(scaas.profile.label) ‖ " +
-      "be16(1) ‖ lp(id)); whole envelope files; wrap_refusals (Aead, each beside its control); name_hint (opens).",
+      "be16(1) ‖ lp(id)); whole envelope files (one protected at the default set; one with migration pending); " +
+      "wrap_refusals (Aead, each beside its control); name_hint (opens). kdf_sets: the default and the test set.",
     {
       kdf_sets: { default: p.KDF_DEFAULT, test: p.KDF_TEST },
       kdf_bounds: kdfBounds,

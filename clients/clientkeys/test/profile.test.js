@@ -88,11 +88,19 @@ test("ids: UUIDv7 rows, name_key rows, checkName rows and refusals", () => {
     } else assert.equal(p.checkName(r.input), r.nfc, r.case);
   }
   assert.ok(refused >= 4 && refused < IDS.check_name.length);
+  // review D-6: the Unicode version the rows assume; Node's ICU at it or later; the Cf table's edges and their neighbours
+  const [major, minor] = process.versions.unicode.split(".").map(Number);
+  const [wantMajor, wantMinor] = IDS.unicode.split(".").map(Number);
+  assert.ok(major * 1000 + minor >= wantMajor * 1000 + wantMinor, process.versions.unicode);
+  const edges = IDS.check_name.filter((r) => r.case.startsWith("the Cf table's edge"));
+  assert.ok(edges.length >= 30 && edges.every((r) => r.error === "ProfileNameInvalid"));
+  assert.ok(IDS.check_name.filter((r) => r.case.startsWith("beside the Cf table") && r.nfc).length >= 8);
 });
 
 // ------------------------------------------------------------------ envelope.json
 
-test("envelope: KDF bounds, the test set only under test-hooks", () => {
+test("envelope: KDF bounds, the test set only under test-hooks; the two sets", () => {
+  assert.deepEqual(ENV.kdf_sets, { default: { ...p.KDF_DEFAULT }, test: { ...p.KDF_TEST } });
   for (const r of ENV.kdf_bounds) {
     const got = code(() => p.checkKdf(r.kdf, r.test_hooks));
     assert.equal(got, r.error ?? null, r.case);
@@ -177,7 +185,16 @@ test("envelope: whole files (protected visible, protected hidden, unprotected) r
     assert.equal(label.hidden, env.name === undefined, r.case);
     if (!label.hidden) assert.equal(label.name, env.name);
   }
-  assert.deepEqual(ENV.files.map((r) => JSON.parse(r.file).state).sort(), ["protected", "protected", "unprotected"]);
+  assert.deepEqual(ENV.files.map((r) => JSON.parse(r.file).state).sort(), [
+    "protected",
+    "protected",
+    "protected",
+    "unprotected",
+    "unprotected",
+  ]);
+  // review D-4: one protected file at the default set; `migration` between `gen` and `name`
+  assert.equal(ENV.files.filter((r) => JSON.parse(r.file).kdf?.m === p.KDF_DEFAULT.m).length, 1);
+  assert.ok(ENV.files.some((r) => r.file.includes('"gen":0,"migration":"pending","name":"default"')));
 });
 
 test("envelope: wrap refusals (state, gen, salt, another id) are Aead; a changed name hint still opens", () => {

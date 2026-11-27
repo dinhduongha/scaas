@@ -136,6 +136,43 @@ fn refusal_file(r: &Value, base: &dyn Fn(&str) -> Vec<u8>) -> Vec<u8> {
     f
 }
 
+/// export.json `headers` (review D-5): each row's text is the header this crate writes for its kdf and nonce prefix. A file of
+/// that header and no chunk passes every header check (the last: the canonical compare against the builder's bytes) and
+/// stops at the length (`truncated`); the test set's only under `test-hooks` (else `kdf`). Control: one space more is
+/// `header`.
+#[test]
+fn header_rows() {
+    let v = rows();
+    let (p, _) = fresh();
+    let reason = |h: &[u8]| {
+        let f = [&b"SCAASPX1"[..], &(h.len() as u32).to_be_bytes(), h].concat();
+        assert_eq!(
+            code(p.import_preview(ImportSource::Bytes(&f), b"x").map(drop)),
+            "ProfileImportOpen"
+        );
+        p.last_import_refusal()
+    };
+    for r in v["headers"].as_array().unwrap() {
+        let h = r["header"].as_str().unwrap();
+        assert_eq!(h.len() as u64, r["header_len"].as_u64().unwrap());
+        let test_set = r["kdf"]["m"] == 8192;
+        let want = if test_set && !cfg!(feature = "test-hooks") {
+            "kdf"
+        } else {
+            "truncated"
+        };
+        assert_eq!(reason(h.as_bytes()), Some(want), "{}", r["case"]);
+        if want == "truncated" {
+            assert_eq!(
+                reason(h.replacen(',', ", ", 1).as_bytes()),
+                Some("header"),
+                "{}",
+                r["case"]
+            );
+        }
+    }
+}
+
 /// Every refusal row of export.json, read as an import: `ProfileImportOpen` with its local reason, and nothing written under
 /// the root. Without `test-hooks` only the rows that say so (the test set refused); with it the others, whose bases are
 /// reproduced from their rows. Then the size control (the length bound itself passes the length check: `tag`).

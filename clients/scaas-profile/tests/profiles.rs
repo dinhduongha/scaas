@@ -190,6 +190,20 @@ impl ProfileKeychain for Keychain {
 #[test]
 fn ids_rows() {
     let v = rows("ids.json");
+    // review D-6: the Unicode version the name rows assume; Rust's char tables and unicode-normalization at it or later
+    let want: Vec<u32> = v["unicode"]
+        .as_str()
+        .unwrap()
+        .split('.')
+        .map(|x| x.parse().unwrap())
+        .collect();
+    let (major, minor, _) = char::UNICODE_VERSION;
+    assert!((major as u32, minor as u32) >= (want[0], want[1]), "char");
+    let (major, minor, _) = unicode_normalization::UNICODE_VERSION;
+    assert!(
+        (major as u32, minor as u32) >= (want[0], want[1]),
+        "unicode-normalization"
+    );
     for r in v["uuid7"].as_array().unwrap() {
         let random: [u8; 10] = hex(r["random"].as_str().unwrap()).try_into().unwrap();
         assert_eq!(
@@ -252,8 +266,26 @@ fn envelope_rows() {
             "ProfileFormat"
         );
     }
+    // the default set (review D-5)
+    let d = &v["kdf_sets"]["default"];
+    assert_eq!(
+        (
+            u64::from(KdfParams::DEFAULT.m_kib),
+            u64::from(KdfParams::DEFAULT.t),
+            4
+        ),
+        (
+            d["m"].as_u64().unwrap(),
+            d["t"].as_u64().unwrap(),
+            d["p"].as_u64().unwrap()
+        )
+    );
     for r in v["kdf_bounds"].as_array().unwrap() {
-        let k: Kdf = serde_json::from_value(r["kdf"].clone()).unwrap();
+        // a kdf object of other fields is refused by its parse (the envelope's ProfileFormat)
+        let Ok(k) = serde_json::from_value::<Kdf>(r["kdf"].clone()) else {
+            assert_eq!(r["error"], "ProfileFormat", "{}", r["case"]);
+            continue;
+        };
         let test_set = k.m == 8192 && k.t == 1;
         if test_set && r["test_hooks"].as_bool().unwrap() != cfg!(feature = "test-hooks") {
             continue;

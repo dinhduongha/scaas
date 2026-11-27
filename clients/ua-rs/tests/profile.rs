@@ -278,7 +278,8 @@ fn envelope_file_rows() {
         }
         opened += 1;
     }
-    assert_eq!(opened, 2);
+    // the test set's visible and hidden files, and the default set's (review D-4)
+    assert_eq!(opened, 3);
 }
 
 #[test]
@@ -714,7 +715,10 @@ fn kdf_bound_rows() {
     let mut refused = 0;
     for r in rows(&e, "kdf_bounds") {
         let case = s(&r["case"]);
-        if r["kdf"]["alg"] != "argon2id" || r["kdf"]["v"] != 1 {
+        if r["kdf"]["alg"] != "argon2id"
+            || r["kdf"]["v"] != 1
+            || r["kdf"].as_object().unwrap().len() != 6
+        {
             continue;
         }
         let (p, salt) = kdf(&r["kdf"]);
@@ -765,6 +769,19 @@ fn kdf_bound_rows() {
     let runs = ProfileKeys::kdf_runs();
     ProfileKeys::dummy_kdf(ProfileKeys::KDF_TEST).unwrap();
     assert_eq!(ProfileKeys::kdf_runs(), runs + 1);
+}
+
+/// envelope.json `kdf_sets` (review D-5): the default and the test set are `ProfileKeys`'s.
+#[test]
+fn kdf_set_rows() {
+    let e = v("envelope");
+    let set = |k: &Value| Argon2Params {
+        m_kib: k["m"].as_u64().unwrap() as u32,
+        t: k["t"].as_u64().unwrap() as u32,
+        p: k["p"].as_u64().unwrap() as u32,
+    };
+    assert_eq!(set(&e["kdf_sets"]["default"]), ProfileKeys::KDF_DEFAULT);
+    assert_eq!(set(&e["kdf_sets"]["test"]), ProfileKeys::KDF_TEST);
 }
 
 /// Argon2id's own `OutOfMemory` (forced by the hook) is `KdfOutOfMemory` at every entry, never `Argument`; counted as a run.
