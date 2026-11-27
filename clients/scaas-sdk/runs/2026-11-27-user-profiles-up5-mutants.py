@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""user-profiles UP5 mutants (the sealed store core: names, manifests, tombstones, anchor, generation files, write lock):
+"""user-profiles UP5 mutants (the sealed store core: names, manifests, tombstones, anchor, generation files, write lock), at
+the store's crate clients/scaas-profile (owner 2026-11-27):
 python3 clients/scaas-sdk/runs/2026-11-27-user-profiles-up5-mutants.py check | run"""
 import sys
 from pathlib import Path
@@ -12,10 +13,10 @@ mutants_lib.NOT_CODE = [
     ":!clients/scaas-sdk/runs/2026-11-27-user-profiles-summary.txt",
 ]
 
-S = "clients/scaas-sdk/src/user_profile/store.rs"
-A = "clients/scaas-sdk/src/user_profile/anchor.rs"
-T = ("cd clients/scaas-sdk && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 "
-     "--features user-profile,test-hooks --test user_profile -- --exact ")
+S = "clients/scaas-profile/src/store.rs"
+A = "clients/scaas-profile/src/anchor.rs"
+T = ("cd clients/scaas-profile && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 "
+     "--features test-hooks --test store -- --exact ")
 MUTANTS = [
     ("the HMAC name replaced by the item name",
      [(S, "        Ok(self.gdir.join(keys.item_file(part, name).map_err(ua)?))\n",
@@ -31,7 +32,7 @@ MUTANTS = [
      T + "g5_deleted_item_put_back"),
     ("the manifest written without put_if",
      [(S, "            match put_file_if(&self.gdir, &p, at, &bytes) {\n",
-       "            match FileStore::write(&self.gdir, &p, &bytes, false).map_err(io) {\n")],
+       "            match file::write(&self.gdir, &p, &bytes) {\n")],
      T + "g5_two_writers_both_land"),
     ("\"differs from the anchor\" as the rule",
      [(A, "                Some(s) if s.rev > a.rev => Verdict::Follow,\n",
@@ -45,13 +46,13 @@ MUTANTS = [
        "            (digits(pid) && digits(n) && false).then_some(Kind::Temp)\n")],
      T + "store_files_temporaries_locks_others"),
     ("no clean-up at open",
-     [(S, "                std::fs::remove_file(e.path()).map_err(|_| SdkError::VaultIo)?\n",
+     [(S, "                std::fs::remove_file(e.path()).map_err(|_| Error::VaultIo)?\n",
        "                drop(e.path())\n")],
      T + "store_files_temporaries_locks_others"),
     ("a waiting writer answered StoreConflict",
      [(S, "            .wait_timeout_while(held, wait, |h| *h)\n",
        "            .wait_timeout_while(held, Duration::ZERO, |h| *h)\n"),
-      (S, "            return Err(SdkError::ProfileBusy);\n", "            return Err(SdkError::StoreConflict);\n")],
+      (S, "            return Err(Error::ProfileBusy);\n", "            return Err(Error::StoreConflict);\n")],
      T + "writer_waits_then_busy"),
 ]
 

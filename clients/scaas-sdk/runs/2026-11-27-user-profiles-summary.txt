@@ -48,3 +48,4 @@ UP5-split | features | c13846093 + split files | 0 | check_test_features 72 mani
 UP5-split | ci_changes self-test | c13846093 + split files | 0 | ok
 UP5-split | fmt rust toml yaml py | c13846093 + split files | 0 | every part ok
 UP5-split | docs | c13846093 + split files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok; paths 0
+UP5-split | mutants up5 (at scaas-profile, one at a time) | 74b860488 (dirty: the runner itself, committed with the record) | 0 | 8 mutants, 8 killed, 0 survived, 0 not loaded, 0 other failure
