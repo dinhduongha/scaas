@@ -1,4 +1,4 @@
 # kh mutants (name | outcome | commit | test | first failure line)
-user-profile enables wallet again | killed | bb00216d6 | python3 clients/ua-rs/runs/2026-11-27-key-handles-nm.py | FAIL: user-profile compiles signing code: <hashbrown::map::HashMap<alloc::string::String, (scaas_ua::wallet::store::Slot, scaas_ua::wallet::vault::Vault), std::
-the signing pattern matches nothing (the positive control) | killed | bb00216d6 | python3 clients/ua-rs/runs/2026-11-27-key-handles-nm.py | FAIL: control: the wallet build shows no signing symbol (the pattern reads nothing)
+user-profile enables wallet again | killed | 0100966f4 | python3 clients/ua-rs/runs/2026-11-27-key-handles-nm.py | FAIL: user-profile compiles signing code: <core::slice::iter::Iter<[u8; 20]> as core::iter::traits::iterator::Iterator>::any::<scaas_ua::wallet::policy::wrap_or
+the signing pattern matches nothing (the positive control) | killed | 0100966f4 | python3 clients/ua-rs/runs/2026-11-27-key-handles-nm.py | FAIL: control: the wallet build shows no SIGNING symbol (the pattern reads nothing)
 2 mutants, 2 killed, 0 survived, 0 not loaded, 0 other failure

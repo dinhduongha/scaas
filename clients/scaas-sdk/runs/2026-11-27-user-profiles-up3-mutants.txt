@@ -1,5 +1,5 @@
 # up3 mutants (name | outcome | commit | test | first failure line)
 the reader does not refuse a prf envelope on a key-locked label | killed | 8c5eea841 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test wallet_vault key_lock_label_form | panicked at tests/wallet_vault.rs:1265:5:
-reseal_label_vault does not skip a key-locked label | killed | 8c5eea841 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test wallet_vault key_lock_skipped_by_reseal_and_retained_open | panicked at tests/wallet_vault.rs:1350:5:
-the backup payload keeps the key-locked key | killed | 8c5eea841 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test wallet_vault key_lock_left_out_of_backup_and_link | panicked at tests/wallet_vault.rs:1412:53:
+reseal_label_vault does not skip a key-locked label | killed | 0100966f4 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test wallet_vault key_lock_skipped_by_reseal_and_retained_open | panicked at tests/wallet_vault.rs:1350:5:
+the backup payload keeps the key-locked key | killed | 0100966f4 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test wallet_vault key_lock_left_out_of_backup_and_link | panicked at tests/wallet_vault.rs:1495:53:
 3 mutants, 3 killed, 0 survived, 0 not loaded, 0 other failure

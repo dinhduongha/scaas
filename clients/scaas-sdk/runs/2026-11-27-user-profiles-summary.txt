@@ -165,7 +165,7 @@ R1 | fmt (format.sh --check rust toml py) | 687d936c5 | 0 | 25 parts ok
 R1 | docs (docs_check check; test_docs_check) | 687d936c5 | 0 | 0 errors, 8 warnings (budgets of docs not touched), 16 notes; test_docs_check ok
 R1 | features (check_test_features) | 687d936c5 | 0 | ok, every control True
 R2 | red (B-1, B-4: --test wallet_vault key_lock_; B-6 check_pass against the mutant; B-7 type) | 723abc542 + R2 tests | 101 | key_lock_refuses_the_old_plain_vault, key_lock_mark_kept_against_an_older_manifest FAILED (5 others ok); check_pass_another_dek FAILED (left Ok, right Err(Aead)); random_bytes_bounded E0308
-R2 | ua-profile (--features app-core,user-profile,test-hooks,vectors --test profile --test app_core) | 723abc542 + R2 files | 0 | profile 20 / 20 (18 -> 20 since UP2: check_pass_another_dek, +1 at R1), app_core 22 / 22
+R2 | ua-profile (--features app-core,user-profile,test-hooks,vectors --test profile --test app_core) | 723abc542 + R2 files | 0 | profile 20 / 20 (19 -> 20: check_pass_another_dek), app_core 22 / 22
 R2 | ua-vault (wallet_vault, wallet_custody, retained_key, wallet_import_ua, wallet_link) | 723abc542 + R2 files | 0 | wallet_vault 31 (29 -> 31), wallet_custody 13, retained_key 2, wallet_import_ua 8, wallet_link 5; --features vectors retained_key 3, wallet_custody 19 (the per-thread chunk counter)
 R2 | ua-clippy (default; user-profile,test-hooks,vectors; --no-default-features user-profile; --no-default-features key-handles; --all-targets -D warnings) | 723abc542 + R2 files | 0 | 4 cells, 0 warnings
 R2 | kh-nm (local, --offline) | 723abc542 + R2 files | 0 | user-profile 7543 symbols, 0 signing (0 off the wallet allow-list, 0 SIGNING); wallet 24444 symbols, 7643 (5592 off the allow-list, 2111 SIGNING); scaas-profile's scaas-ua features json, key-handles, mlock, rand_core, user-profile
@@ -174,3 +174,5 @@ R2 | prof (test default, test-hooks; clippy both --all-targets -D warnings) | 72
 R2 | sdk-up (--features user-profile,test-hooks --test user_profile; the test reads the Zeroizing salt by slice) | 723abc542 + R2 files | 0 | user_profile 15 / 15
 R2 | fmt (format.sh --check rust py) | 723abc542 + R2 files | 0 | 24 parts ok
 R2 | docs (docs_check check; test_docs_check) | 723abc542 + R2 files | 0 | 0 errors, 8 warnings (budgets of docs not touched), 16 notes; test_docs_check ok
+R2 | mutants r2 (one at a time: run "<name>"; clients/scaas-sdk/runs/2026-11-28-user-profiles-r2-mutants.py) | 0100966f4 | 0 | 13 mutants, 13 killed, 0 survived, 0 not loaded, 0 other failure; check: no stale row
+R2 | mutants re-run (rows R2 made stale: kh, the nm script; up2, ua-rs profile.rs; up3, manifest.rs) | 0100966f4 | 0 | kh 2 / 2, up2 5 / 5, up3 2 / 2 re-run: all killed; check: no stale row in kh, up2, up3, r2. Left stale for the round end: r1 21, up5 8, up6 10, up7 7, up8 7, up9 4, up10 6 (scaas-profile files R2 touched by one line each for B-7, plus rows stale before R2)
