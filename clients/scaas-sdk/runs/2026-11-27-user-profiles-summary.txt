@@ -160,3 +160,7 @@ R1 | R1f sdk-up (--features user-profile,test-hooks: --test user_profile, --lib 
 R1 | R1f sdk-clippy (UPF and default, --all-targets -D warnings) | a2b3cb242 + R1f files | 0 | 0 warnings
 R1 | fmt (format.sh --check rust toml py; cargo fmt in clients/scaas-profile first: 049e85573) | 049e85573 | 0 | 25 parts ok
 R1 | mutants r1 (one at a time: run "<name>"; clients/scaas-sdk/runs/2026-11-28-user-profiles-r1-mutants.py) | be9ffe1fb | 0 | 44 mutants, 44 killed, 0 survived, 0 not loaded, 0 other failure (first pass: "G-6 a backslash in an endpoint URL" survived, its test URL also held an `@`; be9ffe1fb adds a backslash-only URL, re-run killed); check: no stale row
+R1 | final prof (test default and test-hooks, on the final tree) | 687d936c5 | 0 | default: lib 1, export 1, lifecycle 7, lock 4, profiles 9, settings 4, store 14; test-hooks: lib 1, export 8, hidden 6, lifecycle 12, lock 4, profiles 15, reseal 8, review 26, settings 5, store 16
+R1 | fmt (format.sh --check rust toml py) | 687d936c5 | 0 | 25 parts ok
+R1 | docs (docs_check check; test_docs_check) | 687d936c5 | 0 | 0 errors, 8 warnings (budgets of docs not touched), 16 notes; test_docs_check ok
+R1 | features (check_test_features) | 687d936c5 | 0 | ok, every control True
