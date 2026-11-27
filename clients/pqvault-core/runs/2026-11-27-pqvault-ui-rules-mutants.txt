@@ -1,0 +1,14 @@
+# ui-rules mutants (name | outcome | commit | test | first failure line)
+a write signed when it is prepared | killed | 9b84e889c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test devices nothing_is_signed_before_the_confirm | panicked at tests/devices.rs:485:5:
+the confirm makes no signing call | killed | 9b84e889c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test devices nothing_is_signed_before_the_confirm | panicked at tests/devices.rs:489:5:
+the quote reads a fresh row (never the entry's) | killed | 9b84e889c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features app-core --test app_core quote_app_call_reads_the_gas_rows_before_the_signature | panicked at tests/app_core.rs:1354:23:
+a card number not secret | killed | 9b84e889c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib item::tests::the_secret_table | panicked at src/item.rs:630:13:
+hideBody ignored | killed | 9b84e889c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib item::tests::the_secret_table | panicked at src/item.rs:671:9:
+a custom field's secret flag ignored | killed | 9b84e889c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib item::tests::custom_fields_declare_secret | panicked at src/item.rs:610:74:
+a field of the wrong kind written | killed | 9b84e889c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib item::tests::a_field_of_the_wrong_kind_is_refused | panicked at src/item.rs:749:9:
+the losing secret kept as plain text | killed | 9b84e889c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib item::tests::merge_keeps_the_losing_secret_secret | panicked at src/item.rs:784:9:
+a history value read as plain | killed | 9b84e889c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib item::tests::merge_keeps_the_losing_secret_secret | panicked at src/item.rs:785:9:
+Debug prints a secret | killed | 9b84e889c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib item::tests::canonical_round_trip_and_silent_debug | panicked at src/item.rs:727:9:
+an item's canonical form not compared on read | killed | 9b84e889c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib item::tests::canonical_round_trip_and_silent_debug | panicked at src/item.rs:729:9:
+a newline escaped another way than serde_json's | killed | 9b84e889c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test vectors item_versions_and_refusals | panicked at tests/vectors.rs:433:81:
+12 mutants, 12 killed, 0 survived, 0 not loaded, 0 other failure
