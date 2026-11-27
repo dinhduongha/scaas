@@ -33,6 +33,9 @@ over the wave-1 core, `Items` made `async`), platform unlock (`enable_platform_u
 skips in `vault/prf.rs` and `vault/seeds.rs`, the backup and device-link counts), TUI T15, scaas-app's pickers, the bindings of
 the `user_profile` surface, the two-instance PqChat e2e (§17 "end-to-end"), and the per-profile Matrix e2e (CLI-UPR-29, §17
 "Matrix per profile": two profiles, two Matrix sessions, no shared state, a switch closing the first client).
+Also in wave 2 (controller call 2026-11-27): the bindings get `UserProfile::lock` (which closes the SDK), so a Dart, Qt or C#
+front-end can lock a profile without a Rust host; if that needs `Sdk::close` bound, it leaves `tests/binding.rs`'s explicit Rust-only
+list (where UP6b registered it) at that time.
 
 ## Global constraints (read before every task)
 

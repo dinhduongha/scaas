@@ -496,6 +496,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 
 ### Recorded, not scheduled
 
+- [ ] **User profiles wave 2** (branch `user-profiles`, plan `docs/superpowers/plans/2026-11-27-user-profiles.md` "Wave 2"): the chain-profile rename, the CLI's profile commands, the pqchat-core and pqvault-core store adapters, platform unlock, the SDK's key-lock calls, TUI T15, scaas-app's pickers, the bindings of the `user_profile` surface including `UserProfile::lock` (it closes the SDK; `Sdk::close` leaves `tests/binding.rs`'s Rust-only list if it must be bound), the two-instance PqChat e2e and the per-profile Matrix e2e.
 - [ ] **Family redeploys carry the formatted build** (code-format round, 2026-11-18): the family contracts' Rust was formatted (rustfmt); panic locations moved, so these artifacts differ from the deployed ones: Cosmos `scaas_mandate`, `scaas_relayfee`, `scaas_token` (docs/networks/cosmos.md §8); Solana `scaas.so` (docs/networks/solana.md §12); NEAR `scaas_near_token`, `scaas_near_dex`, `scaas_near_relayfee` (docs/networks/near.md §12). No hash of them is pinned.
 - [ ] **A gen-1 UA registry without `zether-bls12381` can never add it** (found 2026-10-31 on the SCaaS testnet, branch
   `zether-testnet`; a finding, not a ruling; **owner decision before the SCaaS mainnet 22777 deploys its gen-1 registry**;
