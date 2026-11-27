@@ -165,7 +165,7 @@ fn key32(v: Zeroizing<Vec<u8>>, e: Error) -> Result<Zeroizing<[u8; 32]>> {
 /// scrypt(NFKC(pin), salt, 2^log_n, 8, 1, 32).
 fn pin_kek(pin: &str, salt: &[u8], log_n: u8) -> Result<Zeroizing<[u8; 32]>> {
     let pw = super::sized(|| pin.nfkc());
-    let params = scrypt::Params::new(log_n, 8, 1, 32).map_err(|_| Error::VaultParams)?;
+    let params = scrypt::Params::new(log_n, 8, 1).map_err(|_| Error::VaultParams)?;
     let mut kek = Zeroizing::new([0u8; 32]);
     scrypt::scrypt(pw.as_bytes(), salt, &params, &mut *kek).map_err(|_| Error::VaultParams)?;
     Ok(kek)

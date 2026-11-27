@@ -5,10 +5,12 @@ edition = "2021"
 license-file = "../../../LICENSE"
 publish = false
 
-# PQZH over Ligero (docs/research/pqzh-ligero.md). sha3 and the statement codec pqz-stmt only (plan R2, D11): no path
+# PQZH over Ligero (docs/research/pqzh-ligero.md). sha3, shake, the statement codec pqz-stmt only (plan R2, D11): no path
 # dependency on the Plonky3 crate pqzh.
 [dependencies]
-sha3 = "=0.10.8"
+sha3 = { version = "=0.12.0", default-features = false }
+# SHAKE128 / SHAKE256 (sha3 0.12 moved them to `shake`; the versions ml-kem 0.3.4 takes)
+shake = { version = "=0.1.0", default-features = false }
 pqz-stmt = { path = "../../stmt" }
 
 # bench (default on): the reference presets (conjectured, proven without radix 431, Johnson), the parameter model's

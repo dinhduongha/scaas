@@ -18,26 +18,29 @@ pqz-stmt = { path = "../stmt", default-features = false }
 # PQZH: Ligero over the set's F_q (plan 5h Task 8c part 2): feature `pqzh`, implied by `set-<set>` for every set whose
 # set.toml says pqzh, which also forwards the set to pqzh-ligero (gen_set.py writes the set lines below)
 pqzh-ligero = { path = "../pqzh/ligero", default-features = false, optional = true }
-sha3 = "=0.10.8"
+sha3 = { version = "=0.12.0", default-features = false }
 # feature `pqzl-rust`: the PQZL core in Rust (pqz-core/pqzl/rust), byte-for-byte equal to the C core. Parameter set
 # (owner 2026-10-21: one per build): the feature `set-<set>` below, forwarded to pqz-stmt and pqzl (build.rs compiles
 # the C core with the same set)
 pqzl = { path = "../pqzl/rust", optional = true, default-features = false, features = ["sv"] }
 # feature `prove` only: the op 7 sender memo (P6-ANON §5.4, CTR-PQZ-23 / CTR-ZTH-50: HKDF-SHA256)
-hkdf = { version = "=0.12.4", optional = true }
-sha2 = { version = "=0.10.9", optional = true }
+hkdf = { version = "=0.13.0", optional = true }
+sha2 = { version = "=0.11.1", optional = true }
 # feature `prove` only: the sealed opening of opening tokens (spec three-key model K3-6, K3-6b, K3-7): CTR-UA-32's
 # scheme 1 (ML-KEM-1024 + X25519, the pins of ua-rs `wallet/kem.rs`: X25519 is curve25519-dalek 4's clamped Montgomery
 # ladder) and UA-7's one-shot AES-256-GCM; no RNG (the coins come from the leg seed). ml-kem's `zeroize`: the
 # decapsulation key is cleared on drop (review 3w-delta U2-1)
 ml-kem = { version = "=0.3.4", default-features = false, features = ["zeroize"], optional = true }
 curve25519-dalek = { version = "4", default-features = false, features = ["zeroize"], optional = true }
-aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "alloc", "zeroize"], optional = true }
+aes-gcm = { version = "=0.11.1", default-features = false, features = ["aes", "alloc", "zeroize"], optional = true }
+# feature `prove` only: SHAKE256 of the sealed opening's coins and the vectors (sha3 0.12 moved SHAKE to `shake`; the
+# version ml-kem 0.3.4 takes)
+shake = { version = "=0.1.0", default-features = false, optional = true }
 # 3zh Fable F-5: the KEK's AES key schedule and the GHASH key are cleared on drop (the zeroize features of aes-gcm's own
 # aes / ghash / polyval, the versions aes-gcm resolves; aes is pqzl's pin too); no API is used from these three
-aes = { version = "=0.8.4", default-features = false, features = ["zeroize"], optional = true }
-ghash = { version = "=0.5.1", default-features = false, features = ["zeroize"], optional = true }
-polyval = { version = "=0.6.2", default-features = false, features = ["zeroize"], optional = true }
+aes = { version = "=0.9.4", default-features = false, features = ["zeroize"], optional = true }
+ghash = { version = "=0.6.0", default-features = false, features = ["zeroize"], optional = true }
+polyval = { version = "=0.7.3", default-features = false, features = ["zeroize"], optional = true }
 
 [build-dependencies]
 # feature `pqzl-c` only: build.rs compiles the C core
@@ -90,6 +93,7 @@ prove = [
   "dep:aes",
   "dep:ghash",
   "dep:polyval",
+  "dep:shake",
 ]
 # fault-injection and measurement hooks (pqzl::TEST_*, reinit, arena_bytes): tests and the bench only, never in a
 # production build

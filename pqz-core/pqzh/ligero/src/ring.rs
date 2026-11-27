@@ -2,7 +2,7 @@
 //! honest prover's key / ciphertext equations. The statement codec is `pqz-stmt` (plan R2, P6e Task 6); this module
 //! only turns its canonical coefficients into centred polynomials.
 
-use sha3::digest::{ExtendableOutput, Update, XofReader};
+use shake::{ExtendableOutput, Update, XofReader};
 use std::sync::OnceLock;
 
 use crate::Wiped;
@@ -36,7 +36,7 @@ pub fn a_matrix() -> &'static Vec<Poly> {
         let mut out = vec![[0i64; D]; K * K];
         for i in 0..K {
             for j in 0..K {
-                let mut h = sha3::Shake128::default();
+                let mut h = shake::Shake128::default();
                 h.update(b"SCAAS-PQZ-A-V2");
                 h.update(&[i as u8, j as u8]);
                 let mut r = h.finalize_xof();

@@ -37,7 +37,7 @@ scaas-ua = { path = "../ua-rs", default-features = false, features = [
   "fam-arweave",
 ] }
 cxx = "=1.0.202"
-zeroize = "=1.8.2"
+zeroize = "=1.9.1"
 
 # every call runs in catch_unwind (src/lib.rs `guard`): keep unwinding (pqz-ffi refuses panic = "abort")
 [profile.release]

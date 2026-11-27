@@ -300,11 +300,12 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: v1.8.5 # the forge every local build, gas figure and KAT was made with (stable drifts; Amsterdam since F185)
-      # lib/ is not committed: install the pinned commits and check their sources (CTR-GEN-01, scripts/evm_libs.sh).
+      # lib/ is not committed: vendor.sh installs the pinned commits under vendor/ and links lib/<name> to them
+      # (CTR-GEN-01, ARCH-POS-24), then checks their commit, sha256 and tree.
       - name: Libraries at pinned commits
         run: |
-          ../../scripts/evm_libs.sh install
-          ../../scripts/evm_libs.sh check
+          ../../scripts/vendor.sh install
+          ../../scripts/vendor.sh check
       # the differential tests (test/modules/LegacyDiff.sol) read the pre-split releases, built here (not committed)
       - name: pre-split releases (legacy_artifacts.py build)
         run: python3 -I script/modules/legacy_artifacts.py build
@@ -583,8 +584,8 @@ jobs:
       - name: Contract libraries for the e2e deploy script
         working-directory: smartcontracts/evm
         run: |
-          ../../scripts/evm_libs.sh install
-          ../../scripts/evm_libs.sh check
+          ../../scripts/vendor.sh install
+          ../../scripts/vendor.sh check
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -751,7 +752,8 @@ jobs:
       - name: ML-DSA-65 liquidity plan against the DEX (DexLiquidityMldsa, ffi)
         run: |
           cd ../../smartcontracts/evm
-          ../../scripts/evm_libs.sh install
+          ../../scripts/vendor.sh install
+          ../../scripts/vendor.sh check
           MLDSA_CLIENTKEYS=../../clients/clientkeys forge test --ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol
 
   # P6e Task 10 / gate A / gate B, at one parameter set (PQZ_SET below) — KAT, the tbox / SV fix checks, the vectors byte for byte
@@ -780,6 +782,13 @@ jobs:
             pqz-core/ffi
             pqz-core/stmt
             pqz-core/pqzh/ligero
+      # the upstream LaZer of the KAT scripts and the lattice estimators of the parameter scripts (ARCH-POS-24): fetched
+      # and checked only, nothing here builds or runs them
+      - name: vendor/ groups kat and research at their pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install kat research
+          scripts/vendor.sh check kat research
       - name: generated files in sync (gen_set.py --all --check, to_rust.py --check)
         run: python3 -I params/sets/gen_set.py --all --check && python3 -I pqzl/params/to_rust.py --check
       - name: gate scripts fail on a failing check (gate-controls.sh)
@@ -874,7 +883,8 @@ jobs:
         run: |
           cargo build --release --features hazmat --bin zether-cli
           cd ../../smartcontracts/evm
-          ../../scripts/evm_libs.sh install
+          ../../scripts/vendor.sh install
+          ../../scripts/vendor.sh check
           ZETHER_CLI=$PWD/../../clients/zether-prover/target/release/zether-cli forge test --ffi --match-path test/zether/ZetherProverCross.t.sol
       # zether-read-balance --rpc, the reading layer (R1-R7), against a local anvil the tests start and stop (ANVIL, default on PATH)
       - name: reading layer against anvil (default, hazmat)

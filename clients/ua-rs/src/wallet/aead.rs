@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! AEAD, HKDF, HMAC (spec §7; T8): thin wrappers of `aes-gcm` =0.10.3 (`Aes256Gcm`), `aes-gcm-siv` =0.11.1 (`Aes256GcmSiv`),
-//! both on the one `aes` 0.8.4, and `hkdf` =0.12.4 / `hmac` 0.12. The keys are caller-held session keys (PqChat's `K`, `mk_i`),
+//! AEAD, HKDF, HMAC (spec §7; T8): thin wrappers of `aes-gcm` =0.11.1 (`Aes256Gcm`), `aes-gcm-siv` =0.12.1 (`Aes256GcmSiv`),
+//! both on the one `aes` 0.9.4, and `hkdf` =0.13.0 / `hmac` 0.13. The keys are caller-held session keys (PqChat's `K`, `mk_i`),
 //! not UA secrets; nonce uniqueness is the caller's. A bad tag returns [`Error::Aead`] and no plaintext. UNAUDITED.
 use super::{Error, Result};
 use aes_gcm::aead::{Aead, KeyInit, Payload};
@@ -85,7 +85,7 @@ fn expand(h: &Hkdf<Sha256>, info: &[u8], len: usize) -> Result<Zeroizing<Vec<u8>
 /// HMAC-SHA256 (RFC 2104) of `data` under `key`.
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
     // HMAC takes a key of any length: `new_from_slice` cannot fail here
-    let Ok(mut m) = <Hmac<Sha256> as Mac>::new_from_slice(key) else {
+    let Ok(mut m) = <Hmac<Sha256> as KeyInit>::new_from_slice(key) else {
         return [0; 32];
     };
     m.update(data);

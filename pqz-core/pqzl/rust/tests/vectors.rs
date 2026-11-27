@@ -7,8 +7,8 @@ use pqzl::{
     POLYVEC_BYTES,
 };
 use serde_json::Value;
-use sha3::digest::{ExtendableOutput, Update, XofReader};
-use sha3::{Digest, Keccak256, Shake256};
+use sha3::{Digest, Keccak256};
+use shake::{ExtendableOutput, Shake256, Update, XofReader};
 use std::path::PathBuf;
 
 mod common;

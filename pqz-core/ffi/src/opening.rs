@@ -27,8 +27,8 @@
 //! Wiping (best effort, as `pqzl::clear`): the explicit secrets are cleared on every exit; the ML-KEM decapsulation key,
 //! the KEK's AES-256 key schedule, the GHASH key and the X25519 types clear on drop (their crates' `zeroize` features).
 //! Not reached: the SHA3-256 / SHAKE256 / Keccak / HKDF-SHA256 states that absorbed `ss_M`, `ss_X`, `seed_leg` or
-//! `seed_enc` (`combine`, `coins`, `kek`, the `Sealer` key; the `sha3` / `sha2` / `hkdf` crates give no hook), copies
-//! passed by value, and register spills (3zh Fable F-5).
+//! `seed_enc` (`combine`, `coins`, `kek`, the `Sealer` key; the `sha3` / `shake` / `sha2` / `hkdf` crates give no hook),
+//! copies passed by value, and register spills (3zh Fable F-5).
 use crate::pqzl::{self as pl, PK_BYTES};
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
@@ -36,8 +36,8 @@ use curve25519_dalek::montgomery::MontgomeryPoint;
 use hkdf::Hkdf;
 use ml_kem::{Decapsulate, KeyExport, MlKem1024};
 use sha2::Sha256;
-use sha3::digest::{ExtendableOutput, Update, XofReader};
-use sha3::{Digest, Keccak256, Sha3_256, Shake256};
+use sha3::{Digest, Keccak256, Sha3_256};
+use shake::{ExtendableOutput, Shake256, Update, XofReader};
 
 type Dk = ml_kem::DecapsulationKey<MlKem1024>;
 type Ek = ml_kem::EncapsulationKey<MlKem1024>;
@@ -279,7 +279,7 @@ pub fn seal(role: Role, c: &Credit, p: &Party, seed_leg: &[u8; 32]) -> Option<Ve
         let mut k = kek(&ss);
         pl::clear(&mut ss);
         let sealed = Aes256Gcm::new_from_slice(&k).expect("32-byte key").encrypt(
-            Nonce::from_slice(&[0; 12]),
+            &Nonce::from([0; 12]),
             Payload {
                 msg: seed_leg,
                 aad: &aad(c, p),
@@ -426,7 +426,7 @@ fn open(seed: &[u8; 96], c: &Credit, p: &Party) -> Option<[u8; 32]> {
     let mut k = kek(&ss);
     pl::clear(&mut ss);
     let pt = Aes256Gcm::new_from_slice(&k).expect("32-byte key").decrypt(
-        Nonce::from_slice(&[0; 12]),
+        &Nonce::from([0; 12]),
         Payload {
             msg: sealed,
             aad: &aad(c, p),

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Static benchmark bundle: upstream LaZer 3330e48 vs the pqz-core fork on R_REG / R_TX (README.md).
 #
-#   pqz-core/research/upstream/static/build.sh <work dir> <LaZer clone at 3330e48>
+#   pqz-core/research/upstream/static/build.sh <work dir> [<LaZer clone at 3330e48>, default vendor/lazer-3330e48]
 #     -> <work dir>/pqz-bench-<sha>/  {bench_up_v3, bench_up_v4, bench_fork, bench_fork_v3, run.sh, README.md,
 #                                       build-info.txt}
 #        <work dir>/pqz-bench-<sha>.tar.gz
@@ -11,8 +11,10 @@
 # Fork: host clang (the fork's build.sh compiler), static glibc. Run it under scripts/capped.
 set -eu
 W=$(mkdir -p "$1" && cd "$1" && pwd)
-LZ=$(cd "$2" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
+# default: the vendor/ package (ARCH-POS-24: scripts/vendor.sh install kat)
+[ -n "${2:-}" ] || sh "$HERE/../../../../scripts/vendor.sh" check kat >/dev/null || exit 1
+LZ=$(cd "${2:-$HERE/../../../../vendor/lazer-3330e48}" && pwd)
 XC=$(cd "$HERE/.." && pwd)
 PQZ=$(cd "$XC/../../pqzl" && pwd) # the PQZL core (src/ params/ build.sh), copied as /w/src/pqz-core
 PIN=3330e487228f633eceb322807b13a596b516770f

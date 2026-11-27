@@ -43,8 +43,8 @@ url = "2"
 web-time = "1"
 zeroize = "1"
 # NODE-GW-02's HMAC of a gateway endpoint (its nonce from the OS, base64url)
-hmac = "0.12"
-sha2 = "0.10"
+hmac = "0.13"
+sha2 = "0.11"
 base64 = "0.22"
 getrandom = "0.2"
 alloy = { version = "~1.6", default-features = false, features = [

@@ -1,11 +1,13 @@
 //! `shake128.c`: SHAKE128 (LaZer's transcript hashes, `pqz_rel.c` `shake_tag` / `expand_A`) and the fork's SHAKE256
-//! (`pqz_keys.c`), from the `sha3` crate (D1). C's state allows absorb after a squeeze only as an `ASSERT_ERR`; here
-//! the types rule it out (absorb all parts, then squeeze). Successive squeezes continue one output stream, as C's.
+//! (`pqz_keys.c`), from the `shake` crate (D1; `sha3` before 0.12). C's state allows absorb after a squeeze only as an
+//! `ASSERT_ERR`; here the types rule it out (absorb all parts, then squeeze). Successive squeezes continue one output
+//! stream, as C's.
 //!
 //! `pqz_keys.c`'s bit stream: SHAKE256(tag || seed || be4(ctr)), one squeezed byte per 8 bits, bits LSB first, and
 //! CBD_eta on it.
-use sha3::digest::{ExtendableOutput, Update, XofReader};
-use sha3::{Shake128, Shake128Reader, Shake256, Shake256Reader};
+use shake::{
+    ExtendableOutput, Shake128, Shake128Reader, Shake256, Shake256Reader, Update, XofReader,
+};
 
 /// a SHAKE reader with an empty sponge to overwrite it with (the clear on drop)
 pub(crate) trait Empty {

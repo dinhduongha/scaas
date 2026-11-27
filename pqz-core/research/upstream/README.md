@@ -11,7 +11,8 @@ parameters, witness and seeds. The answer, method and numbers are in [RESULTS.md
 - `Dockerfile`: the offline upstream build image (`p6d-lazer-build:ubuntu24.04`).
 - `build-upstream.sh`, `build-up-bench.sh`, `build-fork.sh`, `build-micro.sh`, `build-prof.sh`: the builds. They
   name the session scratch paths they ran from (`$S` = a LaZer clone at `3330e48` and a fork snapshot at `b2402b5`);
-  set those paths to rerun.
+  set those paths to rerun. `build-upstream.sh` now clones `lazer-up/` from `vendor/lazer-3330e48` when it is missing
+  (`scripts/vendor.sh install kat`), and `static/build.sh` takes that package when no clone is given.
 - `shim/`: the fork's statement builder and bench compiled against upstream (`up_rel.c`, `bench.c`, `memory.h`,
   `shim.c`) and the microbenchmark (`micro.c`).
   - `up_rel.c` is the relation source at `b2402b5`, used by the scripts here.

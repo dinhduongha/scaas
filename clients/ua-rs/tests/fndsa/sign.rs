@@ -23,8 +23,8 @@ pub const KEYS_DIGEST: &str = "02513c7bc57c8122f13a424fdc30870ca5c1e35ac3c42b9ea
 
 /// Seed `i` of degree `kind`: SHAKE256 of a label, the kind and `i`, 48 bytes (keygen's seed length).
 pub fn parity_seed(kind: u16, i: u32) -> Vec<u8> {
-    use sha3::digest::{ExtendableOutput, Update, XofReader};
-    let mut h = sha3::Shake256::default();
+    use shake::{ExtendableOutput, Update, XofReader};
+    let mut h = shake::Shake256::default();
     h.update(b"ua-rs fndsa keygen parity");
     h.update(&kind.to_be_bytes());
     h.update(&i.to_be_bytes());

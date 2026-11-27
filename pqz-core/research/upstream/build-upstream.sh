@@ -4,6 +4,11 @@
 # -fomit-frame-pointer) + -fno-strict-aliasing (aes256ctr-amd64.c bug) + -DNDEBUG.
 set -eu
 X=$(cd "$(dirname "$0")" && pwd)
+# lazer-up: a clone of vendor/lazer-3330e48 (ARCH-POS-24: scripts/vendor.sh install kat), built in place
+if [ ! -d "$X/lazer-up" ]; then
+    sh "$X/../../../scripts/vendor.sh" check kat >/dev/null || exit 1
+    git -c advice.detachedHead=false clone -q "$X/../../../vendor/lazer-3330e48" "$X/lazer-up"
+fi
 docker run --rm --network none --memory=4g -u "$(id -u):$(id -g)" -v "$X":/w -w /w p6d-lazer-build:ubuntu24.04 sh -euc '
   cd /w/lazer-up/third_party
   rm -rf hexl-development && unzip -q hexl-development.zip

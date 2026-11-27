@@ -7,16 +7,22 @@ publish = false
 description = "SCaaS Universal Account identity layer: kind table, ids, keyHash, ua_msg, popDigest, UAAuth, key-data validation. UNAUDITED."
 
 [dependencies]
-sha3 = "0.10"
+# rustcrypto-next (owner 2026-11-26, ARCH-POS-25): the RustCrypto next generation (digest 0.11, hybrid-array) for every
+# direct use; SHAKE from `shake` (sha3 0.12 moved it there), the versions ml-kem 0.3.4 / ml-dsa 0.1.1 take
+sha3 = { version = "=0.12.0", default-features = false }
+shake = { version = "=0.1.0", default-features = false }
 # ua-rs-sign T3a (owner 2026-11-05, RUSTSEC-2026-0387): k256 / p256 0.13 -> 0.14 (elliptic-curve 0.14.3, ecdsa 0.17.0,
 # crypto-bigint 0.5.5 -> 0.7.10), every use in this crate, verifiers included; bip32 0.5.3 -> 0.6.0 (on k256 0.14). Left on
 # crypto-bigint 0.5.5: ZF frost-secp256k1 =3.0.0 (k256 0.13, its latest release), feature `signers` only.
 k256 = { version = "=0.14.0", default-features = false, features = ["arithmetic", "ecdsa", "schnorr", "hash2curve"] }
 p256 = { version = "=0.14.0", default-features = false, features = ["arithmetic", "ecdsa"] }
-sha2 = "=0.10.9"
+sha2 = "=0.11.1"
+# ark-ff 0.5's `DefaultFieldHasher` (BLS12-381 hash to curve, src/verify.rs) takes a digest 0.10 hasher: SHA-256 of
+# sha2 0.10 there only (the version ed25519-dalek 2 / frost-secp256k1 / schnorrkel keep in the lock)
+sha2-for-ark = { package = "sha2", version = "=0.10.9" }
 # the three-key model's HKDF-SHA256 (src/pqz3k.rs; the version already in the lockfile); feature `wallet` uses it too (SLIP-10,
 # EIP-2333, the PQ seeds), so it is no longer optional there
-hmac = "=0.12.1"
+hmac = "=0.13.0"
 curve25519-dalek = "4"
 ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["fast"] }
 ark-ff = "0.5"
@@ -42,36 +48,36 @@ slh-dsa = { version = "=0.2.0-rc.5", default-features = false, optional = true }
 # (runs/2026-11-05-ua-rs-sign-t0.md)
 bip39 = { version = "=2.2.2", default-features = false, features = ["alloc", "zeroize"], optional = true }
 bip32 = { version = "=0.6.0", default-features = false, features = ["alloc", "secp256k1"], optional = true }
-hkdf = { version = "=0.12.4", optional = true }
-zeroize = { version = "=1.8.2", optional = true }
+hkdf = { version = "=0.13.0", optional = true }
+zeroize = { version = "=1.9.1", optional = true }
 unicode-normalization = { version = "=0.1.26", optional = true }
 # ua-rs-sign T3a: the native addresses of clientkeys `describe` (cosmos RIPEMD-160 + bech32, Solana base58, Sui BLAKE2b-256);
 # `ripemd` and `bs58` were in the graph already (bip32 0.6), `blake2` is new (RustCrypto, MIT OR Apache-2.0)
 ripemd = { version = "=0.2.0", optional = true }
 bs58 = { version = "=0.5.1", default-features = false, features = ["alloc"], optional = true }
-blake2 = { version = "=0.10.6", default-features = false, optional = true }
+blake2 = { version = "=0.11.0", default-features = false, optional = true }
 # ua-rs-sign T5: EVM transaction RLP (spec §5.5), pin of T0 (MIT OR Apache-2.0; pulls `bytes` 1.12.1, MIT)
 alloy-rlp = { version = "=0.3.17", default-features = false, optional = true }
 # ua-rs-sign T7: the UA KEM key (spec §6.1, §6.2), pin of T0: ML-KEM-1024 (FIPS 203), `zeroize`; `hazmat` only under `vectors`.
 # Its release encapsulation runs `m` from `rand_core` 0.6 `OsRng` (as the PQ signers), so ml-kem's `getrandom` (getrandom 0.4) is
 # not taken. X25519 is curve25519-dalek 4's clamped Montgomery ladder (a dependency already): no x25519-dalek.
 ml-kem = { version = "=0.3.4", default-features = false, features = ["zeroize"], optional = true }
-# ua-rs-sign T8: AEAD (spec §7: AES-256-GCM, AES-256-GCM-SIV, both on `aes` 0.8, the generation pqzl pins) and the containers'
+# ua-rs-sign T8: AEAD (spec §7: AES-256-GCM, AES-256-GCM-SIV, both on `aes` 0.9, the generation pqzl pins) and the containers'
 # base64url (spec §6.3, unpadded, constant time); pins of T0
-aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "alloc", "zeroize"], optional = true }
-aes-gcm-siv = { version = "=0.11.1", default-features = false, features = ["aes", "alloc"], optional = true }
+aes-gcm = { version = "=0.11.1", default-features = false, features = ["aes", "alloc", "zeroize"], optional = true }
+aes-gcm-siv = { version = "=0.12.1", default-features = false, features = ["aes", "alloc"], optional = true }
 base64ct = { version = "=1.8.3", default-features = false, features = ["alloc"], optional = true }
 # ua-rs-sign T9: the clientkeys vault v1 pin envelope (spec §8.1, CLI-SGN-02: scrypt N = 2^17, r = 8, p = 1), pin of T0; no
-# `simple` / `std` (password-hash and its rand_core 0.6 are not taken): salsa20 0.10.2, pbkdf2 0.12.2 (MIT OR Apache-2.0)
-scrypt = { version = "=0.11.0", default-features = false, optional = true }
+# `simple` / `std` (password-hash is not taken): salsa20 0.11.0, pbkdf2 0.13.0 (MIT OR Apache-2.0)
+scrypt = { version = "=0.12.0", default-features = false, optional = true }
 # scaas-sdk T6 (spec §6.6, §25 Q-K4; owner 2026-11-17): feature `roots`, the Argon2id of roots (c) and (d). RustCrypto argon2
-# 0.5.3 (MIT OR Apache-2.0) on blake2 0.10.6, already in the graph; no `password-hash` / `rand` (only `hash_password_into`)
-argon2 = { version = "=0.5.3", default-features = false, features = ["alloc", "zeroize"], optional = true }
+# 0.6.0 (MIT OR Apache-2.0) on blake2 0.11.0, already in the graph; no `password-hash` / `rand` (only `hash_password_into`)
+argon2 = { version = "=0.6.0", default-features = false, features = ["alloc", "zeroize"], optional = true }
 # ua-rs-native T8a (spec §11, pins of T0, runs/2026-11-17-ua-rs-native-t0.md): Polkadot sr25519. schnorrkel BSD-3-Clause, no `alloc`
 # (it would pull serde_bytes), `getrandom` only (every call passes its own one-shot RNG); its merlin, getrandom_or_panic and
 # arrayref are new in the lock. pbkdf2 (in the lock through scrypt) for the substrate-bip39 mini-secret.
 schnorrkel = { version = "=0.11.5", default-features = false, features = ["getrandom"], optional = true }
-pbkdf2 = { version = "=0.12.2", default-features = false, features = ["hmac"], optional = true }
+pbkdf2 = { version = "=0.13.0", default-features = false, features = ["hmac"], optional = true }
 
 # ua-rs-sign T14: feature `zether` (spec §10.1): the Zether prover (BLS12-381 only; its legacy `bn254` feature stays off). Every
 # proof, transcript and encryption stays there; ua-rs adds key custody (the conf key `x` in the wallet's arena) and the ABI.
@@ -167,7 +173,7 @@ roots = ["wallet", "dep:argon2"]
 # scaas-sdk T21: app-core key handles (src/wallet/appkey.rs; spec §12.2, §23.1 item 9)
 app-core = ["wallet", "dep:argon2"]
 # PqVault plan V1 (spec §6.5, CLI-PQV-10; owner 2026-11-21, O8): the vault passphrase's Argon2id set 1 (64 MiB / 3 / 4), the same
-# `argon2` 0.5.3 pin as `roots` (MIT OR Apache-2.0, `alloc` + `zeroize`, no `password-hash`; its blake2 0.10.6 is ua-rs's), so no
+# `argon2` 0.6.0 pin as `roots` (MIT OR Apache-2.0, `alloc` + `zeroize`, no `password-hash`; its blake2 0.11.0 is ua-rs's), so no
 # second version enters the lock. Today only tests/pqvault_pass.rs reads it (the reproducer of vectors/pqvault/pass.json); the key
 # handle over it is the SDK's app-core task (plan V9 / scaas-sdk T21). `unicode-normalization` (the wallet's pin, in the lock): the
 # passphrase's NFC of RFC 8265 OpaqueString before Argon2id (Fable code review F4).

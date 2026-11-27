@@ -307,7 +307,7 @@ claim*, so the verifier checks `fullMessage` itself.
 |---|---|---|---|---|
 | Move | `bcs::to_bytes` | `aptos_std::aptos_hash::sha3_256` / `std::hash::sha3_256` | `auth::check_envelope` | `ed25519::signature_verify_strict` |
 | Client verifier | byte concatenation per the table above (stdlib) | `hashlib.sha3_256` | the same parse | OpenSSL Ed25519 |
-| Rust adapter | only **decodes** the job payload (proptest) + vectors | crate `sha3` 0.10 (already in `Cargo.lock`, now a direct dependency — no new crate) | none — bytes passed through | none (simulation decides) |
+| Rust adapter | only **decodes** the job payload (proptest) + vectors | crate `sha3` (0.12 since [ARCH-POS-25](../decisions.md#ARCH-POS-25); 0.10 when added, already in `Cargo.lock`, a direct dependency — no new crate) | none — bytes passed through | none (simulation decides) |
 | JS (connector, clientkeys) | none — uses `terms.message` | — | checks the returned `fullMessage` before sending | — |
 
 Cross vectors: `smartcontracts/move/aptos/scripts/gen_vectors.py` generates `tests/vectors.move` (payload, digest,

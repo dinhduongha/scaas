@@ -287,7 +287,10 @@ def build():
             capture_output=True,
         ).stdout
         subprocess.run(["tar", "-x", "-C", pre], input=a, check=True)
-        subprocess.run(["cp", "-al", os.path.join(EVM, "lib"), os.path.join(pre, "smartcontracts/evm/lib")], check=True)
+        # lib/<name> links into vendor/ (scripts/vendor.sh): -L hard-links the files they name, not the links
+        subprocess.run(
+            ["cp", "-alL", os.path.join(EVM, "lib"), os.path.join(pre, "smartcontracts/evm/lib")], check=True
+        )
         # forge from PATH (else ~/.foundry/bin); under scripts/capped locally, plain on CI (no systemd user scope there)
         forge = shutil.which("forge") or os.path.expanduser("~/.foundry/bin/forge")
         cap = [] if os.environ.get("CI") else [os.path.join(ROOT, "scripts/capped")]

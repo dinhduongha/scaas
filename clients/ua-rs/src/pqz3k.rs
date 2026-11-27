@@ -21,8 +21,7 @@ macro_rules! vectors_pub {
         $(#[$m])* pub(crate) fn $name $($rest)*
     };
 }
-use sha3::digest::{ExtendableOutput, Update, XofReader};
-use sha3::Shake256;
+use shake::{ExtendableOutput, Shake256, Update, XofReader};
 #[cfg(feature = "wallet")]
 use zeroize::Zeroizing;
 
