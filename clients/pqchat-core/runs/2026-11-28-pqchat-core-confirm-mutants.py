@@ -148,7 +148,7 @@ MUTANTS = [
     ),
     (
         "only the latest version read",
-        [(TO, "            .saturating_sub(REF_VERSIONS_MAX - 1)\n", "")],
+        [(TO, "e.version_count.saturating_sub(REF_VERSIONS_MAX - 1).max(1);", "e.version_count.max(1);")],
         TOP + "a_pinned_content_hash_is_checked",
     ),
 ]
