@@ -325,7 +325,8 @@ warning, an admin's new info after a gap, the order of a commit's pieces, the cl
   followed the head, nothing is owed, no head admin is `gone`, no path commit of the device's own is staged on the head (F-5, owner
   2026-11-27), a `try` is left and the bound leaves room;
   the default bound is 20. A device anchored in a run keeps the chain's key when a tag fails ("the author did not hold the
-  epoch"); a path-less joiner whose later tag fails sees "this device's Welcome may not match the group"; a good tag with a
+  epoch"), unless the record is its own: then the compromise warning, with no key and no chain until a path commit (owner
+  2026-11-28, F-1, C-11 / G-4); a path-less joiner whose later tag fails sees "this device's Welcome may not match the group"; a good tag with a
   `sealedInfo` that fails is "followed, info not taken"; the leaves under review are listed in every path commit's review,
   and a path commit over them is built only once the caller acknowledged them (`TreeLeavesUnderReview`); a
   path-less record of the device's own `(ua, keyId)` whose nonce no `try` of its seed reproduces is the compromise warning.

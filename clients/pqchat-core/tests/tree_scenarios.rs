@@ -2414,8 +2414,8 @@ async fn the_pathless_faults_read_as_their_control() {
 }
 
 /// The path-less delta §6.2 F-3, §6.5 (fable-D-1 = G-2 of the path-less review): with leaves under review (A's replay of
-/// `pathless-faults`: 4 and 7, from its C45 epochs), a path commit is refused by name before anything is built or signed
-/// unless the caller acknowledged them; acknowledged, the build goes on (the control: another outcome than the refusal).
+/// `pathless-faults`: 4 from its C45 epoch 3, 7 from its own epoch 6, the compromise warning since F-1), a path commit is
+/// refused by name before anything is built or signed unless the caller acknowledged them; acknowledged, the build goes on (the control: another outcome than the refusal).
 /// A device with none under review (D) is not asked.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_path_commit_over_leaves_under_review_asks_first() {

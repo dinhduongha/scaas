@@ -779,7 +779,8 @@ export function pathlessFirstScenario() {
   return w;
 }
 /** The faults a path-less record can carry (§6.2, §6.3, §6.5): a bad Welcome (D: not followed at its join); a wrong tag
- *  (members: "author did not hold", the chain's key kept, no info in force; E: not followed at its join); an admin's full
+ *  (members: "author did not hold", the chain's key kept, no info in force; its author's own device: the compromise warning,
+ *  F-1; E: not followed at its join); an admin's full
  *  info (C33 after C45); a bad sealedInfo with a good tag ("followed, info not taken" for the members, the author and the
  *  joiner C2); a wrong tag while F and C2 are in their first run ("Welcome may not match"); A's path commit reaching them
  *  all; B's path commit with a wrong tag ("not followed (tag)", B's own: the warning). `control`: the same commits with no
