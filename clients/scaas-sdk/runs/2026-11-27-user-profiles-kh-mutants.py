@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""user-profiles KH mutants (owner 2026-11-27, O15, CLI-UPR-30: ua-rs's `key-handles`, `user-profile` with no signing code),
+"""user-profiles KH mutants (owner 2026-11-27, O15, CLI-UPR-32: ua-rs's `key-handles`, `user-profile` with no signing code),
 against the nm gate clients/ua-rs/runs/2026-11-27-key-handles-nm.py:
 python3 clients/scaas-sdk/runs/2026-11-27-user-profiles-kh-mutants.py check | run"""
 import sys

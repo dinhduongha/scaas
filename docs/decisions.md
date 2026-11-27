@@ -12981,19 +12981,19 @@ Change (controller call 2026-11-27, the round-3 Fable review of `9f2ee89b7`, R3-
 **Cost if wrong.** False rollbacks in normal use, which teach the user to accept a real one.
 **Source.** Controller call 2026-11-27 on the round-3 Fable review of the user-profiles spec at `9f2ee89b7` (R3-A-1, B N-1); SDK spec §6.3; [spec](superpowers/specs/2026-11-27-user-profiles.md) §7.2, §19.
 
-### CLI-UPR-29 — Each profile has its own Matrix: its logins, session, store, crypto keys and device id; nothing Matrix-side is shared between profiles
-- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-29 · superseded-by: —
+### CLI-UPR-31 — Each profile has its own Matrix: its logins, session, store, crypto keys and device id; nothing Matrix-side is shared between profiles
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-31 · superseded-by: —
 
-**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-29).) A profile's Matrix logins, session, store, crypto keys and device id are its own and sealed in it (the Matrix store key a sealed item); no Matrix state is shared between profiles; one `scaas-matrix` client per open profile; a switch closes the current client first.
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-31).) A profile's Matrix logins, session, store, crypto keys and device id are its own and sealed in it (the Matrix store key a sealed item); no Matrix state is shared between profiles; one `scaas-matrix` client per open profile; a switch closes the current client first.
 **Status.** SPECIFIED; wave 1 builds the store item only, the two-session test is wave 2. UNAUDITED.
 **Why.** Profiles are separate identities (CLI-UPR-03, CLI-UPR-04); a shared Matrix device or store would tie them together on the homeserver and on disk.
 **Cost if wrong.** One profile's chats, keys or device visible to another; a switch that leaves the first profile's client signed in.
 **Source.** Owner ruling 2026-11-27 (chat, through the controller): each profile has its own Matrix logins, session, store, crypto keys and device id, sealed in that profile; nothing Matrix-side is shared; one `scaas-matrix` client per open profile, closed first at a switch; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O14, §5, §7.2, §17.
 
-### CLI-UPR-30 — scaas-app's default build links `ua-rs` only with the profile-crypto features; no signing code is compiled into it
-- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-30 · superseded-by: —
+### CLI-UPR-32 — scaas-app's default build links `ua-rs` only with the profile-crypto features; no signing code is compiled into it
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-32 · superseded-by: —
 
-**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-30).) `scaas-profile` takes `ua-rs` without defaults and with `user-profile` and `json` only; `user-profile` is the new feature `key-handles` (arena, key handles, AEAD, HKDF, HMAC, Argon2id, `ProfileKeys`, `ExportKey`), which enables no `wallet`, `pq`, `signers`, `fam-*`, `zether` or `pqz`; `app-core` is `key-handles` and `wallet` and keeps what needs a seed or a UA kind; `mlock` locks either arena.
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-32).) `scaas-profile` takes `ua-rs` without defaults and with `user-profile` and `json` only; `user-profile` is the new feature `key-handles` (arena, key handles, AEAD, HKDF, HMAC, Argon2id, `ProfileKeys`, `ExportKey`), which enables no `wallet`, `pq`, `signers`, `fam-*`, `zether` or `pqz`; `app-core` is `key-handles` and `wallet` and keeps what needs a seed or a UA kind; `mlock` locks either arena.
 **Status.** BUILT (`ua-rs` features `key-handles`, `user-profile`, `app-core`, `mlock`; `clients/ua-rs/runs/2026-11-27-key-handles-nm.py`; CI cell `user-profile`). UNAUDITED.
 **Why.** The app's default build holds a profile without the SDK (CLI-UPR-02's Change); signing code it never calls is attack surface and size it does not need.
 **Cost if wrong.** Signing code, PQ kinds or group signers linked into an app build that signs nothing; a later feature edit pulling `wallet` back in unnoticed.
