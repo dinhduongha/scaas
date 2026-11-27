@@ -895,3 +895,29 @@ fn hidden_duplicates_listed_never_picked() {
         ids[0]
     );
 }
+
+/// R4's open point (controller call 2026-11-28): the preview's `imported` marking rewrites `sdk.state` keeping its keys in the
+/// SDK's own order (`rev` first; a nested object's order too; as serde_json writes the SDK's own item): only each open
+/// operation's `state` changes. Control: a state with no open operation comes back byte for byte.
+#[test]
+fn import_marking_keeps_the_key_order() {
+    let _k = kdf_lock();
+    let p = Profiles::new(cfg(&tmp(), None)).unwrap();
+    let preview = |state: &[u8]| {
+        let label = br#"{"name":"Bob","hidden":false}"#;
+        let items = [("keystore", &br#"{"rev":1}"#[..]), ("sdk.state", state)];
+        let pl = Profiles::test_payload(label, b"{}", &items).unwrap();
+        let f = p.test_export(&pl, XPASS, TEST, &[7; 16], &[9; 7]).unwrap();
+        let r = p.import_preview(ImportSource::Bytes(&f), XPASS).unwrap();
+        r.item("sdk.state").unwrap().to_vec()
+    };
+    let ended =
+        br#"{"rev":3,"ops":[{"op":"b","state":"landed","op_json":{"z":1,"a":[2,"x"]}}],"pops":{}}"#;
+    assert_eq!(preview(ended), ended, "control");
+    let open = br#"{"rev":2,"ops":[{"op":"a","state":"signed","valid_until":18446744073709551615},{"op":"b","state":"landed"}],"cursors":{"z":1,"a":2}}"#;
+    let want = br#"{"rev":2,"ops":[{"op":"a","state":"imported","valid_until":18446744073709551615},{"op":"b","state":"landed"}],"cursors":{"z":1,"a":2}}"#;
+    assert_eq!(
+        String::from_utf8(preview(open)).unwrap(),
+        String::from_utf8(want.to_vec()).unwrap()
+    );
+}

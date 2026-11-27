@@ -700,8 +700,8 @@ must(ENV_MIGRATION.includes('"gen":0,"migration":"pending","name":"default"'), "
     return fileRow(c, label, [["keystore", { filler: `export/filler/${c}`, len: total - fixed, rev: 1 }]], false);
   };
   const jsonHex = (o) => hex(utf8ToBytes(JSON.stringify(o)));
-  // keys in byte order: scaas-profile's preview writes sdk.state back through a serde_json map (its operations marked)
-  const STATE = jsonHex({ ops: [], rev: 2 });
+  // the SDK's own key order (rev first): scaas-profile's preview keeps it when it marks the operations (2026-11-28)
+  const STATE = jsonHex({ rev: 2, ops: [] });
   const files = [
     fileRow(
       "small",

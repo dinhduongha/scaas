@@ -359,25 +359,111 @@ fn parse_payload(pl: &[u8]) -> Result<ImportReview, Refusal> {
     })
 }
 
+/// A JSON value whose objects keep their keys' order as read (serde_json's `Map` sorts them unless its `preserve_order`
+/// feature is on, which would reach the SDK's graph), so `sdk.state` is written back in the SDK's own order (controller call
+/// 2026-11-28). A key twice is written back as read (the SDK's parser of the item refuses a field twice).
+enum Ordered {
+    Object(Vec<(String, Ordered)>),
+    Array(Vec<Ordered>),
+    Leaf(serde_json::Value),
+}
+
+impl<'de> serde::Deserialize<'de> for Ordered {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = Ordered;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("JSON")
+            }
+            fn visit_bool<E>(self, v: bool) -> Result<Ordered, E> {
+                Ok(Ordered::Leaf(v.into()))
+            }
+            fn visit_i64<E>(self, v: i64) -> Result<Ordered, E> {
+                Ok(Ordered::Leaf(v.into()))
+            }
+            fn visit_u64<E>(self, v: u64) -> Result<Ordered, E> {
+                Ok(Ordered::Leaf(v.into()))
+            }
+            fn visit_f64<E>(self, v: f64) -> Result<Ordered, E> {
+                Ok(Ordered::Leaf(v.into()))
+            }
+            fn visit_str<E>(self, v: &str) -> Result<Ordered, E> {
+                Ok(Ordered::Leaf(v.into()))
+            }
+            fn visit_unit<E>(self) -> Result<Ordered, E> {
+                Ok(Ordered::Leaf(serde_json::Value::Null))
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut a: A,
+            ) -> Result<Ordered, A::Error> {
+                let mut v = Vec::new();
+                while let Some(x) = a.next_element()? {
+                    v.push(x);
+                }
+                Ok(Ordered::Array(v))
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut a: A,
+            ) -> Result<Ordered, A::Error> {
+                let mut v = Vec::new();
+                while let Some(e) = a.next_entry()? {
+                    v.push(e);
+                }
+                Ok(Ordered::Object(v))
+            }
+        }
+        d.deserialize_any(V)
+    }
+}
+
+impl serde::Serialize for Ordered {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        match self {
+            Ordered::Leaf(v) => v.serialize(s),
+            Ordered::Array(v) => s.collect_seq(v),
+            Ordered::Object(v) => {
+                let mut m = s.serialize_map(Some(v.len()))?;
+                for (k, x) in v {
+                    m.serialize_entry(k, x)?;
+                }
+                m.end()
+            }
+        }
+    }
+}
+
+/// The field `key` of an object.
+fn field<'a>(v: &'a mut Ordered, key: &str) -> Option<&'a mut Ordered> {
+    match v {
+        Ordered::Object(f) => f.iter_mut().find(|(k, _)| k == key).map(|(_, x)| x),
+        _ => None,
+    }
+}
+
 /// `sdk.state` with every operation a chain fact has not ended (`landed`, `reverted`, `consumed`, `expired`) marked
-/// `imported` in its `state`: none is sent or followed without the user's word. A state of no such form (`ops`, each with a
-/// string `state`) is refused (`item`).
-// ponytail: the parsed `Value`'s strings are plain heap copies, freed unwiped, as the SDK's parse of the same item
+/// `imported` in its `state`: none is sent or followed without the user's word. Its keys keep their order (the SDK's own:
+/// `rev` first). A state of no such form (`ops`, each with a string `state`) is refused (`item`).
+// ponytail: the parsed strings are plain heap copies, freed unwiped, as the SDK's parse of the same item
 fn mark_imported(bytes: &[u8]) -> Result<Zeroizing<Vec<u8>>, Refusal> {
     use serde_json::Value;
     if scaas_ua::json::depth_within(bytes, 64).is_err() {
         return Err(no("item"));
     }
-    let mut v: Value = serde_json::from_slice(bytes).map_err(|_| no("item"))?;
-    let ops = v
-        .get_mut("ops")
-        .and_then(Value::as_array_mut)
-        .ok_or(no("item"))?;
+    let mut v: Ordered = serde_json::from_slice(bytes).map_err(|_| no("item"))?;
+    let Some(Ordered::Array(ops)) = field(&mut v, "ops") else {
+        return Err(no("item"));
+    };
     for op in ops {
-        let s = op.get_mut("state").ok_or(no("item"))?;
-        match s.as_str().ok_or(no("item"))? {
+        let Some(Ordered::Leaf(Value::String(s))) = field(op, "state") else {
+            return Err(no("item"));
+        };
+        match s.as_str() {
             "landed" | "reverted" | "consumed" | "expired" => {}
-            _ => *s = Value::from("imported"),
+            _ => *s = "imported".into(),
         }
     }
     let mut out = Zeroizing::new(Vec::with_capacity(bytes.len() + 64 * 8));
