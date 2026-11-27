@@ -88,11 +88,16 @@ fn hex(s: &str) -> Vec<u8> {
         .collect()
 }
 
-/// `p/<id>/profile.envelope` written as given (a hand-built or vector profile).
+/// `p/<id>/profile.envelope` written as given (a hand-built or vector profile), and a protected one's generation `g<gen>/`
+/// (every path that makes a protected profile makes it; one without it is `ProfileDamaged`, review G-11).
 fn plant(root: &Path, id: &str, envelope: &str) {
     let d = root.join("p").join(id);
     std::fs::create_dir_all(&d).unwrap();
     std::fs::write(d.join("profile.envelope"), envelope).unwrap();
+    let v: Value = serde_json::from_str(envelope).unwrap_or(Value::Null);
+    if v["state"] == "protected" {
+        std::fs::create_dir_all(d.join(format!("g{}", v["gen"]))).unwrap();
+    }
 }
 
 fn unprotected(id: &str, name: &str) -> String {
@@ -338,6 +343,8 @@ fn start_cleans_up() {
     for d in [".tmp-free", ".tmp-held"] {
         std::fs::create_dir_all(pd.join(d)).unwrap();
     }
+    // review A-16: start removes a build directory only when its `build.lock` exists and is free
+    std::fs::write(pd.join(".tmp-free/build.lock"), b"").unwrap();
     let _held = lock(&pd.join(".tmp-held/build.lock"));
     let (t_free, t_held) = (new_id(), new_id());
     for t in [&t_free, &t_held] {

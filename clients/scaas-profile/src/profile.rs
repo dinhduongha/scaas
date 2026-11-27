@@ -255,10 +255,12 @@ pub(crate) fn open_code(e: scaas_ua::wallet::Error) -> Error {
 
 impl Profiles {
     /// Start (spec §10): the root checked, then under the root lock the journal finished or undone, each `p/.tmp-*` whose
-    /// `build.lock` is free removed, each tombstone whose instance lock is free removed with its keychain items, each
-    /// UUID-named directory without a usable envelope reported (`ProfileDamaged`, never removed), the index rebuilt when it
-    /// is missing or does not parse while `p/` holds a profile, then the migration from `legacy` (spec §12, `migrate.rs`). No
-    /// live profile's lock is taken. First run (no profile directory, nothing migrated): "default" created unprotected.
+    /// `build.lock` exists and is free removed, each tombstone whose instance lock is free removed after its keychain items
+    /// (beside a live `p/<id>/` the tombstone alone, `ProfileDamaged`), each UUID-named directory without a usable envelope
+    /// reported (`ProfileDamaged`, never removed), the index rebuilt when it is missing or does not parse while `p/` holds a
+    /// profile, then the migration from `legacy` (spec §12, `migrate.rs`). An entry that cannot be cleaned is reported
+    /// (`ProfileDamaged`) and left. No live profile's lock is taken. First run (no profile directory, nothing migrated):
+    /// "default" created unprotected.
     pub fn new(config: ProfilesConfig) -> Result<Profiles, Error> {
         prepare_root(&config.root)?;
         let pr = Profiles {
@@ -338,15 +340,34 @@ impl Profiles {
             if !e.file_type().map_err(|_| Error::VaultIo)?.is_dir() {
                 continue;
             }
-            if name.starts_with(".tmp-") {
-                if try_lock_file(&path.join(BUILD_LOCK))?.is_some() {
-                    remove_dir(&path)?;
+            // each lock is held across its removal; an entry start cannot clean is reported and left, never fatal
+            let cleaned = if name.starts_with(".tmp-") {
+                // only a build directory whose `build.lock` exists and is free: one whose builder has not locked it yet is left
+                let lock = path.join(BUILD_LOCK);
+                match lock.is_file() {
+                    true => try_lock_file(&lock).and_then(|l| match l {
+                        Some(_held) => remove_dir(&path),
+                        None => Ok(()),
+                    }),
+                    false => Ok(()),
                 }
             } else if let Some(id) = name.strip_suffix(TOMBSTONE).filter(|id| is_id(id)) {
-                if try_lock_file(&path.join(INSTANCE_LOCK))?.is_some() {
-                    remove_dir(&path)?;
-                    self.remove_keychain(id)?;
-                }
+                try_lock_file(&path.join(INSTANCE_LOCK)).and_then(|l| match l {
+                    // a tombstone beside a live `p/<id>/` (planted, or a copy): removed alone, the live profile's keychain
+                    // items (its anchor, its marker) kept
+                    Some(_held) if std::fs::symlink_metadata(self.p.join(id)).is_ok() => {
+                        self.event(ProfileEvent::ProfileDamaged);
+                        remove_dir(&path)
+                    }
+                    // the keychain items first, as a delete removes them: a failure keeps the tombstone for the next start
+                    Some(_held) => self.remove_keychain(id).and_then(|()| remove_dir(&path)),
+                    None => Ok(()),
+                })
+            } else {
+                Ok(())
+            };
+            if cleaned.is_err() {
+                self.event(ProfileEvent::ProfileDamaged);
             }
         }
         let scan = self.scan()?;
@@ -673,9 +694,10 @@ impl Profiles {
     }
 
     /// Spec §7.3 at the profile's own open, under its instance lock: a journal (`profile.envelope.next`) rolls the re-seal back,
-    /// `g<gen+1>/` removed first, then the journal; then a generation above `gen` is `ProfileDamaged` (`ProfileRollback` where
-    /// an anchor names a higher `gen`: the envelope is old), never removed; a generation below `gen` is `ProfileDamaged` without
-    /// `g<gen>/`, else returned, to be removed once the wrap has opened.
+    /// `g<gen+1>/` removed first, then the journal (`ProfileRollback` and nothing removed where an anchor names a higher `gen`);
+    /// then a generation above `gen` is `ProfileDamaged` (`ProfileRollback` where an anchor names a higher `gen`: the envelope is
+    /// old), never removed; a protected profile without `g<gen>/` is `ProfileDamaged`; a generation below `gen` is returned, to
+    /// be removed once the wrap has opened.
     pub(crate) fn generations(
         &self,
         dir: &Path,
@@ -684,6 +706,12 @@ impl Profiles {
     ) -> Result<Vec<PathBuf>, Error> {
         let next = gen.checked_add(1).ok_or(Error::ProfileFormat)?;
         if std::fs::symlink_metadata(dir.join(reseal::NEXT)).is_ok() {
+            // a re-seal's journal never sits beside an anchor of a higher `gen` (the anchor follows the commit's rename): the
+            // envelope is old, and the live generation stays
+            if self.anchor_gen(dir, id)? > gen {
+                self.event(ProfileEvent::ProfileRollback);
+                return Err(Error::ProfileRollback);
+            }
             remove_dir(&dir.join(format!("g{next}")))?;
             remove_file(&dir.join(reseal::NEXT))?;
             sync_dir(dir)?;
@@ -710,7 +738,8 @@ impl Profiles {
             self.event(e.0);
             return Err(e.1);
         }
-        if !lower.is_empty() && !dir.join(format!("g{gen}")).is_dir() {
+        // a protected profile without its `g<gen>/` is damaged, never given an empty one
+        if gen > 0 && !dir.join(format!("g{gen}")).is_dir() {
             self.event(ProfileEvent::ProfileDamaged);
             return Err(Error::ProfileDamaged);
         }

@@ -9,7 +9,9 @@
 //!   moved into its `g0/` (`keystore.head` beside the envelope, where the SDK's store reads it) by `rename(2)`, or across
 //!   file systems copied, `fsync`ed, then removed at the source. Each step is idempotent: a moved item is absent at the source;
 //!   an item at both places with the same bytes (a copy whose source removal did not happen) is removed at the source; with
-//!   other bytes (a later write of an old binary) it is reported and left at both.
+//!   other bytes (a later write of an old binary) it is reported and left at both. An item that cannot move (a directory, above
+//!   16 MiB, an I/O failure) is reported (`ProfileDamaged`) and left, never fatal; so is a legacy store whose lock cannot be
+//!   taken.
 //! - **Step (3), `migration` cleared, is the commit of `set_passphrase`** (controller call UP9): spec §5 and §7.1 accept the
 //!   legacy items in an unprotected `g0/` only under `migration: pending`, and §7.3 / §12 seal them there; clearing it at the
 //!   end of the move would make the moved keystore `ProfileFormat` and leave it out of the seal.
@@ -46,9 +48,12 @@ impl Profiles {
         if !legacy && overlay.is_none() {
             return Ok(first_run);
         }
-        let _legacy = match legacy {
-            true => Some(lock_file(&src.join("keystore.lock"))?),
-            false => None,
+        let _legacy = match legacy.then(|| lock_file(&src.join("keystore.lock"))) {
+            Some(Err(_)) => {
+                self.event(ProfileEvent::ProfileDamaged);
+                return Ok(first_run);
+            }
+            l => l,
         };
         let pending = self.scan()?.into_iter().find_map(|(id, e)| {
             e.filter(|e| e.state == State::Unprotected && e.migration.is_some())
@@ -75,11 +80,16 @@ impl Profiles {
                 HEAD => dir.clone(),
                 _ => dir.join("g0"),
             };
-            self.move_item(src, name, &to)?;
+            // an item that cannot move is reported and left, never fatal
+            if self.move_item(src, name, &to).is_err() {
+                self.event(ProfileEvent::ProfileDamaged);
+            }
             self.died(Step::MigrationMoved)?;
         }
         if let Some(o) = overlay {
-            self.move_overlay(o, &dir.join("g0"))?;
+            if self.move_overlay(o, &dir.join("g0")).is_err() {
+                self.event(ProfileEvent::ProfileDamaged);
+            }
             self.died(Step::MigrationMoved)?;
         }
         Ok(false)
