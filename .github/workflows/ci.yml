@@ -140,8 +140,8 @@
 #                          --test vectors); cargo clippy --locked --all-targets -- -D warnings; cargo check --target wasm32-unknown-unknown;
 #                          python3 -I runs/check_reads.py (gate pqc-reads); cargo deny check and cargo audit (its deny.toml, .cargo/audit.toml);
 #                          the chain_ and e2e runs (anvil, Docker, Synapse: gates pqc-chain, pqc-e2e) stay local
-#   scaas-matrix:          in clients/scaas-matrix (CLI-MTX-01): cargo test --locked (tests/deps.rs: no SDK or pqchat-core in its graph;
-#                          the policy, profile and store-key tests); cargo clippy --locked --all-targets -- -D warnings; cargo deny check
+#   scaas-matrix:          in clients/scaas-matrix (CLI-MTX-01): cargo test --locked --features testing (tests/deps.rs: no SDK or pqchat-core
+#                          in its graph; the policy, record, profile and store-key tests); cargo clippy --locked --all-targets --features testing -- -D warnings; cargo deny check
 #                          and cargo audit (its deny.toml, .cargo/audit.toml); in clients/pqchat-transport cargo clippy --locked; the e2e
 #                          against Synapse in Docker (cargo test --test e2e -- --ignored) stays local
 #   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
@@ -1639,10 +1639,10 @@ jobs:
         with:
           tool: cargo-deny@0.20.2,cargo-audit@0.22.2
       - name: cargo test
-        run: cargo test --locked
+        run: cargo test --locked --features testing
       - name: cargo clippy
         run: |
-          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked --all-targets --features testing -- -D warnings
           cd ../pqchat-transport && cargo clippy --locked --all-targets -- -D warnings
       - name: cargo deny and cargo audit
         run: |
