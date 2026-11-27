@@ -40,7 +40,7 @@ only kinds whose kind **and** keyHash group gen 1 does not enable ([accounts.md 
 "Generations", T-REG-4). So a gen-1 UA of a PQ kind could never use a later precompile; only a new kind version (a new UA
 id, re-registration, assets moved) would.
 
-The owner chose option **(b)**: "Do option b, write the spec, then a Fable review." Option (b): **a gen-2 registry may
+The owner chose option **(b)**: the spec is written, then reviewed by Fable. Option (b): **a gen-2 registry may
 re-enable a kind that gen 1 enables, for verification only**, with its own (new) verifier, e.g. one that calls a precompile
 that did not exist when gen 1 was deployed. Registration, the record, the key pointer, the keyHash group and every key write
 stay with gen 1 (no second record, no second owner of the group, no re-registration: the UA id is unchanged). Token
@@ -50,9 +50,9 @@ token release chooses its registry.
 
 ### 0.2 Rulings on the review of revision 1 (owner 2026-11-19)
 
-The owner on the review's positions and the spec's proposals: **"approved all as proposed"**; on the probe of Draft
-addresses: **"the middle way, as proposed"**; on "only two generations" against "N generations": **"Choose b, put it in
-revision 2"**; on the depth cap: **"Accept 16 generations"**.
+The owner on the review's positions and the spec's proposals: **all as proposed**; on the probe of Draft
+addresses: **the middle way, as proposed**; on "only two generations" against "N generations": **option (b), in
+revision 2**; on the depth cap: **16 generations**.
 
 | # | Topic | Ruling | Where |
 |---|---|---|---|
@@ -74,8 +74,8 @@ revision 2"**; on the depth cap: **"Accept 16 generations"**.
 
 ### 0.3 Rulings on the fix-check of revision 2 (owner 2026-11-19)
 
-The owner on the fix-check's two decisions and its positions: **"Approved both as proposed"**; **"approved all as
-proposed"**.
+The owner on the fix-check's two decisions and its positions: **both as proposed**; **all as
+proposed**.
 
 | # | Topic | Ruling | Where |
 |---|---|---|---|
@@ -263,8 +263,8 @@ its id) and the proof stores `storePqzPop` / `storePqzScopedPop` (checked by a p
   elsewhere whose kind is verify-only here, this generation's cap and hold plus `verifyCap(kind)` of `holderOf(ua)`, one
   hand-off and the reads; of a kind not carried here, the holder's cap plus one hand-off; for an `msig` holder, its minimal
   authorizing set at the fallback worst. A structure over it is refused at registration and at `setPqzKey` /
-  `updateMsig` with today's `UAPqzHolder(ua)` (owner M2: "refused like P9"). Stated limit (owner M2): "on a chain without an
-  ML-DSA precompile, an `msig` with two ML-DSA members cannot hold a PQZ key"; the same holds through a verify-only
+  `updateMsig` with today's `UAPqzHolder(ua)` (owner M2: refused like P9). Stated limit (owner M2): on a chain without an
+  ML-DSA precompile, an `msig` with two ML-DSA members cannot hold a PQZ key; the same holds through a verify-only
   generation, whose bound counts the fallback worst. Per structure the bound decides [estimates, default set `n2304-kmax4096`, `PQZ_DEBIT_MIN_GAS` 6.07 M]: two `mldsa65` or
   `mldsa87` members exceed the cap at every set (the treasury of §13: 12.6 M + 6.07 M > 16.78 M); two `mldsa44` members
   (≈ 9.1 M fallback, ≈ 9.3 M with its hold and calldata) fit at `n2304-kmax4096` and `n2048-kmax1024` and exceed it at
@@ -395,7 +395,7 @@ under the holder's hold); when it **answers 0**, the check is refused and there 
   per member on the cache). **Nothing limits a check to `verifyBudget` at run time (N13)**: `verifyBudget` bounds the
   normal path at registration; at run time the check takes what the transaction carries, up to `txGasCap`. The hard bound
   of §4 keeps the **registry's check** of every registered `msig` (fallback included) within one transaction of
-  `txGasCap`, with the consumer reserve beside it (owner M2: "never for good" is narrowed to the registry's check). A
+  `txGasCap`, with the consumer reserve beside it (owner M2: the rule that a check is never refused for good is narrowed to the registry's check). A
   consumer operation dearer than the reserve (`UA_CONSUMER_RESERVE_GAS`; `PQZ_DEBIT_MIN_GAS` for a PQZ debit, which the
   bound covers in full) fails while the precompile gives no answer, and works again when it answers; the check itself
   fails closed with `UAVerifyGas` only when the transaction does not carry the gas.

@@ -5,30 +5,30 @@ into `ua-mtx-merge` `0df1aea32`); MD-14 (the node job and the client builders) *
 port round (the node's lane `2064e707d`, `clientkeys` `bd23168d7`, `ua-rs` `97b96e967`; NODE-JOB-29). The measured figures below come from that build (forge 1.8.5, Amsterdam, `isolate`, regular =
 `lastCallGas` × 64/63; MD-13's re-measured in 3zh-core group 2), the rest is marked [estimate]. Everything cryptographic is **UNAUDITED**. Rule ids here are local
 (`MD-n`); the build round turns them into Changes of CTR-UA-23 / CTR-UA-39 and NET-EVM-06 / -11 and a `decisions.md`
-entry with §0 verbatim. **Scope: EVM.** A grep of every other family (soroban, solana, near, algorand, move, ton, cosmos)
+entry with §0 in full. **Scope: EVM.** A grep of every other family (soroban, solana, near, algorand, move, ton, cosmos)
 and of `scaas-node/src` finds no 66 % rule and no ML-DSA cap (ML-DSA appears only in Soroban's `spike/` and `runs/`):
 no other family changes in this round; the EVM node and clients are SPECIFIED here (MD-14) and built in the `ua-rs-sign`
 port round; a family that gets ML-DSA takes the same rules in its own round. TODO item 3zh.
 
 ## 0. Owner rulings this spec implements (2026-11-15)
 
-1. "Có thể tạm không phụ thuộc Hedera. Nâng rule lên 70%, hoặc giá trị nào đó khớp." then "1. OK" to **75 %** (MD-1).
-2. "Xác định đi theo 2 đường: có precompiler; không precompiler thì phải có cache cho mldsa65 và 87 … đăng ký cache trước,
-   register sau? Register mà thiếu cache là revert." (MD-2, MD-3); extended to mldsa44 (its uncached verify is over the
+1. The rule need not depend on Hedera for now; it is raised from 66 % to a value that fits, accepted at **75 %** (MD-1).
+2. Two paths: with the precompile; without it, a cache for mldsa65 and mldsa87, the cache written before `register`, and a
+   `register` whose cache is missing reverts (MD-2, MD-3); extended to mldsa44 (its uncached verify is over the
    75 % rule too).
-3. mldsa87 cache: "Cần tính cho sau Glamsterdam (vì còn giới hạn 64 k code), 2 part có được không?", then, on MD-5's
-   60 M-block finding, "MD-5: Chia 3 part?": **3 parts** (MD-4). mldsa65: "Cân nhắc mldsa65 dùng 1 part" then kept at 2 parts (3 % margin at 1 part) (MD-4).
-4. "Thế forge không cần bật trần nữa": forge's `enable_tx_gas_limit` stays off; explicit asserts instead (MD-9).
-5. `verifyCached` trusts its pointers: "Ghi docs." (documented, not restricted in code) (MD-10).
-6. "Ok, dùng pre-compiler cho 0x0131"; then option B: "Theo tôi thì option cho mldsa trên scaas testnet: dùng
-   precompiler hoặc không, để còn biết so với các mạng khác." "Ok, theo B" (MD-6, MD-7, MD-8).
-7. On the Fable review (2026-11-15): "Còn lại như đề xuất", then "F-3: như đề xuất." — F-1: the PQZ debit bound for every
+3. mldsa87 cache: sized for after Glamsterdam (the 64 KiB code limit still holds), two parts asked first, then, on MD-5's
+   60 M-block finding, **3 parts** (MD-4). mldsa65: one part considered, then kept at 2 parts (3 % margin at 1 part) (MD-4).
+4. forge needs no cap enabled: forge's `enable_tx_gas_limit` stays off; explicit asserts instead (MD-9).
+5. `verifyCached` trusts its pointers: documented, not restricted in code (MD-10).
+6. The precompile for `0x0131`; then option B: ML-DSA on the SCaaS testnet runs both with and without the precompile, to
+   compare with other networks (MD-6, MD-7, MD-8).
+7. On the Fable review (2026-11-15): the rest as proposed, F-3 included — F-1: the PQZ debit bound for every
    holder kind (MD-13); F-3: the contracts in this round, the node job and the client builders SPECIFIED here and built in
    the `ua-rs-sign` port round after 3zh (MD-14); F-7: a probe call that fails
    refuses the deploy by name (MD-15); the other findings as proposed (§7).
-8. "Dời baseline": `UARegistryCoreLib`'s size baseline moves with this round's reason (MD-12). "Giữ như hiện tại" on the
-   funds-before-register question: the build round answers it (§6).
-9. Order: this round first, pushed and merged into `ua-mtx-merge` (PR #18 carries it, "Đi chung"), then the pqz-core
+8. `UARegistryCoreLib`'s size baseline moves with this round's reason (MD-12). The funds-before-register question is kept as
+   it is: the build round answers it (§6).
+9. Order: this round first, pushed and merged into `ua-mtx-merge` (PR #18 carries it), then the pqz-core
    batch (3zh-core).
 
 ## 1. The finding
@@ -133,14 +133,14 @@ largest single mldsa87 cap that fits 9,185,109 / 10,454,953 / 8,762,812 / 8,526,
 the 44 / 65 cached caps 11.73 / 13.47 M at n2048 … 12.40 / 14.14 M at n2816. **What fits per single kind is unchanged**: a
 cached mldsa87 is a PQZ holder at n2048-kmax1024 and n2304-kmax4096, not at n2560-kmax16384 / n2816-kmax65536. **One `msig`
 verdict changes at n2304-kmax4096**: the room for a holder's worst authorization grows from ≈ 9.26 M to ≈ 10.70 M, so
-`{fndsa512 × 4}, t = 4` (≈ 10.2 M) now fits there. Owner 2026-11-15 ("Ok, theo đề xuất"): the rule stays; the negative
+`{fndsa512 × 4}, t = 4` (≈ 10.2 M) now fits there. Owner 2026-11-15: the rule stays; the negative
 `test_register_msigHolderOverBound` takes a holder over the bound at every set (2-of-2 `fndsa1024` at 5,250,000: bound
 18,255,960 / 16,965,960 / 18,684,960 / 18,924,960, beside `{fndsa512 × 4, slhdsa128s}, t = 5`), its `UAPqzHolder` assertion
 unchanged; the new `test_register_msigHolder_fndsa512x4_perSet` states the per-set boundary: a PQZ holder at n2304-kmax4096,
 `UAPqzHolder` at the three other sets. Tests per set: the cheapest debit and a
 `ROLL_MAX` rollover with a cached mldsa87 holder and a cached ML-DSA fee signer, measured; the refusal where it does not fit.
 
-**MD-14 (who sends the cache parts; F-3, owner "như đề xuất") — BUILT in the `ua-rs-sign` port round after 3zh
+**MD-14 (who sends the cache parts; F-3, owner: as proposed) — BUILT in the `ua-rs-sign` port round after 3zh
 ([NODE-JOB-29](../../node/job-api.md#NODE-JOB-29); the gateway route `POST /v1/ua/register` stays SPECIFIED).** The node sends them on its submit lane, as
 a job of its own (`docs/node/job-api.md`: named fields `kind`, `pk`, `part`; the node builds the calldata; an explicit gas
 limit per NET-EVM-11; allow-lists equal to the contract's in both directions: `guard.rs`, `CALL_TABLE`, `typed.rs`), before
@@ -154,7 +154,7 @@ from a probe that answers "no") refuses the deploy by name; it never falls back 
 the path each ML-DSA kind took (`precompile <address>` or `cache`), beside the flag.
 
 **MD-12 (size).** `UARegistryCoreLib`'s ratchet baseline in `size-baseline.json` moves to the round's measured size
-(WIP: 35,165 → 35,262 B, +97 B, under its 35,694 B line) with this reason in the commit (owner "Dời baseline"); re-measured
+(WIP: 35,165 → 35,262 B, +97 B, under its 35,694 B line) with this reason in the commit (owner ruling 8); re-measured
 after the 3-part change. No module split without asking.
 
 **MD-11 (caps).** Cache caps: 44 4,250,000 and 65 5,950,000 (unchanged), **87 8,800,000** (the least multiple of 50,000 at
@@ -201,7 +201,7 @@ cached rows and the uncached-over-2^24 facts), NET-EVM notes for `MLDSA_PRECOMPI
 
 ## 6. Open, for the owner
 
-1. MD-5 stands with MD-4's 3 parts for mldsa87 (owner "Chia 3 part?"); the per-part figures are re-measured in the build.
+1. MD-5 stands with MD-4's 3 parts for mldsa87 (owner ruling 3); the per-part figures are re-measured in the build.
 2. Size: decided, MD-12.
 3. **Funds before `register`:** can a UA id receive tokens / PQZ / Zether before it is registered? If yes, MD-3's ordering
    matters for users (cache, then register, before anyone pays the id); to be answered by the build round with a test or a
@@ -217,7 +217,7 @@ this section wins.
 |---|---|
 | F-1 (P1) cached mldsa87 PQZ holder cannot debit within 2^24 | MD-13 (owner) |
 | F-2 (P1) cap from one signature | MD-11 measured over the **worst accepting input**: least working gas cold (3 pointers for 87) over every valid ACVP case of the level, the `pq_kat.json` rows and a generated batch including a signature with exactly ω hints (75 / 55 / 80 for 87 / 65 / 44); `PqGas.t.sol` asserts `max + 30,000 <= cap` for 44, 65, 87; the cap and the max stated in MD-11 / accounts.md |
-| F-3 (P2) nobody sends `cacheExpandedKey` | MD-14, SPECIFIED; built in the `ua-rs-sign` port round (owner "F-3: như đề xuất"); until then a subject caches with its own gas or anyone sends the parts (open call) |
+| F-3 (P2) nobody sends `cacheExpandedKey` | MD-14, SPECIFIED; built in the `ua-rs-sign` port round (owner ruling 7); until then a subject caches with its own gas or anyone sends the parts (open call) |
 | F-4 (P2) `UAStore.expanded` dropped its kind check | the kind check comes back, as a per-kind part count (1 / 2 / 3) — one shared function used by `MldsaVerifier.expandedKeyParts`, `UARegistryAuxLib._ekParts` and `UAStore.expanded`, or a test that the three agree per kind (F-12) |
 | F-5 (P2) MD-5 gate not built, measures used gas, deploy-time snapshot | built in `DeployBase`; it compares each part's **least working gas limit** (regular and total) with 2^24 and the block gas limit read from the chain; documented as a deploy-time check (a later block-limit cut is the chain operator's change, named in the runbook) |
 | F-6 (P2) handed-in verifier trusted on two getters; precompile caps placeholders | `DeployBase` recomputes each env verifier's CREATE2 address from `DEPLOY_SALT` and the init code with its arguments and requires equality (beside `KIND` / `PRECOMPILE`); precompile caps from T-GAS (MD-11), placeholders refused by a test once measured |

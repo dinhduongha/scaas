@@ -48,7 +48,7 @@ CTR-GOV-08 refusals unchanged and public balances only (CTR-GOV-13). **Any holde
 contract). The bit grants the power; each holder's own grant is `WHOLE` or `LIMITED` (a `LIMITED` grant binds a daily `perWindow`, `total`, `maxUses`, `validUntil`, `delegable` leaves: the loyalty /
 point-of-sale case), on the **regulated kinds 8–13 only** (owner correction, same day): a plain kind refuses bit 22 as it
 refuses 5–9 (`FeatureInvalidForKind`), so the plain kinds take no byte and "+0" is untouched. Bit 21 `MODERATE` keeps its
-rules (contract-only, RK-1) and is re-scoped by the owner to "other hierarchical moderation", meaning TBD: no body is built
+rules (contract-only, RK-1) and is re-scoped by the owner to other hierarchical moderation, meaning TBD: no body is built
 for it. Wherever this text still says `moderatedTransfer`, `ModeratedTransfer`, `ModerateTargetRefused` or bit 21 for the
 transfer power, read `operatorTransfer` on bit 22 (T19 sweeps the text); the governance part is in T24, the entry and the
 router op in T32 (in place of `moderatedTransfer`).
@@ -351,7 +351,7 @@ it is not a mitigation.
   revoke bound what one key moves. Built: the governance part in T24 (the constant, the holder rule, tests); the entry,
   the router op, vectors and client rows in plan T32; bit 22 in the masks of 8–13 (`_validBits()`, `_roleBits()`,
   `_scalarBits()`, never `_contractOnlyBits()`) with the kinds (§2.1).
-- **Bit 21 `MODERATE`** keeps its rules (contract-only, RK-1); the owner re-scopes it to "other hierarchical moderation"
+- **Bit 21 `MODERATE`** keeps its rules (contract-only, RK-1); the owner re-scopes it to other hierarchical moderation
   (2026-11-05), meaning TBD; no body is built.
 - **`pause(ref, until)`** (CTR-AS-06): `ref ≠ 0`; `now < until ≤ now + 7 days` (`PauseTooLong`); `now ≥ pauseCooldownUntil`
   (`PauseCooldown`, which also refuses a pause while paused); `pauseCooldownUntil = until + 7 days`. `unpause`: paused;

@@ -277,7 +277,7 @@ the `ref` shape check, the nonce scope's `topicId` dimension, the list key (pare
 
 ## 9. Owner decisions and questions
 
-**Decisions of 2026-11-07** (owner, relayed by the coordinator; a Change on CTR-CHAT-01):
+**Decisions of 2026-11-07** (owner; a Change on CTR-CHAT-01):
 
 - **D18 — Nothing hidden, no on-chain moderation.** Neither the topic owner, a moderator nor anyone else may hide an
   entry; the contract has no hide flag, no moderator role and no ban list. Every accepted entry stays listed for good. A
@@ -291,7 +291,7 @@ the `ref` shape check, the nonce scope's `topicId` dimension, the list key (pare
 - **D22 — `PqChat` is a factory kind** (parent §2.1 P32): many instances per chain, each with its own owner UA, sessions
   and public topics; `PqChat` is class 3 on the factory's generic path (§11, factory index spec §8, owner-approved
   2026-11-07).
-- **Cost:** the owner accepts the on-chain cost ("if storing on chain is cheap, fine"); §6 gives it per KiB.
+- **Cost:** the owner accepts the on-chain cost where storing on chain is cheap; §6 gives it per KiB.
 
 **Owner 2026-11-07: Q1 and Q2 answered as recommended** (a Change on CTR-CHAT-01): (Q1) no contract feature; the client
 posts the rest of a long text as replies by the same author, marked as continued; (Q2) an instance's owner UA has no power

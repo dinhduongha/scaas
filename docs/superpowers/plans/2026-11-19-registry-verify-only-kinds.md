@@ -126,7 +126,7 @@ Inputs the spec implies that no spec test row names; each has its test in the ow
   `src/pqz/PqzSet.sol`: one run per worktree, restored after.
 - **Commits:** one per task, staged by explicit path (`git commit --only -- <paths>`), trailers as the session gives
   them, no `Signed-off-by`.
-- **Owner rulings on the plan** (2026-11-19, "approve all as proposed"): C1 – C7, marked *owner Cn* and listed at the end.
+- **Owner rulings on the plan** (2026-11-19, all as proposed): C1 – C7, marked *owner Cn* and listed at the end.
 
 ---
 
@@ -637,7 +637,7 @@ A red step is reported with its output; no pin, bound or test is edited to go gr
 
 ## Owner rulings on the plan (2026-11-19)
 
-The owner on the plan's choices C1 – C7: **"approve all as proposed"**.
+The owner on the plan's choices C1 – C7: **all as proposed**.
 
 | # | Ruling |
 |---|---|

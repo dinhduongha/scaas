@@ -47,7 +47,7 @@ addresses); `pqz-core/ffi/README.md` + `pqz_ffi.h` (C ABI, statuses 0–4, threa
 caller stack); [P6e plan](2026-10-14-p6e-relations.md) D5 (`MAX_INPUT` 393,216), D13 (self-test), D4 (bump rule);
 [P6-ANON plan](2026-10-14-p6-anon.md) §8 and D19 (op 7 `R_TXM` through the same precompile, gas per form keyed by
 length); decisions.md CTR-PQZ-10 Change lines (both ids, status 3 / 4 split). TODO.md P6 rows: the session-4 mandate
-(decisions are controller proposals recorded in decisions.md) and the owner grant "P6f live on the SCaaS testnet".
+(decisions are controller proposals recorded in decisions.md) and the owner grant: P6f live on the SCaaS testnet.
 
 **Base:** `main` at `0807e41` (`pqz-ffi` merged with both ids, the status 3 / 4 split, `OP_SELFTEST`; P6e vectors in
 `smartcontracts/vectors/pqz/`). P6e Task 10 (fuzzing, `p6e-a5`) and Task 12 (docs) and P6-ANON op 7 (`p6-anon-s`) are
