@@ -82,9 +82,12 @@ SDK's own types) or a named result (`{"ok": true}`, `{"op": …, "state": …}`,
 <a id="CLI-CMD-02"></a>**CLI-CMD-02** — **The CLI's `--json` is the SDK's API, versioned by `Sdk::api_version()`'s minor**
 (owner 2026-11-27; SPECIFIED). There is no separate CLI schema. Any change to the JSON's shape (a field added, renamed or
 removed, or a type changed) moves the minor of `Sdk::api_version()` and is listed in the commit; the major moves only on an
-explicit owner decision for a large change. A script reads `sdk api-version` first. Not enforced yet: `Sdk::api_version()` is
-one `u32` (`API_VERSION = 1`, which a binding must equal), so it has no minor; and no test sees a shape change. The proposed
-check: a field-set snapshot of each command's `--json` output in the CLI's tests, failing on any added, renamed, removed or
+explicit owner decision for a large change. A script reads `sdk api-version` first. **The version is a pair**
+(owner 2026-11-27): `Sdk::api_version()` returns `{major, minor}`, starting at `1.0` (`sdk api-version` prints `1.0`); it stays
+`1.0` until the first release (the 2026-11-18 ruling that kept it at 1), and this rule applies from that release on; a binding
+refuses only a different major, the minor is information (a binding is generated in the same build as the SDK). Not built yet:
+today `Sdk::api_version()` is one `u32` (`API_VERSION = 1`, which a binding must equal), and no test sees a shape change. The
+proposed check: a field-set snapshot of each command's `--json` output in the CLI's tests, failing on any added, renamed, removed or
 retyped field unless the minor moved with it.
 
 <a id="CLI-CMD-01"></a>**CLI-CMD-01** — **A refusal is a named code on stderr and a fixed exit code** (BUILT: `src/main.rs`
