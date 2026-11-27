@@ -320,6 +320,18 @@ fn wrap_hashes(wraps: &[PqWrap]) -> Result<Vec<String>, SdkError> {
         .collect()
 }
 
+fn entry_json(r: &PqTopicEntry) -> Value {
+    let e = &r.entry_ref;
+    json!({"topicId": r.topic_id, "author": r.author, "nonce": r.nonce, "parentId": r.parent_id,
+        "ref": {"chainUid": e.chain_uid, "pqchat": e.pqchat, "entryId": e.entry_id, "contentHash": e.content_hash},
+        "mediaType": r.media_type, "body": hex(&r.body)})
+}
+
+fn edit_json(r: &PqTopicEdit) -> Value {
+    json!({"entryId": r.entry_id, "author": r.author, "nonce": r.nonce, "version": r.version,
+        "mediaType": r.media_type, "body": hex(&r.body)})
+}
+
 /// How a record's id is made.
 enum Id {
     None,
@@ -590,10 +602,7 @@ impl AppCore {
         account: KeyRef,
         r: PqTopicEntry,
     ) -> Result<PqChatPrepared, SdkError> {
-        let e = &r.entry_ref;
-        let m = json!({"topicId": r.topic_id, "author": r.author, "nonce": r.nonce, "parentId": r.parent_id,
-            "ref": {"chainUid": e.chain_uid, "pqchat": e.pqchat, "entryId": e.entry_id, "contentHash": e.content_hash},
-            "mediaType": r.media_type, "body": hex(&r.body)});
+        let m = entry_json(&r);
         let id = Id::Of(
             "entry",
             vec![w32(&r.topic_id)?, w32(&r.author)?, w64(r.nonce)],
@@ -608,10 +617,22 @@ impl AppCore {
         account: KeyRef,
         r: PqTopicEdit,
     ) -> Result<PqChatPrepared, SdkError> {
-        let m = json!({"entryId": r.entry_id, "author": r.author, "nonce": r.nonce, "version": r.version,
-            "mediaType": r.media_type, "body": hex(&r.body)});
-        self.prepare_pq(account, "PqTopicEdit", m, Id::None, vec![])
+        self.prepare_pq(account, "PqTopicEdit", edit_json(&r), Id::None, vec![])
             .await
+    }
+
+    /// G5 (CTR-CHAT-31): the `contentHash` a topic `ref` may pin for version 1 of an entry, the typed digest of its
+    /// `PqTopicEntry` rebuilt from state (the place, the version's nonce, media type and body), for a reader to compare. No key;
+    /// a record that does not build: `Argument`.
+    pub fn pqchat_entry_hash(&self, r: PqTopicEntry) -> Result<String, SdkError> {
+        Ok(hex(
+            &pqchat::typed("PqTopicEntry", entry_json(&r))?.digest()?
+        ))
+    }
+
+    /// G5: as [`Self::pqchat_entry_hash`] for a later version, the typed digest of its `PqTopicEdit`.
+    pub fn pqchat_edit_hash(&self, r: PqTopicEdit) -> Result<String, SdkError> {
+        Ok(hex(&pqchat::typed("PqTopicEdit", edit_json(&r))?.digest()?))
     }
 
     /// `PqTopicVote`.

@@ -24,6 +24,7 @@ macro_rules! frb_hint {
 pub mod chain_state;
 pub mod chain_store;
 pub mod check;
+pub mod confirm;
 pub mod consent;
 pub mod content;
 pub mod device;

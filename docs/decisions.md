@@ -324,7 +324,7 @@ Change (2026-11-12, branch `ua-mtx-fix2-node`, Fable recheck R-6 and recheck 2 P
 | Round | Scope | Reviewers (as run) | Target | Status |
 |---|---|---|---|---|
 | Core review 2026-10-25 | `pqz-core`: part 0 (design) to part 4 (transcript and code) (`pqz-core/research/code-review-2026-10-25/`) | Codex, agy, Claude workflow; Fable on part 0 | `008e196c` | done; the part-0 fixes a + b merged. Files changed since `008e196c` are `UNAUDITED` |
-| Pre-freeze AI audit (was: Contracts audit (EVM)) | the 32 units of [audit/](audit/README.md) on the pre-freeze tag, before the freeze (owner 2026-11-12): EVM contracts, `pqz-core`, the Nethermind precompiles, `ua-rs`, the node, the SDK, the app cores, the bindings, CLI and CI, and the cross-cutting units | Fable, Codex, agy, Claude workflow | `<TAG>` | PLANNED |
+| Pre-freeze AI audit (was: Contracts audit (EVM)) | the 35 units of [audit/](audit/README.md) on the pre-freeze tag, before the freeze (owner 2026-11-12): EVM contracts, `pqz-core`, the Nethermind precompiles, `ua-rs`, the node, the SDK, the app cores, the Matrix client, the user profiles' store, the TUI, the bindings, CLI and CI, and the cross-cutting units | Fable, Codex, agy, Claude workflow | `<TAG>` | PLANNED |
 | `ua-rs-sign` T21 | `clients/ua-rs`, `ua-c` and the bindings, at audit grade | Codex, agy, Claude lenses, Fable | the pushed SHA | PLANNED |
 
 **Why.** Owner 2026-11-02: an AI audit is better than a human one; a label tied to a round and a commit cannot claim more than was reviewed.
@@ -13335,8 +13335,14 @@ left makes zero signing calls, its confirmed twin one.
 **Status.** BUILT for `pqvault-core`, UNAUDITED: every write returns a `Prepared` (the unsigned record, its wraps, the SDK's
 `AppCore::quote_app_call` quote from the gas rows), `PqVault::confirm` makes its one signing call and then the signed record's
 `prepare_app_call`; `tests/devices.rs` `nothing_is_signed_before_the_confirm` counts zero signing calls for each write's
-dropped review and one for its confirmed twin. BUILT-gap still in `pqchat-core` (its session, epoch and topic records signed
-when built; it changes after the path-less branch lands), found in `scaas-tui`'s plan work.
+dropped review and one for its confirmed twin. BUILT for `pqchat-core` too (branch `pqchat-core-confirm`, UNAUDITED; the gap
+found in `scaas-tui`'s plan work closed): every write but a message (a session, an epoch, a leave, a removal, a tree creation,
+a tree commit path or path-less, a tree exit, the six topic records) returns a `Prepared` (the SDK's review of the record, the
+`quote_app_call` quote of the payer's call, none for a relayed topic write or a tree commit, whose cost is its plan);
+`PqChat::confirm` makes its one signing call through the chain port; tests counting the port's signing calls over every write
+kind: `tests/session.rs` and `tests/topics.rs` `nothing_is_signed_before_the_confirm` /
+`topic_writes_sign_after_confirm_relayed_by_default`, `tests/tree_scenarios.rs` (the tree exits), `tests/chain_tree.rs` (a
+creation and a commit on a local chain). [CLI-PQC-21](clients/pqchat-core.md#CLI-PQC-21).
 **Why.** A signature made before the confirm exists whether or not the user agrees; a relayer or a bug may then submit it.
 **Cost if wrong.** A signed record the user declined, valid on chain.
 **Source.** Owner ruling 2026-11-27: the recommendations of the owner questions of 2026-11-27 accepted as recommended, F4: sign after the user's confirm, everywhere, PqVault included; [public topics note](research/2026-11-27-public-topics-ui.md) §8 G6; [PqVault UI note](research/2026-11-27-pqvault-ui.md) §8 row 23, §9 G16.
@@ -13887,6 +13893,7 @@ Change (2026-11-24, E-1 (P0), C-1, B-1, F-1 (P1), C-3, F-2, E-2, F-3 (P2) of Fab
 Change (2026-11-24, the spec check of 2026-11-24 (Fable, `sc-F-n` and `sc-E-n`); controller calls; owner: no; status: SPECIFIED, `ua-rs` and clientkeys follow): the exit evidence is judged order-free as the contract could accept it (above, CTR-CHAT-27's Change of the same round), from the fixed exit lists of every epoch; the pin keeps the verified exits; the walk bounds before it allocates and applies every acceptance check on its inputs; a device with no verified tree writes its first pin only from a strict-majority read over at least 3 named endpoints, else it shows the head as "unconfirmed"; a head with `owed > 0` is shown as "removal pending", the honouring commit offered next; a fresh restore costs every record since creation and up to 256 authenticated registry key reads. Source: Fable spec check 2026-11-24 (sc-E-1, sc-E-7, sc-E-8, sc-F-1 to sc-F-4, sc-F-7 to sc-F-9, sc-F-11).
 Change (2026-11-25, the path-less [delta spec](superpowers/specs/2026-11-25-treekem-pathless-add.md); **owner (R18):** the admins' warning; **controller (C45-C47, under the 2026-11-25 grant, owner may veto)**; status: SPECIFIED): the threshold `W(0)` = 20, `W(N) = max(1, N − ⌈N/4⌉)` and the deferred cost; the review line of a path-less Add; the default form, its fallback and no path-less Add while a path commit is staged; the default bound 20 in the creation review; anchored devices, the state 'the author did not hold the epoch', 'followed, info not taken', the joiner's 'Welcome may not match'; the leaves under review in every path commit's review; the own-commit test by the seed-derived nonce; `next` kept only in the head's handle, `ua-rs`'s named path-less operation with its parent check.
 Change (owner: yes, 2026-11-27, relayed by the controller; status: SPECIFIED, the client rule BUILT with the path-less round on branch `treekem-pathless`, UNAUDITED): F-5 of the path-less delta (§6.5): a client never sends a path-less Add while a path commit of its own is staged on the head; another author's staged commit is not visible to it and needs no contract view: the contract's order decides the slot, and the commit that loses it is refused by name (`PqChatEpochTaken`) and rebuilt. No `stagedOf` view. Source: owner ruling 2026-11-27 (chat): a path-less Add is held back only by the sender's own staged path commit; no contract view lists a parent's staged children.
+Change (owner: yes, 2026-11-28, relayed by the controller; status: BUILT in `ua-rs` and clientkeys on branch `treekem-f1`, the vectors' `pathless-faults` rows regenerated, UNAUDITED): the path-less review's owner questions, the delta spec §6.5 and §10. (1) F-1: a path-less record of the device's own `(ua, keyId)` whose nonce its seed reproduces but whose tag the device could not have written is the compromise warning of R10, as for its own path commit, not C45's "the author did not hold the epoch": the device builds its own records, so such a record was signed by someone holding its UA's key and the epoch state. (2) C-11 / G-4: after the compromise warning, for a path-less record as for a path commit, the device takes no key and drops the chain until the next path commit reaches it (fail closed); the warning asks the admins to "add and refresh". (3) G-3, accepted as built: any member can stall a run's unanchored joiners with one wrong-tag path-less record until the next path commit; the cost is one signed record, and the C45 state the anchored members see names its author and the leaves it added.
 
 <a id="CLI-PQC-18"></a>
 ### CLI-PQC-18 — Public topics on the client: relayed writes by default, local drafts, window sorts and the fold; time and batch views for the next `PqChat` release
@@ -13913,12 +13920,55 @@ Change (owner: yes, 2026-11-27, relayed by the controller; status: SPECIFIED, th
   count (G2); the version's `nonce` in `entryOf` and `versionAt`, so a `ref`'s pinned `contentHash` can be checked (G5). The
   layout and gas pins move with their old and new figures; record typehashes and vectors stay.
 
-**Status.** F3 to F6 SPECIFIED, nothing built (today a topic write goes only by the payer's own transaction, and the record is
-signed before the review); F1 and F2 PLANNED for the next contract release. UNAUDITED.
+**Status.** F1, F2 and G5's nonce BUILT in the contract ([CTR-CHAT-29](contracts/pqchat.md#CTR-CHAT-29) to
+[CTR-CHAT-31](contracts/pqchat.md#CTR-CHAT-31)). In `pqchat-core` (branch `pqchat-core-confirm`, UNAUDITED): F3 BUILT (the six
+topic records relayed by the chain's gateways by default, fee 0, the SDK's `AppCore::relay_app_call`, the node's door A
+[NODE-GW-09](node/gateway.md#NODE-GW-09); the payer's own transaction an option), F4 BUILT ([CLI-SDK-36](#CLI-SDK-36)), F6
+BUILT (`entry_rows`, `page_newest`, `ranked` and `rank`, the fold at the threshold the caller passes), the pinned `contentHash`
+checked (G5); F5 (drafts in the profile's sealed store) is the app's, with user profiles. The client's own calls:
+[CLI-PQC-21](clients/pqchat-core.md#CLI-PQC-21).
 **Why.** A UA with no gas can post; a page of 16 posts costs about 65 reads today and about 2 with G2; Hot needs a time no
 entry carries.
 **Cost if wrong.** Posting only for funded UAs; feeds slow enough that clients add an indexer the state rule does not need.
 **Source.** Owner ruling 2026-11-27: the recommendations of the owner questions of 2026-11-27 accepted as recommended, F1 yes with the next contract release, F2 yes, F3 yes with a fee of 0 allowed, F4 yes everywhere, F5 local only in the profile's sealed store, F6 as proposed (a 256-id window); [public topics note](research/2026-11-27-public-topics-ui.md) §6, §7.3, §8, §10.
+
+### CLI-PQC-21 — `pqchat-core`'s sign after confirm, relayed topic writes, window sorts and the pinned `contentHash`: the client's calls
+- old: — · status: current · owner: no · date: 2026-11-28 · normative: clients/pqchat-core.md#CLI-PQC-21 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-21).) Controller calls under the owner's rulings
+[CLI-SDK-36](#CLI-SDK-36) and [CLI-PQC-18](#CLI-PQC-18): every write returns `Prepared<W>`; `PqChat::confirm` checks what must
+hold before the signature (a creation binds its Matrix room and accepts the session there, so a dropped review leaves no
+binding), signs once through the chain port and builds the output; a record write's confirm touches no network, its call is
+`dispatch` (relayed, or the payer's call; `dispatch_paid` for a relay no gateway queued); `Confirmed::within_review` is
+CLI-PQV-18's rule, `false` without a reviewed payer quote (a relayed write, a tree commit). Only the six topic records are
+relayed; a port without gateways is `RelayUnavailable`. The sorts: Top `up − down`, Controversial `min · log2(up + down) /
+max` in Q32 integer arithmetic (Reddit's `(up + down)^(min/max)` order without a platform `pow`), Best the Wilson lower bound
+at z = 1.2816 with `+ − × ÷ √` on `f64` only, ties by the lower list index; Top and Controversial over the newest 256 ids
+against the snapshot, Best over the first 256; a repeated id ranked once; a row folds when `down ≥ up + threshold`, the
+threshold the caller's (`None`: no fold). A pinned `contentHash` is compared with the typed digest of each version rebuilt by
+the SDK (`pqchat_entry_hash` for version 1, `pqchat_edit_hash` after), the newest 64 versions read: a match names its version,
+none equal is `HashMismatch` when every version was read, else `HashUnchecked`. After the review of 2026-11-28: a topic
+record's `seq` or `version` from trusted reads; a rekey's slot and a path-less `try` checked (the `try` reserved) before the
+signature; a creation's room bound after it; the relay's outcome names each refusal.
+**Status.** BUILT on branch `pqchat-core-confirm`, UNAUDITED (tests named in the normative section).
+**Why.** The owner's rulings left the API shape, the sort arithmetic and the bound of the version scan open; a `pow` or `exp`
+of a platform's libm is not correctly rounded, so two clients could order a near-tie apart.
+**Cost if wrong.** A front-end that cannot follow the API; two clients that order one feed differently; a reader that reads
+an unbounded number of versions a node claims.
+**Source.** Controller calls 2026-11-28 under the owner rulings of 2026-11-27 (CLI-SDK-36, CLI-PQC-18).
+
+### NODE-GW-09 — Door A takes the six signed `PqChat` topic records
+- old: — · status: current · owner: no · date: 2026-11-28 · normative: node/gateway.md#NODE-GW-09 · superseded-by: —
+
+**Rule.** (Summary; normative [gateway.md](node/gateway.md#NODE-GW-09).) `POST /v1/op` takes `createTopic`, `updateTopic`,
+`setTopicWriter`, `postEntry`, `editEntry` and `voteEntry` with `contract: "pqchat"` on an instance the guard's `pqchat` rule
+accepts, fee 0 allowed, under the operator's switch `params.relay_pqchat_topics` (default on for a `private` chain, off for a
+`public` one) and an hourly bucket per signing key (`params.pqchat_topics_per_hour`, 60), a call queued this hour answered
+queued once; every other `PqChat` write stays a namespace's job.
+**Status.** BUILT (`scaas-node` `gateway.rs`, test `door_a_takes_a_pqchat_topic_write`), UNAUDITED.
+**Why.** The owner's ruling F3 relays topic writes by default; door A took a registered token's entries only.
+**Cost if wrong.** A topic write that only a funded UA can make, or a door that relays a session's writes the owner did not name.
+**Source.** Controller call 2026-11-28 under [CLI-PQC-18](#CLI-PQC-18) F3 (owner 2026-11-27).
 
 <a id="CLI-PQC-19"></a>
 ### CLI-PQC-19 — Chat in the front-ends: Matrix rooms and PqChat sessions as two row kinds, private Matrix defaults, PqChat pushes on opt-in, chat in the web build later

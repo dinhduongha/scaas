@@ -37881,7 +37881,8 @@ class VaultImpl extends RustOpaque implements Vault {
   Future<List<String>> lock({required String seed}) =>
       ScaasSdk.instance.api.scaasSdkVaultSeedsVaultLock(that: this, seed: seed);
 
-  /// Locks every seed.
+  /// Locks every seed: each seed with an open main set or a hidden set (one `lock` each), so a hidden set opened on a locked
+  /// seed is locked too.
   Future<List<String>> lockAll() =>
       ScaasSdk.instance.api.scaasSdkVaultSeedsVaultLockAll(that: this);
 

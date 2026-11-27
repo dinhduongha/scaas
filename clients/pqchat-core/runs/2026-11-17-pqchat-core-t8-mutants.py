@@ -30,8 +30,8 @@ MUTANTS = [
        "        r.ephemeral.push((self.user.clone(), \"m.receipt\".into()));\n")],
      T + "matrix_conformance fake_conforms"),
     ("carry the room id in a chain write",
-     [(SE, "\"wrapHashes\": signed.wrap_hashes, \"sealedInfo\": model::hex(&sealed)});",
-       "\"wrapHashes\": signed.wrap_hashes, \"sealedInfo\": model::hex(serde_json::to_string(&r.info).unwrap_or_default().as_bytes())});")],
+     [(SE, "\"wrapHashes\": prepared.wrap_hashes, \"sealedInfo\": model::hex(&sealed),",
+       "\"wrapHashes\": prepared.wrap_hashes, \"sealedInfo\": model::hex(serde_json::to_string(&r.info).unwrap_or_default().as_bytes()),")],
      T + "matrix_fake room_id_in_no_chain_write"),
 ]
 

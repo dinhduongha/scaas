@@ -60,7 +60,7 @@ jobs:
       PQZ_SET: ${{ matrix.set }}
       SEED: ${{ matrix.part.seed }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       # the image's preinstalled SDKs the gate never uses: room for one set's cargo targets
@@ -99,7 +99,7 @@ jobs:
             pqz-core/ffi/wallet-wasm
             pqz-core/fuzz
       # the wallet module's test (ffi/run.sh part ffi/wallet) runs clients/clientkeys' node --test
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 26.8.1
           cache: npm
@@ -133,7 +133,7 @@ jobs:
       - name: step table
         if: always()
         run: python3 -I .github/pqz_gate_summary.py "pqz-core/runs/gate/$PQZ_SET-progress.txt" >>"$GITHUB_STEP_SUMMARY" || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: pqz-gate-${{ matrix.set }}-${{ matrix.part.id }}
@@ -150,10 +150,10 @@ jobs:
     if: always()
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: pqz-gate-*
           path: gate

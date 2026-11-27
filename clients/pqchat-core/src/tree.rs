@@ -5,10 +5,14 @@
 //! sent in C37's order, the exits, and the replay from state alone with its checkpoint (the pin) kept in the store. The
 //! state machine is here; every secret, record byte and tree rule is `scaas-ua`'s, every read and write the SDK's. A tree
 //! session sends no receipt (R11) and nothing on its own after a failed open (C22). UNAUDITED.
+use crate::confirm::{lines, Path, Prepared, RecordWrite, Then};
 use crate::model::{self, at};
+use crate::net::{Signature, Unsigned};
 use crate::reads::SessionRef;
 use crate::session::Me;
+use crate::topics::At;
 use crate::{PqChat, PqChatError};
+use async_trait::async_trait;
 use scaas_sdk::app_core::{AppCall, AppCore, AppKey};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::pqchat_tree::{
@@ -63,6 +67,9 @@ pub const TREE_READS: &[&str] = &[
     "IUARegistry.registrationOf",
 ];
 
+/// A tree exit built for the review, unsigned (CLI-SDK-36): [`PqChat::confirm`] signs it, [`PqChat::dispatch`] calls it.
+pub type TreeExitWrite = Prepared<RecordWrite>;
+
 /// A tree session to create: the creator and a few members (each at the KEM version it holds now), the admins, the info
 /// (`sealedInfo`), the payer of the one transaction. More members come by commits of Adds (owner 2026-11-25).
 pub struct CreateTree {
@@ -76,6 +83,75 @@ pub struct CreateTree {
     pub payer: KeyRef,
     /// the session's `pathRefreshBound` (the path-less delta §3.1, R18): `None` the client default 20, 0 never forced
     pub path_refresh_bound: Option<u32>,
+}
+
+/// A tree session built for the review, unsigned (CLI-SDK-36): [`PqChat::confirm`] signs it into a [`TreeCreated`].
+pub type TreeCreateWrite = Prepared<TreeCreate>;
+
+/// A tree creation's facts for its review and what its confirm sends: the session's ids, `K_0`'s handle, `createSession`'s
+/// arguments without the signature.
+pub struct TreeCreate {
+    pub session_id: String,
+    pub tree_id: String,
+    pub(crate) k: Arc<AppKey>,
+    pub(crate) args: Value,
+    pub(crate) at: At,
+    pub(crate) payer: KeyRef,
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+impl Then for TreeCreate {
+    type Out = TreeCreated;
+
+    async fn then(self, chat: &PqChat, s: Signature) -> Result<TreeCreated, PqChatError> {
+        let Signature::Record(signed) = s else {
+            return Err(PqChatError::Internal);
+        };
+        let mut args = self.args;
+        if let Some(o) = args.as_object_mut() {
+            o.insert("sig".into(), crate::session::sig_json(&signed.sig));
+        }
+        // codex-r3-5: the signed record and every wrap kept before anything leaves, until the session is complete at home;
+        // C-12: a call that cannot be prepared (over the cap, or refused) drops what it kept, nothing has left the device
+        let kept = create_key(&self.session_id);
+        crate::store::Items(&*chat.store).update::<Value, _>(&kept, |_| Ok(args.clone()))?;
+        let call = match chat
+            .net
+            .prepare(
+                &self.at.chain,
+                &self.at.instance,
+                "IPqChat.createSession",
+                args,
+                &self.payer,
+            )
+            .await
+        {
+            Ok(c) => c,
+            Err(e) => {
+                crate::store::Items(&*chat.store).update::<Value, _>(&kept, |_| Ok(Value::Null))?;
+                return Err(match e.code() {
+                    "GasAboveTxCap" => PqChatError::TreeTooLarge,
+                    _ => e,
+                });
+            }
+        };
+        chat.set_consent(
+            &SessionRef {
+                chain: self.at.chain,
+                home: self.at.instance,
+                session_id: self.session_id.clone(),
+            },
+            crate::consent::Consent::Accepted,
+            true,
+        )?;
+        Ok(TreeCreated {
+            session_id: self.session_id,
+            tree_id: self.tree_id,
+            k: self.k,
+            call,
+        })
+    }
 }
 
 /// A created tree session: its ids, `K_0`'s handle and the prepared `createSession` with every wrap (one transaction).
@@ -137,6 +213,90 @@ pub struct TreeBuilt {
     /// the commit's review as signed (`scaas-ua`'s lines), and for a path commit the leaves under review (the path-less
     /// delta §6.2, F-3: listed, never removed by this client on its own)
     pub review: Vec<(String, String)>,
+}
+
+/// A tree commit built for the review, unsigned (CLI-SDK-36): [`PqChat::confirm`] signs it into a [`TreeBuilt`].
+pub type TreeWrite = Prepared<TreeCommitWrite>;
+
+/// A tree commit's facts for its review (its plan, the head's confirmation, the Adds left, the review's lines) and what its
+/// confirm keeps.
+pub struct TreeCommitWrite {
+    pub plan: pt::PqTreePlan,
+    pub head_confirmed: bool,
+    pub adds_left: Vec<Value>,
+    pub review: Vec<(String, String)>,
+    pub(crate) pathless: bool,
+    pub(crate) session_id: String,
+    /// the `try` (C47) after this one's, reserved by the confirm before the signature; the head it was built on, and its number
+    pub(crate) next: u32,
+    pub(crate) head: Option<String>,
+    pub(crate) number: u64,
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+impl Then for TreeCommitWrite {
+    type Out = TreeBuilt;
+
+    /// C47 across reviews (reviews A-7, D-3): a path-less commit's `try` is reserved in the store before the signature, in
+    /// one compare-and-set: it must still be the next on its head, and the store must name no later head; else `TreeStale`
+    /// (build again). So no `try` is signed twice, by two reviews or two concurrent confirms, and a stale review never
+    /// resets the counter of a later head.
+    async fn before(&self, chat: &PqChat) -> Result<(), PqChatError> {
+        if !self.pathless {
+            return Ok(());
+        }
+        let want = self.next.saturating_sub(1);
+        let (head, number) = (self.head.clone().unwrap_or_default(), self.number);
+        crate::store::Items(&*chat.store).update::<Value, _>(
+            &tries_key(&self.session_id),
+            |t| {
+                let t = t.filter(|t| !t.is_null());
+                let parent = t
+                    .as_ref()
+                    .and_then(|t| t.get("parent"))
+                    .and_then(Value::as_str)
+                    .map(str::to_ascii_lowercase);
+                let at = |k: &str| t.as_ref().and_then(|t| t.get(k)).and_then(Value::as_u64);
+                let cur = match parent {
+                    Some(p) if p == head => at("next").unwrap_or(u64::MAX),
+                    Some(_) if at("number").unwrap_or(0) > number => u64::MAX,
+                    _ => 0,
+                };
+                if cur != u64::from(want) {
+                    return Err(PqChatError::TreeStale);
+                }
+                Ok(json!({"parent": head, "next": self.next, "number": number}))
+            },
+        )?;
+        Ok(())
+    }
+
+    async fn then(self, chat: &PqChat, s: Signature) -> Result<TreeBuilt, PqChatError> {
+        let Signature::Commit(signed) = s else {
+            return Err(PqChatError::Internal);
+        };
+        let parent = signed
+            .record
+            .get("parentEpochId")
+            .cloned()
+            .unwrap_or_default();
+        // F-5 (owner 2026-11-27): this device's own path commit holds its path-less Adds back while it is staged on this head
+        // (the path-less review's D-7 = G-5: every signed path commit, one transaction or several: until it lands the head
+        // does not move, and once it moves the marker names another parent)
+        if signed.record.get("pathless") == Some(&json!(false)) {
+            let v = json!({"epochId": signed.epoch_id, "parent": parent});
+            crate::store::Items(&*chat.store)
+                .update::<Value, _>(&staged_key(&self.session_id), |_| Ok(v.clone()))?;
+        }
+        Ok(TreeBuilt {
+            signed,
+            plan: self.plan,
+            head_confirmed: self.head_confirmed,
+            adds_left: self.adds_left,
+            review: self.review,
+        })
+    }
 }
 
 /// The commits a commit request becomes (owner 2026-11-27, [`PqChat::tree_commit_plan`]): the most Adds one commit takes
@@ -673,7 +833,7 @@ impl PqChat {
     /// record and **every wrap in one transaction** (`wraps.length == members.length`). The member count is capped by the
     /// chain's limits from the chain's gas rows ([`pt::create_cap`]) and confirmed by the quote; over it `TreeTooLarge`, nothing
     /// signed. More members come by commits of Adds with their Welcome wraps. A `none` home is refused (C1, `TreeHomeNone`).
-    pub async fn create_tree(&self, r: CreateTree) -> Result<TreeCreated, PqChatError> {
+    pub async fn create_tree(&self, r: CreateTree) -> Result<TreeCreateWrite, PqChatError> {
         let me = r.me.ua.to_ascii_lowercase();
         crate::session::check_stores(&r.info)?;
         self.require_listed(&r.chain, &r.home).await?;
@@ -731,53 +891,37 @@ impl PqChat {
                     .pqchat_tree_genesis(key.clone(), session.clone(), rd, info.clone())
             })
             .await?;
-        let signed = self
+        let prepared = self
             .app
             .prepare_pqchat_tree_session(r.me.key.clone(), g.record.clone())
             .await
-            .map_err(sdk)?
-            .sign()
-            .await
             .map_err(sdk)?;
-        let sig = crate::session::sig_json(&signed.sig);
-        let args = json!({"s": strings(&g.record), "wraps": strings(&json!(g.wraps)), "sig": sig});
-        // codex-r3-5: the signed record and every wrap kept before anything leaves, until the session is complete at home;
-        // C-12: a call that cannot be prepared (over the cap, or refused) drops what it kept, nothing has left the device
-        let kept = create_key(&g.session_id);
-        crate::store::Items(&*self.store).update::<Value, _>(&kept, |_| Ok(args.clone()))?;
-        let call = match self
-            .net
-            .prepare(
-                &r.chain,
-                &sref.home,
-                "IPqChat.createSession",
-                args,
-                &r.payer,
-            )
-            .await
-        {
-            Ok(c) => c,
-            Err(e) => {
-                crate::store::Items(&*self.store).update::<Value, _>(&kept, |_| Ok(Value::Null))?;
-                return Err(match e.code() {
-                    "GasAboveTxCap" => PqChatError::TreeTooLarge,
-                    _ => e,
-                });
-            }
+        let args = json!({"s": strings(&g.record), "wraps": strings(&json!(g.wraps))});
+        let at = At {
+            chain: r.chain.clone(),
+            instance: sref.home.clone(),
         };
-        self.set_consent(
-            &SessionRef {
-                session_id: g.session_id.clone(),
-                ..sref
+        let quote = self
+            .quote_unsigned(
+                &at,
+                "IPqChat.createSession",
+                args.clone(),
+                &r.payer,
+                &r.me.key,
+            )
+            .await?;
+        Ok(Prepared {
+            review: prepared.review.clone(),
+            unsigned: Unsigned::Record(prepared),
+            quote: Some(quote),
+            then: TreeCreate {
+                session_id: g.session_id,
+                tree_id: g.tree_id,
+                k: g.k,
+                args,
+                at,
+                payer: r.payer,
             },
-            crate::consent::Consent::Accepted,
-            true,
-        )?;
-        Ok(TreeCreated {
-            session_id: g.session_id,
-            tree_id: g.tree_id,
-            k: g.k,
-            call,
         })
     }
 
@@ -1141,7 +1285,7 @@ impl PqChat {
         st: &TreeState,
         c: TreeCommit,
         leaf: u32,
-    ) -> Result<TreeBuilt, PqChatError> {
+    ) -> Result<TreeWrite, PqChatError> {
         let (mut prepared, mut head_confirmed, _) =
             self.tree_built(s, st, &c, &c.adds, leaf, false).await?;
         let mut split = self
@@ -1172,39 +1316,22 @@ impl PqChat {
                 format!("leaves under review (a warning or an author that did not hold the epoch names them): {}", l.join(", ")),
             ));
         }
-        let signed = prepared.sign().map_err(sdk)?;
-        if pathless {
-            // C47: the next path-less build on this head takes the next `try`
-            let parent = signed
-                .record
-                .get("parentEpochId")
-                .cloned()
-                .unwrap_or_default();
-            let next = self.next_try(st)?.saturating_add(1);
-            crate::store::Items(&*self.store)
-                .update::<Value, _>(&tries_key(&st.session_id), |_| {
-                    Ok(json!({"parent": parent, "next": next}))
-                })?;
-        }
-        // F-5 (owner 2026-11-27): this device's own path commit holds its path-less Adds back while it is staged on this head
-        // (the path-less review's D-7 = G-5: every signed path commit, one transaction or several: until it lands the head
-        // does not move, and once it moves the marker names another parent)
-        if signed.record.get("pathless") == Some(&json!(false)) {
-            let parent = signed
-                .record
-                .get("parentEpochId")
-                .cloned()
-                .unwrap_or_default();
-            let v = json!({"epochId": signed.epoch_id, "parent": parent});
-            crate::store::Items(&*self.store)
-                .update::<Value, _>(&staged_key(&st.session_id), |_| Ok(v.clone()))?;
-        }
-        Ok(TreeBuilt {
-            signed,
-            plan,
-            head_confirmed,
-            adds_left: left.to_vec(),
-            review,
+        let next = self.next_try(st)?.saturating_add(1);
+        Ok(Prepared {
+            review: lines(&review),
+            unsigned: Unsigned::Commit(Box::new(prepared)),
+            quote: None,
+            then: TreeCommitWrite {
+                plan,
+                head_confirmed,
+                adds_left: left.to_vec(),
+                review,
+                pathless,
+                session_id: st.session_id.clone(),
+                next,
+                head: st.ids.last().map(|x| x.to_ascii_lowercase()),
+                number: st.head,
+            },
         })
     }
 
@@ -1438,8 +1565,13 @@ impl PqChat {
     /// The `try` (C47) of this device's next path-less Add on the head of `st`: one more than the last it signed on that
     /// head, 0 on a new head.
     fn next_try(&self, st: &TreeState) -> Result<u32, PqChatError> {
-        let t: Option<Value> = crate::store::Items(&*self.store).get(&tries_key(&st.session_id))?;
         let head = st.ids.last().map(|x| x.to_ascii_lowercase());
+        self.stored_try(&st.session_id, head)
+    }
+
+    /// The next `try` the store holds for `session_id` on the head `head` (0 on another head or none).
+    fn stored_try(&self, session_id: &str, head: Option<String>) -> Result<u32, PqChatError> {
+        let t: Option<Value> = crate::store::Items(&*self.store).get(&tries_key(session_id))?;
         Ok(match t {
             Some(t)
                 if t.get("parent")
@@ -1666,7 +1798,7 @@ impl PqChat {
         epoch_id: &str,
         nonce: u64,
         payer: &KeyRef,
-    ) -> Result<AppCall, PqChatError> {
+    ) -> Result<TreeExitWrite, PqChatError> {
         self.exit_epoch(s, epoch_id).await?;
         let tree_id = self.tree_id(s).await?;
         let p = self
@@ -1681,11 +1813,40 @@ impl PqChat {
                 },
             )
             .map_err(sdk)?;
-        let sig = crate::session::sig_json(&p.sign().map_err(sdk)?);
-        let args = json!({"l": strings(&p.record), "sig": sig});
-        self.net
-            .prepare(&s.chain, &s.home, "IPqChat.treeLeave", args, payer)
+        self.tree_exit(s, me, "IPqChat.treeLeave", "l", p, payer)
             .await
+    }
+
+    /// A tree exit prepared for the review: its lines and the quote of its call before the signature.
+    async fn tree_exit(
+        &self,
+        s: &SessionRef,
+        me: &Me,
+        item: &'static str,
+        name: &'static str,
+        p: pt::PqTreeExit,
+        payer: &KeyRef,
+    ) -> Result<TreeExitWrite, PqChatError> {
+        let at = At {
+            chain: s.chain.clone(),
+            instance: s.home.clone(),
+        };
+        let record = strings(&p.record);
+        let quote = self
+            .quote_unsigned(&at, item, json!({ name: record }), payer, &me.key)
+            .await?;
+        Ok(Prepared {
+            review: lines(&p.review),
+            unsigned: Unsigned::Exit(p),
+            quote: Some(quote),
+            then: RecordWrite {
+                at,
+                item,
+                name,
+                record,
+                path: Path::Payer(payer.clone()),
+            },
+        })
     }
 
     /// `treeRemove` of `members` from `s` by the admin `me` naming `epoch_id` (within the lag, else `ExitLag`; its
@@ -1699,7 +1860,7 @@ impl PqChat {
         members: Vec<String>,
         nonce: u64,
         payer: &KeyRef,
-    ) -> Result<AppCall, PqChatError> {
+    ) -> Result<TreeExitWrite, PqChatError> {
         let mut members: Vec<String> = members.iter().map(|m| m.to_ascii_lowercase()).collect();
         members.sort();
         members.dedup();
@@ -1722,10 +1883,7 @@ impl PqChat {
                 },
             )
             .map_err(sdk)?;
-        let sig = crate::session::sig_json(&p.sign().map_err(sdk)?);
-        let args = json!({"r": strings(&p.record), "sig": sig});
-        self.net
-            .prepare(&s.chain, &s.home, "IPqChat.treeRemove", args, payer)
+        self.tree_exit(s, me, "IPqChat.treeRemove", "r", p, payer)
             .await
     }
 

@@ -15,13 +15,13 @@ T6a a discovered node counted among the 3 (scaas-rpc's named agreement over ever
 T6a a receipt sent in a tree session | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
 T6b an automatic write after a failed open | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
 T6b a held send flushed (a tree epoch's child not asked for) | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
-T6b a read skipped after a failed open | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+T6b a read skipped after a failed open | killed | 3252b5b2b | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
 T6b a dropped UA accepted without its signed leave or removal | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
 T6b replay that reads an event | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
 T6b replay that opens before the join | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
 T6b the range stopped at endEpoch (a ciphertext opened at the commit that removed the key) | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
 T6b the join's author judged without the parent's admins | killed | bdf6ef30c | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
-T6b the warning cleared by a refresh while a foreign leaf stays | killed | 5ae420567 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
+T6b the warning cleared by a refresh while a foreign leaf stays | killed | 3252b5b2b | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
 T6b a commit author not checked against the roster | killed | 5ae420567 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
 C-1 a record stored alone taken as complete | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
 D-14 what landed read at the final block only | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios

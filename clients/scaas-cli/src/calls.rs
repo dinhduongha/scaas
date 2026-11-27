@@ -36,6 +36,118 @@ pub const EXCLUDED: &[(&str, &str)] = &[
         "signed inside `app-core prepare-pqchat-*` / `pqchat-prepare-session` / `-epoch`, after the confirm on its review (T26 A-5)",
     ),
     (
+        "AppCore::pqchat_tree_registry",
+        "a step of the tree state machine over `PqTreeReads` the caller gathers round by round (pqchat-core's `tree_run` drives it); no single command's input",
+    ),
+    (
+        "AppCore::pqchat_tree_genesis",
+        "a step of the tree state machine over `PqTreeReads` the caller gathers round by round (pqchat-core's `tree_run` drives it); no single command's input",
+    ),
+    (
+        "AppCore::pqchat_tree_prepare_commit",
+        "a step of the tree state machine over `PqTreeReads` the caller gathers round by round (pqchat-core's `tree_run` drives it); no single command's input",
+    ),
+    (
+        "AppCore::pqchat_tree_prepare_pathless",
+        "a step of the tree state machine over `PqTreeReads` the caller gathers round by round (pqchat-core's `tree_run` drives it); no single command's input",
+    ),
+    (
+        "AppCore::pqchat_tree_replay",
+        "a step of the tree state machine over `PqTreeReads` the caller gathers round by round (pqchat-core's `tree_run` drives it); no single command's input",
+    ),
+    (
+        "AppCore::pqchat_tree_resume",
+        "a step of the tree state machine over `PqTreeReads` the caller gathers round by round (pqchat-core's `tree_run` drives it); no single command's input",
+    ),
+    (
+        "PqTreeReads::put_kem_key_at",
+        "fills the tree state machine's reads (Rust-only, between its rounds)",
+    ),
+    (
+        "PqTreeReads::put_msig_at",
+        "fills the tree state machine's reads (Rust-only, between its rounds)",
+    ),
+    (
+        "PqTreeReads::put_msig_state",
+        "fills the tree state machine's reads (Rust-only, between its rounds)",
+    ),
+    (
+        "PqTreeReads::put_registration",
+        "fills the tree state machine's reads (Rust-only, between its rounds)",
+    ),
+    (
+        "PqTreeReplay::adopt",
+        "moves a replay's node keys into the next replay (Rust-only, pqchat-core's resume)",
+    ),
+    (
+        "PqTreeCommit::sign",
+        "the commit the tree state machine built, signed by its caller after the review (no command builds one)",
+    ),
+    (
+        "PqTreeExit::sign",
+        "signed inside `app-core prepare-pqchat-tree-leave` / `-remove`, after the confirm on its review",
+    ),
+    (
+        "PqGas::asked",
+        "arithmetic over the tree gas rows a caller holds; no chain read",
+    ),
+    (
+        "PqLimits::fits",
+        "arithmetic over `pqchat-tree-limits`' answer; no chain read",
+    ),
+    (
+        "PqPathlessCheck::form",
+        "the path-less form's rule over a state the caller holds; no chain read",
+    ),
+    (
+        "pqchat_tree::adds_per_commit",
+        "a planning helper of the tree mode over values the caller holds (gas rows, a plan, a record); no chain read",
+    ),
+    (
+        "pqchat_tree::create_cap",
+        "a planning helper of the tree mode over values the caller holds (gas rows, a plan, a record); no chain read",
+    ),
+    (
+        "pqchat_tree::deferred_cost",
+        "a planning helper of the tree mode over values the caller holds (gas rows, a plan, a record); no chain read",
+    ),
+    (
+        "pqchat_tree::kem_hash",
+        "a planning helper of the tree mode over values the caller holds (gas rows, a plan, a record); no chain read",
+    ),
+    (
+        "pqchat_tree::margined",
+        "a planning helper of the tree mode over values the caller holds (gas rows, a plan, a record); no chain read",
+    ),
+    (
+        "pqchat_tree::next_send",
+        "a planning helper of the tree mode over values the caller holds (gas rows, a plan, a record); no chain read",
+    ),
+    (
+        "pqchat_tree::plan_commit",
+        "a planning helper of the tree mode over values the caller holds (gas rows, a plan, a record); no chain read",
+    ),
+    (
+        "pqchat_tree::record_unknown",
+        "a planning helper of the tree mode over values the caller holds (gas rows, a plan, a record); no chain read",
+    ),
+    (
+        "pqchat_tree::refresh_line",
+        "a planning helper of the tree mode over values the caller holds (gas rows, a plan, a record); no chain read",
+    ),
+    (
+        "pqchat_tree::registry_name",
+        "a planning helper of the tree mode over values the caller holds (gas rows, a plan, a record); no chain read",
+    ),
+    (
+        "pqchat_tree::signer_name",
+        "a planning helper of the tree mode over values the caller holds (gas rows, a plan, a record); no chain read",
+    ),
+    (
+        "pqchat_tree::split_adds",
+        "a planning helper of the tree mode over values the caller holds (gas rows, a plan, a record); no chain read",
+    ),
+    (
         "PqCardPrepared::sign",
         "signed inside `app-core prepare-pqchat-card`, after the confirm on its review (T26 A-5)",
     ),
@@ -676,6 +788,30 @@ calls! { cx;
         cx.confirm(json!({"review": review(&call.review), "quote": call.quote}))?;
         named("tx", sdk(cx).wallet().submit_native_send(call.quote).await?)
     };
+    "app-core quote-app-call" "AppCore::quote_app_call" {chain: String, contract: String, entry: String, args: String, payer: KeyRef, signer: KeyRef} => js(cx.app()?.quote_app_call(chain, contract, entry, args, payer, signer).await?);
+    "app-core relay-app-call" "AppCore::relay_app_call" {chain: String, kind: String, contract: String, entry: String, args: String} => js(cx.app()?.relay_app_call(chain, kind, contract, entry, args).await?);
+    "app-core read-app-latest" "AppCore::read_app_latest" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app_latest(chain, contract, entry, args).await?));
+    "app-core read-app-agreed-named" "AppCore::read_app_agreed_named" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app_agreed_named(chain, contract, entry, args).await?));
+    "app-core named-endpoints" "AppCore::named_endpoints" {chain: String} => named("named", cx.app()?.named_endpoints(&chain)?);
+    "app-core pqchat-tree-limits" "AppCore::pqchat_tree_limits" {chain: String} => {
+        let l = cx.app()?.pqchat_tree_limits(&chain).await?;
+        js(json!({"block": l.block, "txRegular": l.tx_regular}))
+    };
+    "app-core prepare-pqchat-tree-session" "AppCore::prepare_pqchat_tree_session" {account: KeyRef, record: Value} @sign => {
+        let p = cx.app()?.prepare_pqchat_tree_session(account.clone(), record).await?;
+        cx.confirm(json!({"sign": p.record, "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
+    };
+    "app-core prepare-pqchat-tree-leave" "AppCore::prepare_pqchat_tree_leave" {account: KeyRef, session_id: String, tree_id: String, epoch_id: String, nonce: u64} @sign => {
+        let p = cx.app()?.prepare_pqchat_tree_leave(account.clone(), scaas_sdk::pqchat_tree::PqTreeLeave { session_id, tree_id, epoch_id, nonce })?;
+        cx.confirm(json!({"sign": "PqChatTreeLeave", "account": account, "record": p.record, "review": p.review, "digest": p.digest}))?;
+        js(json!({"record": p.record, "sig": p.sign()?}))
+    };
+    "app-core prepare-pqchat-tree-remove" "AppCore::prepare_pqchat_tree_remove" {account: KeyRef, session_id: String, tree_id: String, epoch_id: String, next_epoch: u64, members: Vec<String>, nonce: u64} @sign => {
+        let p = cx.app()?.prepare_pqchat_tree_remove(account.clone(), scaas_sdk::pqchat_tree::PqTreeRemove { session_id, tree_id, epoch_id, next_epoch, members, nonce })?;
+        cx.confirm(json!({"sign": "PqChatTreeRemove", "account": account, "record": p.record, "review": p.review, "digest": p.digest}))?;
+        js(json!({"record": p.record, "sig": p.sign()?}))
+    };
     "app-core read-app" "AppCore::read_app" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app(chain, contract, entry, args).await?));
     "app-core read-app-plain" "AppCore::read_app_plain" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app_plain(chain, contract, entry, args).await?));
     "app-core read-app-agreed" "AppCore::read_app_agreed" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app_agreed(chain, contract, entry, args).await?));
@@ -726,6 +862,8 @@ calls! { cx;
     "app-core pqchat-decode-payload" "AppCore::pqchat_decode_payload" {payload: Vec<u8>} => js(cx.app()?.pqchat_decode_payload(payload)?);
     "app-core pqchat-wrap-hash" "AppCore::pqchat_wrap_hash" {wrap: PqWrap} => named("hash", cx.app()?.pqchat_wrap_hash(wrap)?);
     "app-core pqchat-message-id" "AppCore::pqchat_message_id" {r: PqChatMessage} => named("messageId", cx.app()?.pqchat_message_id(r)?);
+    "app-core pqchat-entry-hash" "AppCore::pqchat_entry_hash" {r: PqTopicEntry} => named("contentHash", cx.app()?.pqchat_entry_hash(r)?);
+    "app-core pqchat-edit-hash" "AppCore::pqchat_edit_hash" {r: PqTopicEdit} => named("contentHash", cx.app()?.pqchat_edit_hash(r)?);
     "app-core pqchat-session-id" "AppCore::pqchat_session_id" {creator: String, nonce: u64} => named("sessionId", cx.app()?.pqchat_session_id(creator, nonce)?);
     "app-core pqchat-epoch-id" "AppCore::pqchat_epoch_id" {session_id: String, author: String, nonce: u64} => named("epochId", cx.app()?.pqchat_epoch_id(session_id, author, nonce)?);
     "app-core prepare-pqchat-session" "AppCore::prepare_pqchat_session" {account: KeyRef, r: PqChatSession} @sign => {
