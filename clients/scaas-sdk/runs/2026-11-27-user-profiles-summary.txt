@@ -14,3 +14,12 @@ UP2 | ua-vault | 4505606cf + UP2 files | 0 | wallet_vault 29, wallet_custody 13,
 UP2 | fmt rust toml | 4505606cf + UP2 files | 0 | format.sh --check rust toml: every part ok
 UP2 | docs | 4505606cf + UP2 files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
 UP2 | mutants | e926da791 | 0 | 5 mutants, 5 killed, 0 survived, 0 not loaded, 0 other failure
+UP3 | ua-vault (wallet_vault, wallet_custody, retained_key, wallet_import_ua; plus wallet_link) | 8c5eea841 | 0 | 29+13+2+8 pass (+5 wallet_link), 0 fail
+UP3 | ua-clippy default --all-targets -D warnings | 8c5eea841 | 0 | 0 warnings
+UP3 | ua-clippy --all-targets --features vectors -D warnings (user-profile,test-hooks absent until UP2) | 8c5eea841 | 0 | 0 warnings
+UP3 | ck (npm test) | 8c5eea841 | 0 | 693 tests, 688 pass, 0 fail, 5 skipped
+UP3 | ks-gen (keystore-vectors.mjs regenerate + diff -r) | 8c5eea841 | 0 | 3 files identical
+UP3 | sdk keystore_vectors | 8c5eea841 | 0 | 2 pass
+UP3 | fmt rust js | 8c5eea841 | 0 | ok
+UP3 | docs | 8c5eea841 | 0 | 0 errors (8 old warnings); test_docs_check ok
+UP3 | mutants up3 | 4505606cf | 0 | 3 mutants, 3 killed, 0 survived, 0 not loaded, 0 other failure
