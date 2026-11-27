@@ -200,7 +200,7 @@ without GMP, MPFR, floats or malloc, natively and in wasm32, and proves and veri
 
 ## Optimisation P6d-2 (branch `p6d2-opt`)
 
-P6d-2 is the optimisation round (owner: "optimise the fork"); merged as `b87078a` on 2026-10-13. In short: `R_TX`
+P6d-2 is the optimisation round (owner: optimise the fork); merged as `b87078a` on 2026-10-13. In short: `R_TX`
 prove went from 17.0 s to 1.10 s native and verify from 14.9 s to 0.72 s, with byte-identical proofs.
 
 Only the implementation changed: same parameters, same proof format, and **proofs byte-identical** to main for the

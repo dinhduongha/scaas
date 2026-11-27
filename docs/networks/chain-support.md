@@ -92,20 +92,20 @@ Status: SPECIFIED.
 | 25 | Arweave (store) | n/a | n/a | n/a | B | B | B | B | n/a | n/a | n/a | n/a | B |
 
 
-Row 8 (Ethereum Classic, 61; Mordor 63) is removed: the owner dropped ETC on 2026-11-22 (decisions CLI-SDK-32, "ETC has no
-finalized block"); its profiles are in `smartcontracts/evm/legacy/chains/`. The other rows keep their numbers.
+Row 8 (Ethereum Classic, 61; Mordor 63) is removed: the owner dropped ETC on 2026-11-22 (decisions CLI-SDK-32: ETC has no
+finalized block); its profiles are in `smartcontracts/evm/legacy/chains/`. The other rows keep their numbers.
 
 Counts (24 rows): Contract B 22 (13 B‡), n/a 2. Relay B 21, P 1, n/a 2. Index B 22, n/a 2. Signing B 18, after the freeze 5, n/a 1. rpc read B 23, n/a 1. rpc write B 16, after the freeze 7, n/a 1. SDK B 16, after the freeze 7, n/a 1. Zether B 11 (10 B‡), P 1, M 10, n/a 2. PQ B 12 (11 B‡; on 5 of them kinds disabled), P 3, M 7, n/a 2. PQZ B 9 (8 B‡; on 2 of them disabled on one network), P 1, M 9, disabled 3, n/a 2. Self-relay B 14, P 1, after the freeze 7, n/a 2. Native B 15, after the freeze 9 (8 of them with the read built).
 
 **SDK plan T39's re-read (2026-11-22, at `origin/ua-rs-sign` fe435934b).** This round's T41 is `evm`, `soroban` and `arweave` only
-(owner 2026-11-22, in English: this round's T41 is only the current slices, the rest after the freeze; decisions CLI-SDK-32); the other families' cells read "after the freeze", counted as neither BUILT nor failed.
+(owner 2026-11-22: this round's T41 is only the current slices, the rest after the freeze; decisions CLI-SDK-32); the other families' cells read "after the freeze", counted as neither BUILT nor failed.
 chains-arweave's node tasks: CA-T3 BUILT and merged (`[[chains]] max_inflight`, `Breaker::below_cost`, their tests); CA-T9 BUILT
 and merged (`guard.rs` `Rule::ChatStore` for `pqchatstore`, the code hash at the final block, tests
 `a_pqchatstore_job_runs_on_the_pinned_code_under_the_lane_policy` and `a_pqchatstore_pass_is_read_at_the_final_block_and_not_kept_for_ever`);
 CA-T14 not built: it takes T13's Paseo measurement, a deploy on the owner's word. The rule's cells still `P` in this round's
 scope, each with what it waits for: Polkadot Hub's Relay, the `max_tx_gas` parts of rpc read and SDK, and Self-relay (CA-T14).
-Moonbeam's SDK and Self-relay waited for the SDK's `pinnedReads` wiring: BUILT on 2026-11-22 (owner, "Làm ngay, cùng sdk-binding": do it
-now, with sdk-binding), a `ChainProfile` field `pinned_reads` through every binding.
+Moonbeam's SDK and Self-relay waited for the SDK's `pinnedReads` wiring: BUILT on 2026-11-22 (owner: done at once,
+with sdk-binding), a `ChainProfile` field `pinned_reads` through every binding.
 Soroban's Self-relay and Native cells ran on a local Protocol 30 network too (plan T39: a hand-off landed by the payee, the blob
 then `ImportConsumed`, an own op self-relayed from another key of the same seed, a native XLM send); a self-relay paid by the
 op's own subject key is open for the Soroban round (the simulation's `SourceAccount` auth entry, refused by `scaas-rpc`).

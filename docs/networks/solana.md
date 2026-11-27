@@ -302,7 +302,7 @@ own** key (the admin never touches an Account); turning it on without a backup i
 `set_guardian(other)` is always allowed); value ops (`relay_pay`, `mandate_open`, DEX legs of this Account) abort
 `NoBackup` if a backup is somehow missing (a cheap check). The portal guides adding a seed key or guardian before
 `set_policy`; a client cannot read on-chain state, so a missing backup surfaces in simulation (the job `dead` with a
-clear reason). Owner decision ("only an on/off option"). BUILT.
+clear reason). Owner decision: only an on/off option. BUILT.
 
 ## 4. Lanes
 

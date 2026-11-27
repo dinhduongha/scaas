@@ -2,8 +2,8 @@
 
 # PQZ with hidden identities: what sender / receiver anonymity would cost (estimate, no code)
 
-Written 2026-10-14 at the owner's request ("PQZL hides only the amount; what if identities are hidden too — estimate,
-no code"). PQZ today hides amounts and balances; sender, receiver and auditor accounts are public (pq-zero-knowledge.md, ring
+Written 2026-10-14 at the owner's request: PQZL hides only the amount; what if identities are hidden too (an estimate,
+no code). PQZ today hides amounts and balances; sender, receiver and auditor accounts are public (pq-zero-knowledge.md, ring
 size 2, no linkable tags). This note estimates two ways to hide identities. **No decision is recorded here and nothing
 was measured**: every number below is an estimate scaled from the measured PQZL figures (`pqz-core/STATUS.md`,
 `pqz-relations-burn-disclose.md` §1) and from published figures of others. Tags: [measured] our runs, [paper] a
@@ -11,9 +11,9 @@ published figure, [estimate] / [inference] this note.
 
 **Update 2026-10-14 (second version, P6-ANON planning).** Owner decisions of that day, in order: build identity
 hiding as an optional, prepared feature that is OFF by default; **the sender may stay visible, only the receiver must
-be hidden** ("Chấp nhận lộ người gửi nhưng không biết người nhận"); and, as the final scope, **build only mode 2A′, the
-receiver-only ring, for both proof systems (PQZL and PQZH), "prepared to show it works, with concrete measurements,
-ready for others; SCaaS itself does not use it"** — stealth (2B), sender ring (1) and both sides (3) are not built and
+be hidden**; and, as the final scope, **build only mode 2A′, the
+receiver-only ring, for both proof systems (PQZL and PQZH), prepared to show it works, with concrete measurements,
+ready for others; SCaaS itself does not use it** — stealth (2B), sender ring (1) and both sides (3) are not built and
 stay here as described alternatives. The controller then recorded that mode 2A′ **is the multi-recipient transfer the
 owner decided for classical Zether on 2026-10-08** (Z1–Z13, CTR-ZTH-37 … 43), so it is planned as the PQZ
 multi-recipient transfer `R_TXM`; the owner accepted that design (sender visible, one proof per transfer, verified by

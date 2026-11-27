@@ -455,8 +455,8 @@ reserves it in the state dimension); new storage slots cost 97,920 state gas and
 
 ## Genesis gasLimit 200 M on the SCaaS testnet (executed 2026-10-22)
 
-*Live only.* Owner 2026-10-22: reset the SCaaS testnet now so blocks are 200 M from block 0 ("Reset ngay để có 200 M
-sớm, không cần chạy tải"); no load rehearsal, no burst / fill drill, no calibration. Everything else stays as on
+*Live only.* Owner 2026-10-22: reset the SCaaS testnet now so blocks are 200 M from block 0, as early
+as possible; no load rehearsal, no burst / fill drill, no calibration. Everything else stays as on
 2026-10-21: image `scaas/nethermind-pqz:2.2.0-pqz3`, the same `engine.Pqz` (two schedules, PQZL v2 rows) and params
 (Amsterdam from timestamp 1), `config.json` (`TargetBlockGasLimit` already 200 M), compose, ports and keys. No chain-data
 backup (owner 2026-10-21); the data dir is renamed, `genesis.json` gets a `.bak-pre-200m-20261022` copy.
@@ -494,8 +494,8 @@ vectors that use `0x24e43dcb…c464` as a fixed `chainUid` keep it (a test const
 
 ## Image 2.2.0-pqz4 on the SCaaS testnet (executed 2026-10-25)
 
-*Live only.* Owner 2026-10-24: "run it on the SCaaS testnet yourself" (the controller deploys plan 5h Task 8d part 1 to
-the testnet itself, instead of a copy-chain probe) and "no backup of chain 7622 needed". Log
+*Live only.* Owner 2026-10-24: the controller deploys plan 5h Task 8d part 1 to
+the testnet itself, instead of a copy-chain probe, and no backup of chain 7622 is needed. Log
 `../runs/2026-10-25-pqz4-live.txt`; branch `pqz-16k` at `35b59a62` (8d part 1 merged with main's Nethermind 2.2 work).
 
 1. Image: `scripts/capped pqz-core/nethermind/build-image.sh pqz4` twice — pass 1 stops at the reviewed-library check
@@ -521,7 +521,7 @@ Not done here: contracts (plan 5h Task 8d part 2 — the testnet has no PQZ cont
 
 ## Image 2.2.0-pqz5 on the SCaaS testnet (executed 2026-10-26)
 
-*Live only.* Owner 2026-10-26: "làm roll-out testnet đi" (roll the R0 review fix part b out to the testnet); no backup
+*Live only.* Owner 2026-10-26: roll the R0 review fix part b out to the testnet; no backup
 of chain 7622's data (owner 2026-10-24). Logs `../runs/2026-10-26-image-pqz5.txt`, `../runs/2026-10-26-pqz5-live.txt`;
 branch `pqz-16k` at `349b96b8` (part b merged).
 
@@ -697,7 +697,7 @@ registered are skipped; a new run makes new tokens: `E2E_SALT` defaults from the
 *Live only.* Owner 2026-11-03 ([CTR-GOV-19](../../../docs/decisions.md)): the SCaaS testnet
 leaves EIP-7954 out and keeps every other Amsterdam EIP, so that every token kind, `WrappedPqzToken` (72,160 B) included,
 runs at a higher `maxCodeSize` (governance plan T16; NET-EVM-06's Change, governance spec §12.10). Go: owner 2026-11-04
-("Làm reset: mục 2, reset lần 1", TODO pre-freeze item 2), with [`MLDSA87`](#mldsa87-on-the-scaas-testnet-executed-2026-11-04-with-reset-1-ctr-ua-39-owner-2026-11-04)
+(run the reset: item 2, reset 1; TODO pre-freeze item 2), with [`MLDSA87`](#mldsa87-on-the-scaas-testnet-executed-2026-11-04-with-reset-1-ctr-ua-39-owner-2026-11-04)
 in the same reset. The SCaaS mainnet is the owner's and is never touched (`--testnet-reset` refuses every chain but the SCaaS testnet).
 
 **Status: executed 2026-11-04** (13:01:49Z) by the controller. Logs `../runs/2026-11-04-testnet-reset1.txt` (script
@@ -788,7 +788,7 @@ ones back (both nodes and Blockscout), and starts sealer, rpc and Blockscout (th
 
 Resets 3, 4 and 4b used the same procedure (`smartcontracts/evm/runs/2026-11-12-scaas-testnet-reset3/`,
 `smartcontracts/evm/runs/2026-11-15-scaas-testnet-reset4/`, summaries `runs/2026-11-15-reset4.txt`); reset 5 is that procedure
-on the `ua-mtx-merge` tree before PR #18 (owner 2026-11-16, "Ok, reset 5 before PR #18"), scripts in
+on the `ua-mtx-merge` tree before PR #18 (owner 2026-11-16), scripts in
 `smartcontracts/evm/runs/2026-11-16-scaas-testnet-reset5/`, summary `smartcontracts/evm/runs/2026-11-16-reset5.txt`.
 No chain-data backup (owner 2026-10-24): data dirs renamed `*.pre-reset5-20261116`, `.bak-pre-reset5-20261116` copies of
 `genesis.json`, `docker-compose.yml`, `config.json`, `config.rpc.json`.
@@ -813,7 +813,7 @@ RPC_7622=<rpc> VERIFY=none VERIFY_REASON=... MATRIX_OUT=runs/2026-11-16-matrix s
 sh script/onchain/verify.sh scaas-testnet     # DEPLOY_SET=all (the default): both sets, completeness with the children
 ```
 
-**Two deploy sets** (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"; then "agreed" to two full sets as a
+**Two deploy sets** (owner 2026-11-16, option 2: one chain, two deploy sets; then two full sets as a
 test-only layout; [NET-EVM-13](../../../docs/networks/evm.md#NET-EVM-13)'s Change). The chain carries two whole deploys of the
 same build, each with its own `DEPLOY_SALT`, `OpenFactory`, UA registry, `GovernanceRouter`, releases and tokens:
 `mldsa-on` (`MLDSA_PRECOMPILE=on`, the shipped default: the registry's ML-DSA kinds on `MldsaVerifier`s that call the chain's
@@ -854,8 +854,8 @@ container needs 4 GB to compile kind 13's modules (OOM-killed at 768 MiB and at 
 
 ## Chain id 22779 at the reset before the pre-freeze tag (prepared 2026-11-26)
 
-**The decision** (owner 2026-11-26, [NET-EVM-21](../../../docs/decisions.md#NET-EVM-21)): "Thôi, 22777 cho mainnet, 22779 cho
-testnet." The SCaaS testnet moves from chain id 7622 (`0x1dc6`) to **22779** (`0x58fb`) at the full reset before the
+**The decision** (owner 2026-11-26, [NET-EVM-21](../../../docs/decisions.md#NET-EVM-21)): 22777 for the mainnet, 22779 for the
+testnet. The SCaaS testnet moves from chain id 7622 (`0x1dc6`) to **22779** (`0x58fb`) at the full reset before the
 pre-freeze tag; the SCaaS mainnet's documented id is **22777** (`0x58f9`; public chain lists give 22776 to MAP Protocol).
 Nothing here touches the live stack before that reset; the mainnet stays the owner's.
 

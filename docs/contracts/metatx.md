@@ -358,9 +358,9 @@ struct UAEnvelope { bytes32 from; /* the same seven fields */ }
   calls) `WrappedPqzToken` is 63,423 B and `WrappedZetherToken` 62,169 B (`smartcontracts/evm/size-baseline.json`); the task reports and `docs/research/evm-size-levers.md` have the rest.
   Since the Zether bodies run in the libraries ([CTR-ZTH-94](zether.md#CTR-ZTH-94)), `WrappedZetherToken` is 58,407 B and `NormalZetherToken` 47,470 B.
 
-<a id="CTR-MTX-29"></a>**CTR-MTX-29** — **Every parameter is explicit** (owner 2026-10-31, general rule, the owner's text): "every parameter is explicit, as in a REST / JSON / RPC API — no packed / opaque
-`bytes` that bundle several fields". A genuine cryptographic blob stays `bytes`, "but as its own named parameter (`proof`, `ciphertext`, `kemPk`, `pqzKey`, `signature`, …)". "The statement / digest
-bytes that pqz-stmt and the verifiers hash stay byte-identical (the contract assembles them from the explicit params)", and what is stored is exactly what the packed bytes were: a PQZ or Zether
+<a id="CTR-MTX-29"></a>**CTR-MTX-29** — **Every parameter is explicit** (owner 2026-10-31, general rule): every parameter is explicit, as in a REST / JSON / RPC API, with no packed / opaque
+`bytes` that bundle several fields. A genuine cryptographic blob stays `bytes`, but as its own named parameter (`proof`, `ciphertext`, `kemPk`, `pqzKey`, `signature`, …). The statement / digest
+bytes that pqz-stmt and the verifiers hash stay byte-identical (the contract assembles them from the explicit params), and what is stored is exactly what the packed bytes were: a PQZ or Zether
 ciphertext, key or proof never exists only as a hash plus calldata or events ([CTR-PQZ-13](pq-zero-knowledge.md#CTR-PQZ-13)). Applied in the contracts: the Zether and PQZ ops
 ([CTR-ZTH-37](zether.md#CTR-ZTH-37), [CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21), Appendix X.3 of the plan), the registry
 ([CTR-UA-36](accounts.md#CTR-UA-36)), `UASig`, `DexLeg`, the order and cancel structs; in the node's job API (explicit named JSON per operation, hex refused, [NODE-JOB-20](../node/job-api.md#NODE-JOB-20));

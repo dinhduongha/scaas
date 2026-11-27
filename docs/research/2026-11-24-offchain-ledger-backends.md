@@ -5,19 +5,14 @@
 Research of 2026-11-24 for the owner. Nothing here is built, specified or ruled; every design below is a proposal. Any SCaaS
 cryptographic code it names is **UNAUDITED** ([ARCH-POS-14](../decisions.md#ARCH-POS-14)).
 
-The owner's request, verbatim: "Nghiên cứu thêm về việc đẩy scaas transaction lên dịch vụ kiểu Supabase, hoặc S3, hoặc 1
-imutable database nào đó - thay vì đẩy lên smart-chain." (Study pushing SCaaS transactions to a Supabase-style service, to S3,
-or to some immutable database, instead of to a smart-contract chain.)
+The owner's request: study pushing SCaaS transactions to a Supabase-style service, to S3, or to some immutable database,
+instead of to a smart-contract chain.
 
-The owner's added focus and framing, verbatim: "Đặc biệt ở hai phần PqChat và PqVault. Những phần nào làm không được (yêu cầu
-phải có chain - không ánh xạ được sang legacy service thì có thể bỏ qua). Lưu ý là các dịch vụ offchain vẫn có thể làm việc theo
-mô hình client sign giao dịch, thay vì dùng JWT. Một số trường hợp có thể sign giao dịch để lấy JWT, rồi dùng JWT đó làm các việc
-đặc thù riêng. Việc này đưa mô hình SCaaS chính xác về kiểu mà nó muốn: storage; năng lực xử lý; payment linh động, có thể free;
-Chữ ký (Authentication) từ client, không hoặc giảm dùng JWT." (Especially PqChat and PqVault. Parts that cannot work, because
-they need a chain and do not map to a legacy service, may be skipped. Off-chain services can still work on the model where the
-client signs transactions instead of using a JWT. In some cases a client can sign a transaction to obtain a JWT and use it for
-particular tasks. This brings SCaaS exactly to the shape it wants: storage; compute; flexible payment, possibly free;
-signatures (authentication) from the client, with no or less JWT.)
+The owner's added focus and framing: especially PqChat and PqVault. Parts that cannot work, because they need a chain and do
+not map to a legacy service, may be skipped. Off-chain services can still work on the model where the client signs
+transactions instead of using a JWT. In some cases a client can sign a transaction to obtain a JWT and use it for particular
+tasks. This brings SCaaS exactly to the shape it wants: storage; compute; flexible payment, possibly free; signatures
+(authentication) from the client, with no or less JWT.
 
 Tags: **[F]** a fact with its source (a SCaaS fact cites a repository path or rule id); **[V]** a vendor's claim about its own
 product, not checked by us; **[I]** our inference; **[E]** an estimate. Web sources were read on 2026-11-24 unless a date is
@@ -625,11 +620,7 @@ None of these blocks the freeze or the audit (§10.2).
 
 ## 11. Owner direction: a backend service with on-chain or off-chain per part (2026-11-24)
 
-The owner, 2026-11-24, verbatim: "Chọn backend nào => chỗ này có thể viết API service đứng giữa scaas và backend, như đã làm với
-arweave làm lưu trữ. Có thể tùy chọn: đăng ký UA trên chain, hoặc offchain. Data và execute cũng vậy .v.v. hãy xem dữ liệu offchain
-là readable như onchain. Bảo vệ dữ liệu bằng mật mã."
-
-In English: instead of choosing one backend, write an **API service between SCaaS and the backend**, as was done for Arweave
+The owner, 2026-11-24: instead of choosing one backend, write an **API service between SCaaS and the backend**, as was done for Arweave
 storage. Each part is **optional per deployment**: UA registration on chain or off chain; data and execution likewise; and so on.
 **Treat off-chain data as readable like on-chain data.** Protect data with cryptography.
 

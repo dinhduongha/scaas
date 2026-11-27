@@ -270,7 +270,7 @@ PQZ parameters.
 <a id="CTR-PQZ-02"></a>**CTR-PQZ-02** — **Encryption = additive-only module-LWE with BFV-style encoding** ("MLWE-BFV-add"),
 implemented in `pqz-core`, not taken from an FHE library. CKKS and TFHE rejected ([constraints](#constraints)). We use
 Enc/Add/Dec only; a BFV stack brings relinearization keys and failure probabilities we must not have. The owner's
-"BFV/BGV (RLWE)" is met in substance: RLWE `n = 2048` and MLWE `d = 64, k = 32` have the same LWE dimension; the
+BFV/BGV (RLWE) choice is met in substance: RLWE `n = 2048` and MLWE `d = 64, k = 32` have the same LWE dimension; the
 module form matches the LNP22 proof ring.
 
 ### <a id="parameters"></a>4.1 Parameters
@@ -687,7 +687,7 @@ on the body-module build ([CTR-TOK-30](token-wrappers.md#CTR-TOK-30); owner 2026
 `test_debitMinGas_isTheCheapestLogDebit` at each set; before it 7,258,188 / 7,468,120 / 7,675,561 / 7,910,855: the stub to
 P and the self-call's stub to Q add two frames; moved +963 / +972 / +980 / +989 after rounds 3r + 3s + 3t, owner
 2026-11-11, from 7,298,111 / 7,513,388 / 7,726,229 / 7,968,014; moved +324 at each set after the Fable review fixes,
-owner ruling 2026-11-11 "move the pin", from 7,299,074 / 7,514,360 / 7,727,209 / 7,969,003). So the worst-case authorization may not exceed about 9.41 M / 10.70 M / 8.98 M /
+owner ruling 2026-11-11 to move the pin, from 7,299,074 / 7,514,360 / 7,727,209 / 7,969,003). So the worst-case authorization may not exceed about 9.41 M / 10.70 M / 8.98 M /
 8.74 M (before 3zh-core group 2: 9.48 M / 9.26 M / 9.05 M / 8.81 M), less its calldata term (112,640 gas for two ML-DSA-65 slots; `test_register_msigHolderBoundary`); `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused (since 3zh-core group 2
 the second fits at `n2304-kmax4096`, room ≈ 10.70 M: `test_register_msigHolder_fndsa512x4_perSet`; a 2-of-2 `fndsa1024` at
 5,250,000 is over the bound at every set, owner 2026-11-15), a 2-of-2
@@ -1563,7 +1563,7 @@ the token), then the escrow check. Anything failing ⇒ the whole transaction re
 SCaaS testnet) and protects itself by simulating on a follower.
 
 <a id="CTR-PQZ-21"></a>**CTR-PQZ-21** — **`PqzToken` relays through the generic self-call, as classical Zether**
-(owner 2026-10-08: "why not the same as Zether?"). `mtxConfidentialTransfer*`, `mtxUnshield`, `mtxShield(bytes32,uint256)` are allowlisted self-calls
+(owner 2026-10-08: the same path as Zether). `mtxConfidentialTransfer*`, `mtxUnshield`, `mtxShield(bytes32,uint256)` are allowlisted self-calls
 through `mtxExecute`/`uaExecute` (`mtxRollOver` and `mtxPrepareAcc` too, Task R), and the proof-carrying
 ones read the envelope binding from the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)); there is no separate PQZ mixin.
 PQZ selectors are refused in `mtxBatch`/`uaBatch` (`MtxNotBatchable(selector)`: one op is ≈ 3 M gas and up to
@@ -2969,7 +2969,7 @@ Class 2 and class 3 with the opening cost the same bytes. Regular gas stays unde
 at `n2304-kmax4096` and `n2048-kmax1024` every row fits 60 M; an **opening token at `n2560-kmax16384` needs a chain whose block
 gas limit is at least 63.40 M** (op 1 with the auditor, 63,402,676); **at `n2816-kmax65536` an opening token needs at least
 73.32 M** (op 1 with the auditor, 73,319,716), and **every scoped key record (class 2 or 3, opening or not) needs at least
-61.06 M** for its stored `R_REG` proof (`storePqzScopedPop` 61,057,539). Owner ruling 2026-11-14 (verbatim in
+61.06 M** for its stored `R_REG` proof (`storePqzScopedPop` 61,057,539). Owner ruling 2026-11-14 (recorded in
 [decisions.md](../decisions.md#ctr-pqz-37--three-pqz-key-classes-registry-offchain-shared-offchain-token-fixed-at-creation-the-opening-machinery-keyed-on-pqzopening)): `n2560-kmax16384` and `n2816-kmax65536` are only for customer chains with larger blocks; no factory refusal, no design change. The node refuses by name what the connected chain cannot include
 ([NODE-JOB-28](../node/job-api.md#NODE-JOB-28) `TX_EXCEEDS_CHAIN_LIMIT`). The signed rollover adds one UA signature check and
 up to `ROLL_MAX` skip marks ([CTR-PQZ-41](#CTR-PQZ-41)).

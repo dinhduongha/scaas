@@ -248,7 +248,7 @@ and helper only; no hooks in token code.
 
 ## 4. ACL and delegated decryption
 
-The owner's question: "needs careful study; it may be done, or as a feature bit". This section analyses; it rules nothing.
+The owner's question: it needs careful study; it may be done, or as a feature bit. This section analyses; it rules nothing.
 
 ### 4.1 What Zama does
 
@@ -391,7 +391,7 @@ viewer while the holder is offline (c2), or a public consent record (b). Never s
 - **Q2.** Is a view grant wanted at all before the freeze, or after mainnet?
 - **Q3.** Which scopes matter: per transfer, per balance (built from entries), per token?
 - **Q4.** On opening tokens, the share-or-skip decision depends on the holder's KEM decapsulation through the opening check.
-  By its text, ARCH-POS-13's Change of 2026-11-13 ("KEM và ARCH-POS-13: Coi là nằm ngoài") covers it. Confirm that, or prefer
+  By its text, ARCH-POS-13's Change of 2026-11-13 (the KEM is treated as outside ARCH-POS-13) covers it. Confirm that, or prefer
   that a grant shares every entry in scope, junk included, and lets the grantee's own check reject it.
 - **Q5.** If (c2) is ever built: bit 33 `VIEW_GRANT` as a capability set at creation, and may the admin disable it (which ends
   every holder's grants on that token), or must it be locked?
@@ -504,12 +504,12 @@ forfeit**: a non-reveal or an out-of-range reveal goes to `slashSink` ([CTR-TND-
 the leader during `dqWindow` ([CTR-TND-06](../contracts/tender.md#CTR-TND-06)). There is one immutable contract per chain, with
 no admin ([CTR-TND-08](../contracts/tender.md#CTR-TND-08)). Every price is public once revealed.
 
-**The owner's direction (2026-11-24), verbatim:** "người thua chứng minh bằng ZK rằng mình thua => Không cần, chỉ cần người thắng
-chứng minh mình thắng. Nếu người thua thấy người thắng đặt giá cao hơn (hoặc thấp hơn - đấu giá ngược) thì có thể tự chứng minh
-mình là người thắng. Bên chủ thầu có thể là vai như auditor hoặc gì đó. mọi người đều phải mở giá, ai không mở thì mất tiền cọc
-=> Cái này không đúng, chỉ cần trả lại tiền, vì họ không mở giá, họ đã thua. Chưa cần làm gì cả, chỉ cần ghi vào tài liệu."
+**The owner's direction (2026-11-24):** losers need not prove by ZK that they lost; only the winner proves that it won. A
+loser who sees that the winner bid higher (or lower, in a reverse auction) can prove itself the winner. The buyer may take a
+role like an auditor. Every bidder must open its price; a bidder that does not open does not lose its deposit, it is only
+refunded, since by not opening it has lost. Nothing is to be done yet; it is only written into the docs.
 
-In English, as the owner's design. It is recorded here only: nothing is built, and the details are not ruled.
+The owner's design, as follows. It is recorded here only: nothing is built, and the details are not ruled.
 
 1. **No ZK proof from losers.** Only the winner proves it won, by revealing its opening `(price, salt)` against its
    commitment.
@@ -585,9 +585,9 @@ In English, as the owner's design. It is recorded here only: nothing is built, a
     a leaked key to one tender's bids, and it allows a later escrowed release of that key to an arbiter without touching the
     buyer's chats or other tenders. The registry key needs no new record, but a leak of it opens every tender sealed to it and
     the buyer's chats. Open question; no ruling here.
-  - **ARCH-POS-13: option A does not breach it.** The owner's words (2026-11-24): the decrypted tender data is treated "like a
-    chat message, or PqVault items shared out". The rule already covers this. Its Change of 2026-11-13 ("KEM và ARCH-POS-13:
-    Coi là nằm ngoài" [KEM and ARCH-POS-13: treat it as outside]) reads: "The rule is about decryption with a PQZ or a Zether
+  - **ARCH-POS-13: option A does not breach it.** The owner (2026-11-24): the decrypted tender data is treated like a
+    chat message, or PqVault items shared out. The rule already covers this. Its Change of 2026-11-13 (the KEM treated as
+    outside ARCH-POS-13) reads: "The rule is about decryption with a PQZ or a Zether
     key. A decapsulation of the hybrid KEM scheme of CTR-UA-32 (ML-KEM-1024 + X25519, IND-CCA by its combiner), under a chat
     key or an opening key, and the one-shot AEAD keyed by it are outside the rule." ([ARCH-POS-13](../decisions.md#ARCH-POS-13),
     on `ua-rs-sign` at `6db173f7c`). A bid sealed to the buyer with scheme 1 KEM + AEAD is built exactly like a PqChat message

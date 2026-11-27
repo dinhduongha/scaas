@@ -537,8 +537,8 @@ Built shapes, auditor on (auditor off is a little smaller and faster). Run: the 
   over the browser's 256 MiB limit, so the C backend proves M ≤ 4 in wasm32 and M = 8 is for native or desktop
   wallets. The Rust core needs 117.4 MiB of wasm32 linear memory at M = 8 (auditor on; 105.9 MiB off) and 115.5 MB of
   native heap (one relation per process; a process holding every relation's keys reaches 219.0 MiB), so on
-  `pqz-ffi`'s Rust backend (the default) wasm32 proves M = 8 too (owner 2026-10-18 "if it is
-  enough, raise it", decisions.md CTR-PQZ-09; [pqzl/rust/README.md](pqzl/rust/README.md#the-wasm32-op-7-limit-owner-2026-10-18-if-it-is-enough-raise-it)).
+  `pqz-ffi`'s Rust backend (the default) wasm32 proves M = 8 too (owner 2026-10-18: raised if
+  the measurement is enough, decisions.md CTR-PQZ-09; [pqzl/rust/README.md](pqzl/rust/README.md#the-wasm32-op-7-limit-owner-2026-10-18-if-it-is-enough-raise-it)).
   C core native proving uses 343 MiB at M = 4 and 664 MiB at M = 8. PQZH proving needs ≤ 44 MB native and ≤ 49 MiB wasm32.
 - The node's verify arena (512 MiB, S3) holds every multi-recipient shape's keys and tables with a 2× margin (§5.3).
 - One transfer to 4 recipients (M = 4, auditor on) instead of 4 single transfers: about 3.5× fewer bytes and 3.5× less
