@@ -3,7 +3,9 @@
 //! its signature chain before anything is trusted (VC15), unlocking it into epoch keys (handles), and building every record
 //! a user signs. Reading never depends on what opened: a vault's state, its removals and the user's wraps are all read
 //! before any key is tried, and an item page is read whole, so nothing a node sees follows from a decryption (ARCH-POS-13).
-//! UNAUDITED.
+//! One write follows an open on purpose: `resolve` merges against the latest version only when it opened, then quotes the
+//! edit (a node read), as the edit after a merge always was; the open is AEAD-authenticated, so a member learns nothing
+//! of its own ciphertext from it (review B-4). UNAUDITED.
 use crate::item::{self, Field, Item, Merge};
 use crate::keys::{self, ItemAt};
 use crate::records::*;
@@ -302,12 +304,15 @@ pub struct ItemVersion {
 /// A write built for the user's review and not signed (CLI-SDK-36): the record, the wraps of a create or a rekey (empty
 /// otherwise), and the SDK's quote of its call before the signature (`AppCore::quote_app_call`: the review with the
 /// signature empty, the payer's gas from the gas rows, `None` unquoted). [`PqVault::confirm`] signs it on the user's confirm;
-/// dropped, it signed nothing. It holds no key: the record's ciphertexts, its typed data and the key references only.
+/// dropped, it signed nothing. It holds no key: the record's ciphertexts, its typed data and the key references only. Its
+/// fields are read-only (review B-2): what `confirm` signs and calls is what the review showed. It does not track the
+/// vault: a front-end drops its open `Prepared`s when it locks the vault (a stale one is refused by the contract, after
+/// its signature; review B-5).
 #[derive(Debug)]
 pub struct Prepared<R> {
-    pub record: R,
-    pub wraps: Vec<Wrap>,
-    pub quote: AppQuote,
+    record: R,
+    wraps: Vec<Wrap>,
+    quote: AppQuote,
     signer: KeyRef,
     path: AppPath,
     at: Instance,
@@ -404,6 +409,30 @@ fn get<T: serde::de::DeserializeOwned>(v: &Value, k: &str) -> Result<T> {
 
 fn u16_of(n: Num) -> Result<u16> {
     u16::try_from(n.0).map_err(|_| Error::ChainUnverified)
+}
+
+/// A write signed on the user's confirm ([`PqVault::confirm`]): the signed record and its wraps, and the call of it,
+/// prepared and simulated (`Err`: not sent; the record can be called again with [`PqVault::prepare_signed`]).
+#[derive(Debug)]
+pub struct Confirmed<R> {
+    pub signed: Signed<R>,
+    pub wraps: Vec<Wrap>,
+    pub call: Result<AppCall>,
+}
+
+impl<R> Prepared<R> {
+    /// The unsigned record.
+    pub fn record(&self) -> &R {
+        &self.record
+    }
+    /// The wraps of a create or a rekey (empty otherwise).
+    pub fn wraps(&self) -> &[Wrap] {
+        &self.wraps
+    }
+    /// The SDK's quote of the call before the signature, for the review.
+    pub fn quote(&self) -> &AppQuote {
+        &self.quote
+    }
 }
 
 // ------------------------------------------------------------------ reading and verifying (spec §5.9, §6.9)
@@ -1058,26 +1087,31 @@ impl PqVault {
 
     /// Signs `p` on the user's confirm of its review (CLI-SDK-36): the one signing call (`AppCore::prepare_pqvault_record`,
     /// `AppPrepared::sign`), then the signed record's call prepared and simulated (`AppCore::prepare_app_call`) for
-    /// `Wallet::submit_native_send`. A refused simulation (another device's newer version, `PqVaultVersion`) is the SDK's
-    /// error: the signed record is dropped with it, nothing sent.
-    pub async fn confirm<R: Record>(&self, p: Prepared<R>) -> Result<(Signed<R>, AppCall)> {
+    /// `Wallet::submit_native_send`. `Err` only when nothing was signed; once signed, the record is returned whatever the
+    /// call did (review D-5): `call` is `Err` for a refused simulation (another device's newer version, `PqVaultVersion`:
+    /// then `resolve`) or a node that did not answer (then `prepare_signed` of the same record again, no second signature).
+    pub async fn confirm<R: Record>(&self, p: Prepared<R>) -> Result<Confirmed<R>> {
         let s = self
             .net
             .sign(&p.at.chain, &p.signer, p.path, p.typed)
             .await?;
         let sig = sig_of_signed(s);
-        let (entry, args) = call_args(&p.record, &p.wraps, &sig)?;
-        let call = self
-            .net
-            .call(&p.at.chain, p.at.contract, &entry, args, p.payer)
-            .await?;
-        Ok((
-            Signed {
+        let call = match call_args(&p.record, &p.wraps, &sig) {
+            Ok((entry, args)) => self
+                .net
+                .call(&p.at.chain, p.at.contract, &entry, args, p.payer)
+                .await
+                .map_err(Error::from),
+            Err(e) => Err(e),
+        };
+        Ok(Confirmed {
+            signed: Signed {
                 record: p.record,
                 sig,
             },
+            wraps: p.wraps,
             call,
-        ))
+        })
     }
 
     fn info_json(info: &VaultInfo) -> Value {

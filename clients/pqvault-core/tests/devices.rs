@@ -44,6 +44,11 @@ struct Seam {
     signs: Mutex<u32>,
     quotes: Mutex<u32>,
     called: Mutex<Vec<Value>>,
+    /// each quote's arguments, each signing call's typed data and path (review B-1)
+    quoted: Mutex<Vec<Value>>,
+    signed: Mutex<Vec<(String, String)>>,
+    /// the next prepared call fails (a node that did not answer)
+    fail_call: Mutex<bool>,
 }
 #[async_trait::async_trait]
 impl Net for Seam {
@@ -55,9 +60,13 @@ impl Net for Seam {
         &self,
         _: &str,
         _: &KeyRef,
-        _: AppPath,
-        _: String,
+        path: AppPath,
+        typed: String,
     ) -> Result<AppSigned, SdkError> {
+        self.signed
+            .lock()
+            .unwrap()
+            .push((typed, format!("{path:?}")));
         let mut n = self.signs.lock().unwrap();
         *n += 1;
         Ok(AppSigned {
@@ -104,6 +113,9 @@ impl Net for Seam {
         args: Value,
         payer: KeyRef,
     ) -> Result<AppCall, SdkError> {
+        if std::mem::take(&mut *self.fail_call.lock().unwrap()) {
+            return Err(SdkError::Argument);
+        }
         self.called.lock().unwrap().push(args);
         Ok(AppCall {
             review: vec![],
@@ -138,11 +150,12 @@ impl Net for Seam {
         _: &str,
         _: Addr,
         _: &str,
-        _: Value,
+        args: Value,
         _: KeyRef,
         _: KeyRef,
     ) -> Result<AppQuote, SdkError> {
         *self.quotes.lock().unwrap() += 1;
+        self.quoted.lock().unwrap().push(args);
         Ok(AppQuote {
             review: vec![],
             quote: None,
@@ -208,6 +221,9 @@ async fn world() -> World {
         signs: Mutex::new(0),
         quotes: Mutex::new(0),
         called: Mutex::new(vec![]),
+        quoted: Mutex::new(vec![]),
+        signed: Mutex::new(vec![]),
+        fail_call: Mutex::new(false),
     });
     let pv = PqVault::with_net(sdk, core.clone(), seam.clone());
     let me = PqVault::vault_key(&seed, 1);
@@ -261,7 +277,7 @@ fn keys_of(m: &[MemberKey]) -> Vec<(B32, u64)> {
 /// The state a node would answer for the vault `p` creates (epoch 0 only, the seam's verifier accepts any signature), the
 /// user's own wraps by member index.
 fn state(w: &World, p: &Prepared<VaultCreate>) -> VaultState {
-    let (c, wraps) = (&p.record, &p.wraps);
+    let (c, wraps) = (p.record(), p.wraps());
     let vid = vault_id(c.creator, c.nonce.0, 0, c.home_chain, c.home_vault_contract);
     VaultState {
         at: at(),
@@ -319,7 +335,7 @@ async fn each_own_key_is_kept_and_its_wrap_opens() {
     let mut want = vec![(w.a, 1), (w.a, 2), (w.b, 1)];
     want.sort();
     assert_eq!(
-        keys_of(&s.record.members),
+        keys_of(&s.record().members),
         want,
         "every key, (ua, keyId) ascending"
     );
@@ -329,7 +345,7 @@ async fn each_own_key_is_kept_and_its_wrap_opens() {
         "one wrap per key, to that key"
     );
     assert_eq!(
-        s.wraps
+        s.wraps()
             .iter()
             .map(|x| (x.member, x.key_id.0))
             .collect::<Vec<_>>(),
@@ -348,7 +364,7 @@ async fn each_own_key_is_kept_and_its_wrap_opens() {
         "one K_e under both keys"
     );
     // the control: a wrap of another member's key does not open by the user's
-    let theirs = s.wraps.iter().find(|x| x.member == w.b).unwrap();
+    let theirs = s.wraps().iter().find(|x| x.member == w.b).unwrap();
     assert!(keys::unwrap(&w.core, &w.me, theirs, vid, vid).is_err());
     // unlocked by either own wrap alone: each key's wrap is enough
     for keep in 0..2 {
@@ -400,7 +416,7 @@ async fn at_most_eight_keys_per_ua() {
         )
         .await
         .unwrap();
-    assert_eq!(s.record.members.len(), 9, "8 keys of a and b's one");
+    assert_eq!(s.record().members.len(), 9, "8 keys of a and b's one");
     let st = w.pv.verify(state(&w, &s)).await.unwrap();
     let u = w.pv.unlock(&w.me, st, &Passphrase::Off).await.unwrap();
     let mut more: Vec<MemberKey> = (1..=9).map(|k| key(w.a, k)).collect();
@@ -444,12 +460,12 @@ async fn rights_stay_per_ua() {
         )
         .await
         .unwrap();
-    assert_eq!(keys_of(&e.record.members), {
+    assert_eq!(keys_of(&e.record().members), {
         let mut v = vec![(w.a, 1), (w.b, 1), (w.b, 2)];
         v.sort();
         v
     });
-    assert_eq!(e.wraps.len(), 3);
+    assert_eq!(e.wraps().len(), 3);
     assert!(!x.weaker, "b's second key: no new member");
     let (_, x) =
         w.pv.rekey(
@@ -465,16 +481,17 @@ async fn rights_stay_per_ua() {
     assert!(x.weaker, "the control: c is a new member");
     // the admin right is a's (the UA), a removal names b's UA once
     let (r, _) = w.pv.remove(&u, &[w.b, w.b], w.payer.clone()).await.unwrap();
-    assert_eq!(r.record.members, vec![w.b]);
-    assert_eq!(r.record.admin, w.a);
+    assert_eq!(r.record().members, vec![w.b]);
+    assert_eq!(r.record().admin, w.a);
 }
 
 fn signs(w: &World) -> u32 {
     *w.seam.signs.lock().unwrap()
 }
 
-/// Two prepared twins of one write, `n` signing calls before either was prepared: preparing signed nothing, the dropped
-/// review signs nothing, its confirmed twin signs once and its call carries that signature.
+/// Two prepared twins of one write, `n` signing calls before either was prepared (`kept` prepared last): preparing signed
+/// nothing, the dropped review signs nothing, its confirmed twin signs once; what is signed is the reviewed record's typed
+/// data on the portable path, and its call is the quoted call with that signature (review B-1).
 async fn dropped_then_confirmed<R: pqvault_core::records::Record>(
     w: &World,
     n: u32,
@@ -485,20 +502,37 @@ async fn dropped_then_confirmed<R: pqvault_core::records::Record>(
     assert_eq!(signs(w), n, "{what}: prepared, nothing signed");
     drop(dropped);
     assert_eq!(signs(w), n, "{what}: a review left signs nothing");
-    let (s, _) = w.pv.confirm(kept).await.unwrap();
+    let quoted = w.seam.quoted.lock().unwrap().last().cloned().unwrap();
+    assert_eq!(
+        quoted["sig"],
+        json!({"keyData": "0x", "signature": "0x", "members": []}),
+        "{what}: quoted with the signature empty"
+    );
+    let typed = typed_json(kept.record(), Domain::Portable).unwrap();
+    let c = w.pv.confirm(kept).await.unwrap();
     assert_eq!(signs(w), n + 1, "{what}: the confirm signs once");
-    let last = w.seam.called.lock().unwrap().last().cloned().unwrap();
+    assert_eq!(
+        w.seam.signed.lock().unwrap().last().cloned().unwrap(),
+        (typed, "Portable".to_string()),
+        "{what}: the reviewed record's typed data signed"
+    );
+    assert!(c.call.is_ok(), "{what}");
+    let s = c.signed;
+    let mut last = w.seam.called.lock().unwrap().last().cloned().unwrap();
     assert_eq!(
         last["sig"]["signature"],
         json!(hex(&s.sig.signature)),
         "{what}: its call carries that signature"
     );
+    last["sig"] = quoted["sig"].clone();
+    assert_eq!(last, quoted, "{what}: the call is the quoted call");
     s
 }
 
 /// CLI-SDK-36 (rule 23): every write of `pqvault-core` is built for its review and quoted without a signing call; a review
 /// left makes zero signing calls, its confirmed twin one. A vault, an item, an edit, a tombstone, a batch, a share (a rekey
-/// adding a member), a passphrase change, a removal, a leave, an accept and a decline.
+/// adding a member), a rekey by a named author (`rekey_by`), a passphrase change, a removal, a leave, an accept and a
+/// decline. `resolve` is `edit_item` after a read of the history: the anvil e2e's conflict runs it.
 #[tokio::test(flavor = "multi_thread")]
 async fn nothing_is_signed_before_the_confirm() {
     let _one = ONE.lock().await;
@@ -570,6 +604,12 @@ async fn nothing_is_signed_before_the_confirm() {
     assert!(x.weaker, "a share adds a member");
     dropped_then_confirmed(&w, n, a, b, "a share").await;
     let n = signs(&w);
+    let rb = || {
+        w.pv.rekey_by(&u, &w.me, w.a, &share, &admins, None, Link::Prev, pay())
+    };
+    let ((a, _), (b, _)) = (rb().await.unwrap(), rb().await.unwrap());
+    dropped_then_confirmed(&w, n, a, b, "a rekey by a named author").await;
+    let n = signs(&w);
     let pass = Passphrase::On(sec("a new vault passphrase".as_bytes()));
     let ch = || {
         w.pv.rekey(&u, &members, &admins, Some(&pass), Link::Prev, pay())
@@ -596,4 +636,14 @@ async fn nothing_is_signed_before_the_confirm() {
         );
         dropped_then_confirmed(&w, n, a, b, if yes { "an accept" } else { "a decline" }).await;
     }
+    // review D-5: once signed, a failed call returns the signed record; calling it again signs nothing more
+    let n = signs(&w);
+    let p = w.pv.create_item(&u, &login, pay()).await.unwrap();
+    *w.seam.fail_call.lock().unwrap() = true;
+    let c = w.pv.confirm(p).await.unwrap();
+    assert!(c.call.is_err(), "the call failed");
+    assert_eq!(signs(&w), n + 1, "signed once");
+    let again = w.pv.prepare_signed(&at(), &c.signed, &c.wraps, pay()).await;
+    assert!(again.is_ok(), "the same signed record called again");
+    assert_eq!(signs(&w), n + 1, "no second signature");
 }

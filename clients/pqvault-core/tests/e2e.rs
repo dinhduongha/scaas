@@ -339,9 +339,9 @@ async fn register_on(d: &Device, key: &KeyRef, chain: &str) {
 
 /// A prepared write confirmed (its one signing call, then the call's simulation) and sent: the signed record.
 async fn sent<R: Record>(pv: &PqVault, d: &Device, p: Prepared<R>) -> Signed<R> {
-    let (s, call) = pv.confirm(p).await.unwrap();
-    send(d, call).await;
-    s
+    let c = pv.confirm(p).await.unwrap();
+    send(d, c.call.unwrap()).await;
+    c.signed
 }
 
 /// The item of a test's JSON (its canonical bytes read by the item layer).
@@ -632,7 +632,11 @@ async fn personal_vault_recovery_conflict_passphrase() {
         .await
         .unwrap();
     sent(&pv, &d, e1).await;
-    assert!(pv.confirm(e2).await.is_err(), "the second n + 1 is refused");
+    let refused = pv.confirm(e2).await.unwrap();
+    assert!(
+        refused.call.is_err(),
+        "the second n + 1 is refused by the simulation after its signature"
+    );
     let (e3, m) = pv
         .resolve(
             &u,
@@ -643,7 +647,7 @@ async fn personal_vault_recovery_conflict_passphrase() {
         )
         .await
         .unwrap();
-    assert_eq!(e3.record.version.0, 3);
+    assert_eq!(e3.record().version.0, 3);
     let Merge::Clean(merged) = m else {
         panic!("{m:?}")
     };
@@ -670,7 +674,10 @@ async fn personal_vault_recovery_conflict_passphrase() {
         .unwrap();
     assert!(batches.len() >= 2, "sized by the limits: {}", batches.len());
     assert_eq!(
-        batches.iter().map(|b| b.record.items.len()).sum::<usize>(),
+        batches
+            .iter()
+            .map(|b| b.record().items.len())
+            .sum::<usize>(),
         5
     );
     for b in batches {
@@ -776,7 +783,7 @@ async fn personal_vault_recovery_conflict_passphrase() {
         .create_item(&un, &login("after the change", "c1"), d2.payer.clone())
         .await
         .unwrap();
-    assert_ne!(it.record.epoch_id, per.vault_id);
+    assert_ne!(it.record().epoch_id, per.vault_id);
     sent(&pv, &d2, it).await;
     let mut want = want;
     want.push(json_of(&login("after the change", "c1")));
@@ -1390,7 +1397,10 @@ async fn kem_rotation_and_msig_admin() {
         .rekey(&u, &[ma, mb1], &[ua], None, Link::Prev, da.payer.clone())
         .await
         .unwrap();
-    assert_eq!(e.wraps.iter().find(|w| w.member == ub).unwrap().key_id.0, 1);
+    assert_eq!(
+        e.wraps().iter().find(|w| w.member == ub).unwrap().key_id.0,
+        1
+    );
     sent(&pa, &da, e).await;
     let u = pa
         .unlock(&ka, pa.load(&at, vid, ua).await.unwrap(), &given())
@@ -1689,7 +1699,7 @@ async fn kem_rotation_and_msig_admin() {
             )
             .await
             .unwrap();
-        assert_eq!(e.record.author, m);
+        assert_eq!(e.record().author, m);
         let e = sent(&pa, &da, e).await;
         assert!(
             e.sig.key_data.is_empty() && e.sig.signature.is_empty() && e.sig.members.len() == 2
@@ -1775,8 +1785,9 @@ fn deploy_line(rpc: &str, chain_id: u64) -> (Value, String) {
     )
 }
 
-/// Controller call 2026-11-22 (CLI-PQV-15, F2): PqVault's dedicated path on a registry line of two generations (chain 31930,
-/// its own). The profile `g2` binds generation 2, `g1` generation 1, where the FN-DSA-512 UA and the `msig` M of it and a
+/// Controller call 2026-11-22 (CLI-PQV-15, F2): PqVault's dedicated path on a registry line of two generations (its own
+/// anvil at anvil's chain id 31337: the SDK takes the head as final only there, owner 2026-11-23, T26 B-22; chain 31930
+/// before 2026-11-27). The profile `g2` binds generation 2, `g1` generation 1, where the FN-DSA-512 UA and the `msig` M of it and a
 /// native EVM key are registered (generation 2 holds neither). Through `g2`: M's chain-bound record is signed with its native
 /// member over `UAAuth` in generation 1's domain (M's holder), generation 2's `requireAuthorized` forwards it there and
 /// accepts it, and `verify_pqvault_record` agrees; the native key signing alone is generation 2's (its own check); the same
@@ -1788,9 +1799,9 @@ async fn pqvault_records_on_a_two_generation_line() {
     use scaas_sdk::account::{msig_structure, MsigMemberArgs, MsigRegister};
     use scaas_sdk::app_core::AppUaSig;
     use scaas_sdk::op::MsigSlot;
-    const CHAIN: u64 = 31930;
+    const CHAIN: u64 = 31337;
     let (_a, rpc) = anvil_on(CHAIN).await;
-    say("anvil up (31930); deploying generations 1 and 2");
+    say("anvil up (31337); deploying generations 1 and 2");
     let (dep, gen2) = deploy_line(&rpc, CHAIN);
     let gen1 = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
     let inst = dep["pqvault_instance"]
