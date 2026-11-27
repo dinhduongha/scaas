@@ -966,8 +966,9 @@ fn window_sorts_are_deterministic() {
     assert_eq!(order(&rows, Rank::Top), vec![0, 3, 5, 2, 4, 1]);
     // (10,9): 19^0.9 ≈ 14.1; (3,3): 6; (5,1) and (1,5): 6^0.2 ≈ 1.43; (0,0): 0
     assert_eq!(order(&rows, Rank::Controversial), vec![5, 2, 0, 1, 3, 4]);
-    let best = [(1, 0), (100, 20), (10, 0), (0, 0), (1, 3)];
-    assert_eq!(order(&best, Rank::Best), vec![2, 1, 0, 4, 3]);
+    // no up-vote scores 0 exactly: 0/9 ties with 0/0 and goes by its higher index (review A-5: f64 noise put it first)
+    let best = [(1, 0), (100, 20), (10, 0), (0, 0), (1, 3), (0, 9)];
+    assert_eq!(order(&best, Rank::Best), vec![2, 1, 0, 4, 3, 5]);
     // the same rows reversed: the same order by index
     for sort in [Rank::Top, Rank::Controversial, Rank::Best] {
         let mut v: Vec<(u64, EntryRow)> = rows
