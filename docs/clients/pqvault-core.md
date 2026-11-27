@@ -45,15 +45,16 @@ Status: **BUILT** (`src/lib.rs`, `src/vault.rs`, `src/item.rs`).
 | Unlock | `unlock(account, state, pass) -> Unlocked`, `lock(unlocked)`, `check_not_reused(pass, personal)`, `share_box(vaults, recipients)` |
 | Items read | `open_latest(v) -> [ItemVersion]`, `history(v, item) -> [ItemVersion]`, `newest_readable(history)`; `ItemVersion.value: Result<Item>` |
 | Writes (unsigned, §4) | `create_vault(account, info, members, at, mode, pass, payer) -> Prepared<VaultCreate>`; `rekey(v, members, admins, pass, link, payer)` and `rekey_by(v, signer, author, members, admins, pass, link, payer) -> (Prepared<VaultEpoch>, Exposure)`; `leave(v, payer) -> Prepared<VaultLeave>`; `remove(v, members, payer) -> (Prepared<VaultRemove>, [AffectedItem])`; `create_item(v, item, payer) -> Prepared<ItemRecord>`; `edit_item(v, base, item, payer) -> Prepared<EditRecord>` (a tombstone: `Item::deleted()`); `resolve(v, base, ours, item, payer) -> (Prepared<EditRecord>, Merge)`; `create_items(v, items, limits, payer) -> [Prepared<BatchRecord>]`; `accept(index, vault, accept, personal, payer) -> Prepared<ItemRecord>` |
-| Confirm | `confirm(prepared) -> (Signed<R>, AppCall)`: the one signing call, then the call for `Wallet::submit_native_send` |
+| Confirm | `confirm(prepared) -> Confirmed<R> { signed, wraps, call: Result<AppCall> }`: the one signing call, then the call for `Wallet::submit_native_send`; `Err` only when nothing was signed |
+| A prepared write | `Prepared::record()`, `wraps()`, `quote()`: read-only (what `confirm` signs is what the review showed) |
 | A signed record | `prepare_signed(at, signed, wraps, payer) -> AppCall` (anyone may submit a signed record, a replica's copy included) |
 | Plans | `migration_plan(from) -> MigrationPlan` |
 
 Change of 2026-11-27 (CLI-SDK-36, CLI-PQV-16), for a front-end that used the earlier calls: every write took no payer and
 returned `Signed<R>` (with the wraps beside it for a create or a rekey), and `prepare_create`, `prepare_rekey`,
 `prepare_leave`, `prepare_remove`, `prepare_item`, `prepare_edit` and `prepare_batch` made its call; now every write takes
-the payer, returns `Prepared<R>` (the wraps in it) and is signed and called by `confirm`; `prepare_signed` replaces the seven
-for a record signed elsewhere. Items cross as `Item`, never as `serde_json::Value`: `create_item`, `edit_item`,
+the payer, returns `Prepared<R>` (the wraps in it) and is signed and called by `confirm`, which returns `Confirmed<R>`;
+`prepare_signed` replaces the seven for a record signed elsewhere or a `Confirmed` whose call failed. Items cross as `Item`, never as `serde_json::Value`: `create_item`, `edit_item`,
 `create_items` and `resolve` take `Item`s, `ItemVersion.value` and `Merge` hold them.
 
 ## 3. Items and the secret table
@@ -67,10 +68,14 @@ field this client does not know, its canonical JSON kept byte for byte, never sh
 values, typed as their field is, so a secret's earlier value stays a secret. The table, the `card` and `identity` fields,
 `hideBody` and the custom fields are pinned in [spec §6.8](../superpowers/specs/2026-11-17-pqvault.md#68-the-item-plaintext)
 and in `item::TABLE`, the one place every front-end reads them from. A draft is built with `Item::new(type)` and
-`set(name, Field)`; `Item::check` refuses a field of another kind than the table's (`Shape`), before anything is built. The
+`set(name, Field)`; `Item::check` refuses a field of another kind than the table's (`Shape`), its history included,
+before anything is built. What the reader keeps (an unknown field, a table field in a shape this client does not know, a
+`null`, a history of another shape) is written back as it was, itself canonical JSON. The merge compares values by their
+canonical JSON and retypes every value by the merged item's table; a tombstone against an edit keeps the edit
+([CLI-PQV-17](../decisions.md#CLI-PQV-17)). A reader opens at most 64 secrets per item. The
 canonical JSON is written into a zeroizing buffer of 16,384 B that never reallocates and read from the decrypted plaintext's
-secret buffer in place (a secret's text goes into its `SecretBytes` without a `String` between); `Debug` names fields and
-kinds only. The stored bytes are unchanged: `smartcontracts/vectors/pqvault/items.json`'s plaintexts are read and written
+secret buffer in place (a secret's text goes into its `SecretBytes` without a `String` between); `Debug` prints counts
+only. The stored bytes are unchanged: `smartcontracts/vectors/pqvault/items.json`'s plaintexts are read and written
 back byte for byte.
 
 ## 4. Sign after confirm
@@ -82,9 +87,13 @@ Every write returns a `Prepared<R>`: the unsigned record, its wraps, and the SDK
 (`AppQuote`: the call's review with the signature empty, and the payer's quote from the gas rows `(entry, "app", signer
 kind)`, `None` when no row is measured). Nothing is signed until `confirm`; a `Prepared` dropped signed nothing and holds no
 key (the record's ciphertexts, its typed data and the key references only). `confirm` makes the one signing call
-(`prepare_pqvault_record`, `AppPrepared::sign`), then `prepare_app_call`, whose simulation follows the signature: a refusal
-there (another device's newer version, `PqVaultVersion`) drops the signed record and sends nothing; the front-end then
-offers `resolve`. The rule is [CLI-SDK-36](../decisions.md#CLI-SDK-36); the SDK's side is
+(`prepare_pqvault_record`, `AppPrepared::sign`), then `prepare_app_call`, whose simulation follows the signature, and
+returns `Confirmed`: the signed record whatever the call did. A refused simulation (another device's newer version,
+`PqVaultVersion`) sends nothing; the front-end then offers `resolve`. A node that did not answer sends nothing either;
+`prepare_signed` calls the same signed record again, with no second signature. A `Prepared` does not track the vault: a
+front-end drops its open ones when it locks the vault (a stale one is refused by the contract, after its signature). What a
+front-end does with `Confirmed.call`'s quote before it sends (send when within the reviewed quote, else a second confirm)
+is an open point for the owner (review D-6). The rule is [CLI-SDK-36](../decisions.md#CLI-SDK-36); the SDK's side is
 [scaas-sdk.md](scaas-sdk.md) ("Sign after confirm").
 
 ## 5. Stores

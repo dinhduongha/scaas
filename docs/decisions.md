@@ -11949,7 +11949,8 @@ Change (controller calls 2026-11-22, the coordinator; owner may override; status
   and Dioxus front-ends.
 
 Every write signs only after the user's confirm ([CLI-SDK-36](#CLI-SDK-36)).
-**Status.** H1, H2, H3 BUILT in `pqvault-core` (`item.rs`: `Item`, `Field::{Plain, Secret, Custom, Opaque}`, the table
+**Status.** H1 BUILT in `pqvault-core` except its calls `ItemSummary`, `ItemHandle`, `reveal` and `copy` (SPECIFIED; a
+front-end reads a `Secret` field's bytes itself on the reveal); H2, H3 BUILT (`item.rs`: `Item`, `Field::{Plain, Secret, Custom, Opaque}`, the table
 `TABLE`, the canonical JSON in zeroizing buffers that never reallocate, a field of the wrong kind refused `Shape`, the merge's
 losing value typed as its field; [spec §6.8](superpowers/specs/2026-11-17-pqvault.md#68-the-item-plaintext) pins the `card` and
 `identity` fields, the secret table, `hideBody` and the custom fields `fields`); the stored item bytes unchanged (the
@@ -11959,6 +11960,32 @@ vectors read and written back byte for byte). H4 to H10 SPECIFIED, not built (th
 secret in memory they cannot wipe; a breach check over another member's version would tell a server whether it opened.
 **Cost if wrong.** A card number drawn in the clear by one front-end; a breach request that acts as a decryption oracle.
 **Source.** Owner ruling 2026-11-27: the recommendations of the owner questions of 2026-11-27 accepted as recommended, H1 to H10 as proposed; [PqVault UI note](research/2026-11-27-pqvault-ui.md) §1, §8 rows 23 to 25, §9, §11 Q1 to Q10.
+
+<a id="CLI-PQV-17"></a>
+### CLI-PQV-17 — Controller calls of the review of CLI-PQV-16 H1–H3 and CLI-SDK-36 in `pqvault-core`, 2026-11-27
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: decisions.md#CLI-PQV-17 · superseded-by: —
+
+**Rule.** The owner may override any. (1) **Kept parts.** A field this client does not know, a table field in a shape it
+does not know (a secret that is no text, a custom list or a history of another shape) and a `null` are kept as they were
+read and written back on an edit; a kept part must itself be canonical JSON, the whole item nesting at most 8 (else
+`Unreadable`). (2) **The merge retypes.** Values compare by their canonical JSON; every merged value, history included, is
+retyped by the merged item's table, so a body hidden on either side stays hidden and a secret's earlier value stays secret;
+a tombstone on one side against an edit on the other keeps the edit whole, `deleted` recorded in its history as a conflict
+on `type`; against no edit the tombstone stands. (3) **At most 64 secrets per item read** (`Unreadable` above); a kept part
+is a zeroizing heap buffer, not a locked block. (4) **`Item`'s `Debug` prints counts only** (CLI-PQV-03). (5)
+**`confirm` returns `Confirmed { signed, wraps, call }`**: once signed, the record comes back whatever the call did, so a
+node that did not answer costs no second signature (`prepare_signed` calls it again); `Err` only when nothing was signed.
+(6) `Prepared`'s fields are read-only; a front-end drops its open `Prepared`s when it locks the vault. (7) The SDK's
+`quote_app_call` checks the payer first, counts an app row's `per_item` as the one argument array of its name (top level
+or one level down), and quotes a native or imported signer; an `msig`, a group or a stored key stays unquoted.
+**Status.** BUILT, UNAUDITED (branch `pqvault-ui-rules`; `src/item.rs`, `src/vault.rs`, the SDK's `app_core.rs`).
+**Why.** The findings of the Fable review of 2026-11-27 (C-1 to C-5, D-5, D-12, A-1, A-2, B-1, B-2): an item a newer
+client wrote stays editable, a merge never moves a hidden body or a secret into plain, a member's item cannot ask for
+unbounded locked memory, a transient node error never costs a second signature.
+**Cost if wrong.** (2): a delete on one device is undone by an edit on another until the user deletes again; (3): an
+honest item with more than 64 secrets (history included) is unreadable on this client.
+**Source.** The review `scratchpad/pqvault-ui-rules-review-20261127-1556/` (local), [CLI-PQV-16](#CLI-PQV-16),
+[CLI-SDK-36](#CLI-SDK-36).
 
 <a id="CLI-UAL-62"></a>
 ### CLI-UAL-62 — Owner rulings of the native round, 2026-11-17
