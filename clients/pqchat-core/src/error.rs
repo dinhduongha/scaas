@@ -118,3 +118,10 @@ impl From<SdkError> for PqChatError {
         PqChatError::Sdk(e)
     }
 }
+
+impl From<pqchat_transport::TransportError> for PqChatError {
+    /// A transport call that failed: a room that cannot be created, joined or written (no room id or Matrix id in it).
+    fn from(_: pqchat_transport::TransportError) -> Self {
+        PqChatError::MatrixRoom
+    }
+}

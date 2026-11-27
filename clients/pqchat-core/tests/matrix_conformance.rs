@@ -13,8 +13,7 @@ mod common;
 
 use async_trait::async_trait;
 use common::matrix::{Client, Server, ServerWitness};
-use pqchat_core::matrix::{conformance, HistoryPage, MatrixTransport};
-use pqchat_core::PqChatError;
+use pqchat_core::matrix::{conformance, HistoryPage, MatrixTransport, TransportError};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -50,7 +49,7 @@ impl MatrixTransport for Leaky {
     fn user_id(&self) -> String {
         self.inner.user_id()
     }
-    async fn create_room(&self) -> Result<String, PqChatError> {
+    async fn create_room(&self) -> Result<String, TransportError> {
         let r = self.inner.create_room().await?;
         if self.fault == Fault::Encrypted {
             self.inner
@@ -64,25 +63,25 @@ impl MatrixTransport for Leaky {
         }
         Ok(r)
     }
-    async fn joined(&self, room: &str) -> Result<bool, PqChatError> {
+    async fn joined(&self, room: &str) -> Result<bool, TransportError> {
         self.inner.joined(room).await
     }
-    async fn members(&self, room: &str) -> Result<Vec<String>, PqChatError> {
+    async fn members(&self, room: &str) -> Result<Vec<String>, TransportError> {
         self.inner.members(room).await
     }
-    async fn join(&self, room: &str) -> Result<(), PqChatError> {
+    async fn join(&self, room: &str) -> Result<(), TransportError> {
         self.inner.join(room).await
     }
-    async fn invite(&self, room: &str, user: &str) -> Result<(), PqChatError> {
+    async fn invite(&self, room: &str, user: &str) -> Result<(), TransportError> {
         self.inner.invite(room, user).await
     }
-    async fn remove(&self, room: &str, user: &str) -> Result<(), PqChatError> {
+    async fn remove(&self, room: &str, user: &str) -> Result<(), TransportError> {
         self.inner.remove(room, user).await
     }
-    async fn set_admin(&self, room: &str, user: &str, admin: bool) -> Result<(), PqChatError> {
+    async fn set_admin(&self, room: &str, user: &str, admin: bool) -> Result<(), TransportError> {
         self.inner.set_admin(room, user, admin).await
     }
-    async fn send_event(&self, room: &str, content: Value) -> Result<(), PqChatError> {
+    async fn send_event(&self, room: &str, content: Value) -> Result<(), TransportError> {
         self.inner.send_event(room, content).await?;
         if self.fault == Fault::Typing {
             self.signal(room, "m.typing");
@@ -93,7 +92,7 @@ impl MatrixTransport for Leaky {
         &self,
         room: &str,
         before: Option<String>,
-    ) -> Result<HistoryPage, PqChatError> {
+    ) -> Result<HistoryPage, TransportError> {
         let p = self.inner.history(room, before).await?;
         match self.fault {
             Fault::Receipt => self.signal(room, "m.receipt"),
