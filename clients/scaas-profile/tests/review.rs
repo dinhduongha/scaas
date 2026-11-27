@@ -453,3 +453,45 @@ fn a17_item_without_rev_refused_before_the_kdf() {
         .unwrap();
     p.import(&r, &[], PASS, None, Some(TEST)).unwrap();
 }
+
+/// A-2: a re-seal whose steps after the commit's rename fail (the keychain refuses every put: the anchor's copy, the
+/// `protected` marker) reports success, and the open store is on the new generation: a write lands there and reads back
+/// after a reopen. Control: unprotected before.
+#[test]
+fn a2_reseal_committed_reports_success() {
+    let _k = kdf_lock();
+    let (root, kc) = (tmp(), Arc::new(Keychain::default()));
+    let p = Profiles::new(cfg(&root, Some(&kc))).unwrap();
+    let id = p.list().unwrap()[0].id.clone();
+    let o = p.open(&id, None).unwrap();
+    assert!(!o.info().protected, "control");
+    kc.fail_put.store(true, SeqCst);
+    let r = o.set_passphrase(PASS, Some(TEST), None);
+    kc.fail_put.store(false, SeqCst);
+    r.unwrap();
+    assert!(o.info().protected);
+    o.core().put_if(SDK, "a", None, &item(1, "a")).unwrap();
+    o.lock();
+    let o = p.open(&id, Some(PASS)).unwrap();
+    assert!(o.core().get(SDK, "a").unwrap().is_some());
+}
+
+/// A-3: a create whose steps after its rename fail (the index cannot be written: the root is read-only) reports success;
+/// its journal stays, so the next start adds its row. Control: the row is missing until then.
+#[cfg(unix)]
+#[test]
+fn a3_create_committed_reports_success() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tmp();
+    let p = Profiles::new(cfg(&root, None)).unwrap();
+    let mode = |m| std::fs::set_permissions(&root, std::fs::Permissions::from_mode(m)).unwrap();
+    mode(0o500);
+    let r = p.create("New");
+    mode(0o700);
+    let info = r.unwrap();
+    assert!(root.join("p").join(&info.id).is_dir());
+    assert!(!index_text(&root).contains("New"), "control: no row yet");
+    drop(p);
+    let p = Profiles::new(cfg(&root, None)).unwrap();
+    assert!(p.list().unwrap().iter().any(|i| i.name == "New"));
+}

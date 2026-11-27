@@ -17,7 +17,8 @@
 //! `ProfileNameTaken`), after the old one is checked and before any write.
 //!
 //! A failure before the commit removes `g<N+1>/`, then the journal; a crash there is rolled back at the next open (§7.3, in
-//! `Profiles::open`). Under `test-hooks` a hook after each step can stop the run as if the process died.
+//! `Profiles::open`). The rename is the commit: from it on the store is on `g<N+1>/` and the re-seal succeeds, every later
+//! step best-effort (the next open finishes what failed). Under `test-hooks` a hook after each step can stop the run as if the process died.
 use crate::envelope::{self, Envelope, Kdf, KdfParams, State, B64};
 use crate::file::{self, mkdir, rev_of, MAX_BYTES};
 use crate::hidden::{seal_label, search, taken, unchanged};
@@ -206,23 +207,26 @@ impl OpenProfile {
                 return Err(e);
             }
         }
-        // step 4: the commit
+        // step 4: the commit. The rename is the commit (review A-2): from it on the profile is the new generation, so the
+        // store moves to it whatever follows, and every later step is best-effort and the re-seal succeeds (an anchor not
+        // written follows at the next open, a missing marker is written at the next protected open, a `g<N>/` left is
+        // removed at the next open)
         std::fs::rename(dir.join(NEXT), dir.join(envelope::FILE)).map_err(|_| Error::VaultIo)?;
-        sync_dir(&dir)?;
+        let _ = sync_dir(&dir);
         if self.died(Step::Renamed) {
             return Err(Error::VaultIo);
         }
-        core.commit(gen, keys, Head::of(next.rev, &bytes))?;
+        let _ = core.commit(gen, keys, Head::of(next.rev, &bytes));
         if let (Some(kc), State::Unprotected) = (&self.keychain, env.state) {
-            kc.put(&keychain_name(&info.id, "protected"), b"1")?;
+            let _ = kc.put(&keychain_name(&info.id, "protected"), b"1");
         }
         if self.died(Step::Committed) {
             return Err(Error::VaultIo);
         }
         drop(w);
         // step 5
-        remove_dir(&dir.join(format!("g{}", env.gen)))?;
-        sync_dir(&dir)
+        let _ = remove_dir(&dir.join(format!("g{}", env.gen))).and_then(|()| sync_dir(&dir));
+        Ok(())
     }
 
     /// Whether `passphrase` opens this profile's `pass` wrap in `env` to the held `DEK_p` (one Argon2id run in the heavy

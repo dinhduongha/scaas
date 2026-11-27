@@ -522,7 +522,8 @@ impl Profiles {
     }
 
     /// Under the root lock: room checked, the journal, `tmp` renamed to `p/<id>/`, its row added (`row`: the visible name;
-    /// `None` for a hidden profile, which reads and writes no index byte), the journal removed.
+    /// `None` for a hidden profile, which reads and writes no index byte), the journal removed. A failure after the rename
+    /// (the commit) is no failure: the journal is left for the next start.
     pub(crate) fn commit_create(
         &self,
         tmp: &Path,
@@ -549,17 +550,24 @@ impl Profiles {
         file::write(&self.p, &jpath, &jbytes)?;
         let dir = self.p.join(id);
         std::fs::rename(tmp, &dir).map_err(|_| Error::VaultIo)?;
-        sync_dir(&self.p)?;
-        remove_file(&dir.join(BUILD_LOCK))?;
-        if let Some((mut ix, at, name)) = ix {
-            ix.profiles.push(Row {
-                id: id.into(),
-                name: name.into(),
-            });
-            self.write_index(&mut ix, at)?;
+        // the rename is the commit (review A-3): the profile exists, so what follows is best-effort and the create succeeds;
+        // the journal stays until the row is written, and the next start adds a row a failure here left out
+        let _ = sync_dir(&self.p);
+        let _ = remove_file(&dir.join(BUILD_LOCK));
+        let row = match ix {
+            Some((mut ix, at, name)) => {
+                ix.profiles.push(Row {
+                    id: id.into(),
+                    name: name.into(),
+                });
+                self.write_index(&mut ix, at).is_ok()
+            }
+            None => true,
+        };
+        if row && remove_file(&jpath).is_ok() {
+            let _ = sync_dir(&self.p);
         }
-        remove_file(&jpath)?;
-        sync_dir(&self.p)
+        Ok(())
     }
 
     /// A new `p/.tmp-<random>/` to build a profile in (spec §5, §10).
