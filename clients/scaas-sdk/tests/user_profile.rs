@@ -5,7 +5,8 @@
 //! `DEK_p` (`create_dek`, no Argon2id). UP6b (§10 lock, §11, §17 G11): `UserProfiles`, `UserProfile::sdk`, `Sdk::close`; the
 //! protected profiles there are planted by hand (one wrap at the test KDF set) and opened through `UserProfiles`. UP7 (§7.3,
 //! §7.6): `set_passphrase` and `change_passphrase` through `UserProfile`, and every secret-creating call refused
-//! `ProfilePassphraseRequired` before any work on an unprotected profile's `Sdk`.
+//! `ProfilePassphraseRequired` before any work on an unprotected profile's `Sdk`. UP8 (§8): the hidden calls route to the
+//! store's (its own tests are clients/scaas-profile/tests/hidden.rs).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -72,7 +73,7 @@ fn file_of(dir: &Path, keys: &ProfileKeys, part: &str, name: &str) -> PathBuf {
 /// The store's codes reach the SDK by name: each `scaas-profile` code is the `SdkError` of the same name (none collapsed).
 #[test]
 fn store_codes_are_the_sdks() {
-    assert_eq!(Error::ALL.len(), 22);
+    assert_eq!(Error::ALL.len(), 24);
     for e in Error::ALL {
         assert_eq!(SdkError::from(*e).code(), e.code());
     }
@@ -600,4 +601,49 @@ async fn change_passphrase_through_sdk() {
         .unwrap();
     let s = up.sdk(sdk_config(vec![])).await.unwrap();
     assert_eq!(s.vault().seeds().await.unwrap()[0].id, id);
+}
+
+/// UP8: `create_hidden`, `open_hidden`, `hide`, `show` and `rename` route to the store's calls (name and passphrase as
+/// `SecretBytes`): a hidden profile is unlisted and opens by its name in another case; a wrong passphrase is `ProfileOpen`; a
+/// hidden rename without its passphrase `Argument`, with it the new name opens; `show` lists it, `hide` takes it off.
+#[tokio::test(flavor = "multi_thread")]
+async fn hidden_calls_route() {
+    let root = tmp().join("root");
+    let ups = UserProfiles::new(ProfilesConfig::new(root.to_string_lossy().into_owned()))
+        .await
+        .unwrap();
+    let names = || async {
+        let mut v: Vec<String> = ups
+            .list()
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|i| i.name)
+            .collect();
+        v.sort();
+        v
+    };
+    let up = ups
+        .create_hidden(sec("Hidden one"), sec(PASS), Some(TEST_KDF))
+        .await
+        .unwrap();
+    up.lock().await;
+    assert_eq!(names().await, ["default"]);
+    assert_eq!(
+        code(
+            ups.open_hidden(sec("hidden ONE"), sec(PASS2))
+                .await
+                .map(drop)
+        ),
+        "ProfileOpen"
+    );
+    let up = ups.open_hidden(sec("hidden ONE"), sec(PASS)).await.unwrap();
+    assert_eq!(code(up.rename(sec("Renamed"), None).await), "Argument");
+    up.rename(sec("Renamed"), Some(sec(PASS))).await.unwrap();
+    up.clone().lock().await;
+    let up = ups.open_hidden(sec("renamed"), sec(PASS)).await.unwrap();
+    up.show().await.unwrap();
+    assert_eq!(names().await, ["Renamed", "default"]);
+    up.hide(sec(PASS)).await.unwrap();
+    assert_eq!(names().await, ["default"]);
 }

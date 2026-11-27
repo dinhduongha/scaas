@@ -3,9 +3,10 @@
 //! docs/clients/scaas-sdk.md §12): the local store of many protected profiles, without the SDK (owner 2026-11-27, CLI-UPR-02's
 //! Change); the SDK (feature `user-profile`) builds on it. Every KDF, AEAD and MAC runs in `scaas-ua`'s profile arena
 //! (`ProfileKeys`); this crate holds handles, public bytes and files. Synchronous: run every call on a blocking thread. Built so
-//! far (plan UP5, UP6, UP7): the sealed store core of one open profile ([`Core`]), the manifests and the anchor; the profile
+//! far (plan UP5 to UP8): the sealed store core of one open profile ([`Core`]), the manifests and the anchor; the profile
 //! root, the index, the envelope, the instance lock, start, create, open, list and lock ([`Profiles`], [`OpenProfile`]); the
-//! re-seal (`set_passphrase`, `change_passphrase`, spec §7.3). UNAUDITED.
+//! re-seal (`set_passphrase`, `change_passphrase`, spec §7.3); hidden profiles (`create_hidden`, `open_hidden`, `hide`, `show`,
+//! `rename`, spec §8). UNAUDITED.
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -20,6 +21,7 @@ compile_error!("scaas-profile's feature `test-hooks` is test-only: never in a re
 pub mod anchor;
 pub mod envelope;
 mod file;
+mod hidden;
 mod index;
 pub mod names;
 mod profile;
@@ -102,6 +104,10 @@ codes! {
     ProfileKdfOutOfMemory,
     /// a new profile passphrase under its rule (spec §7.6): fewer than 8 characters, or digits only, on its OpaqueString form
     ProfilePassphraseWeak,
+    /// 16 hidden profiles under `p/` (spec §8): `create_hidden`, `hide()`
+    ProfileHiddenLimit,
+    /// more than 32 candidates for a hidden search (spec §8 step 1), before any KDF run
+    ProfileSearchTooLarge,
 }
 
 impl std::fmt::Display for Error {

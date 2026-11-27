@@ -26,11 +26,11 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use zeroize::Zeroizing;
 
 const ROOT_LOCK: &str = "profiles.json.lock";
-const INSTANCE_LOCK: &str = "instance.lock";
-const BUILD_LOCK: &str = "build.lock";
+pub(crate) const INSTANCE_LOCK: &str = "instance.lock";
+pub(crate) const BUILD_LOCK: &str = "build.lock";
 const TOMBSTONE: &str = ".deleted";
 /// At most 32 profile directories under `p/` (spec §6).
-const DIRS_MAX: usize = 32;
+pub(crate) const DIRS_MAX: usize = 32;
 /// The keychain items of a profile (spec §5, §7.1, §7.2, §7.6), removed with its tombstone.
 const KEYCHAIN_ITEMS: [&str; 4] = ["head", "protected", "keystore.head", "unlock"];
 /// The Matrix store key's item in part `sdk` (spec §7.2, CLI-UPR-29).
@@ -123,10 +123,10 @@ impl Drop for HeavyGuard<'_> {
 /// The profiles of one root. Every call is blocking work (files, Argon2id): run it on a blocking thread. No `Debug`.
 pub struct Profiles {
     root: PathBuf,
-    p: PathBuf,
-    keychain: Option<Arc<dyn ProfileKeychain>>,
-    kdf_max_kib: u32,
-    heavy: Arc<Heavy>,
+    pub(crate) p: PathBuf,
+    pub(crate) keychain: Option<Arc<dyn ProfileKeychain>>,
+    pub(crate) kdf_max_kib: u32,
+    pub(crate) heavy: Arc<Heavy>,
     events: Mutex<Vec<ProfileEvent>>,
     #[cfg(feature = "test-hooks")]
     before_kdf: Mutex<Option<Box<dyn FnOnce() + Send>>>,
@@ -199,6 +199,32 @@ fn rev_at(bytes: &Option<Option<Vec<u8>>>) -> Option<u64> {
         .map(|b| b.as_deref().map_or(u64::MAX, file::rev_of))
 }
 
+/// The UUID-named directories of `p/` by id, each with its envelope and its bytes (`None`: missing or not usable).
+pub(crate) type Scan = Vec<(String, Option<(Envelope, Vec<u8>)>)>;
+
+/// Every UUID-named directory of `p` and its envelope and bytes, sorted by id.
+pub(crate) fn scan(p: &Path) -> Result<Scan, Error> {
+    let mut out = Vec::new();
+    for e in std::fs::read_dir(p).map_err(|_| Error::VaultIo)? {
+        let e = e.map_err(|_| Error::VaultIo)?;
+        let Some(id) = e
+            .file_name()
+            .to_str()
+            .filter(|n| is_id(n))
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        if !e.file_type().map_err(|_| Error::VaultIo)?.is_dir() {
+            continue;
+        }
+        let env = read_envelope(&e.path(), &id).ok().flatten();
+        out.push((id, env));
+    }
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(out)
+}
+
 /// A profile arena's refusal at open: a wrong passphrase or an altered wrap `ProfileOpen`, argon2's allocation failure
 /// `ProfileKdfOutOfMemory`.
 pub(crate) fn open_code(e: scaas_ua::wallet::Error) -> Error {
@@ -258,7 +284,7 @@ impl Profiles {
             .push(e);
     }
 
-    fn root_lock(&self) -> Result<File, Error> {
+    pub(crate) fn root_lock(&self) -> Result<File, Error> {
         lock_file(&self.root.join(ROOT_LOCK))
     }
 
@@ -325,32 +351,17 @@ impl Profiles {
     }
 
     /// Every UUID-named directory of `p/` and its envelope (`None`: missing or not usable), by id.
-    fn scan(&self) -> Result<Vec<(String, Option<Envelope>)>, Error> {
-        let mut out = Vec::new();
-        for e in std::fs::read_dir(&self.p).map_err(|_| Error::VaultIo)? {
-            let e = e.map_err(|_| Error::VaultIo)?;
-            let Some(id) = e
-                .file_name()
-                .to_str()
-                .filter(|n| is_id(n))
-                .map(str::to_string)
-            else {
-                continue;
-            };
-            if !e.file_type().map_err(|_| Error::VaultIo)?.is_dir() {
-                continue;
-            }
-            let env = read_envelope(&e.path(), &id).ok().flatten().map(|(e, _)| e);
-            out.push((id, env));
-        }
-        out.sort_by(|a, b| a.0.cmp(&b.0));
-        Ok(out)
+    pub(crate) fn scan(&self) -> Result<Vec<(String, Option<Envelope>)>, Error> {
+        Ok(scan(&self.p)?
+            .into_iter()
+            .map(|(id, e)| (id, e.map(|(e, _)| e)))
+            .collect())
     }
 
     /// The index under the root lock and its file's rev for `put_if`: rows of missing directories dropped; rebuilt from the
     /// envelopes (and written) when it is missing or does not parse while `p/` holds a profile, one row per envelope with a
     /// public name, protected or not; two with one `name_key` both listed, with `ProfileIndexMismatch`.
-    fn index_locked(&self) -> Result<(Index, Option<u64>), Error> {
+    pub(crate) fn index_locked(&self) -> Result<(Index, Option<u64>), Error> {
         let bytes = read_bounded(&self.root.join(index::FILE), index::MAX)?;
         let at = rev_at(&bytes);
         let parsed = bytes.flatten().and_then(|b| Index::parse(&b));
@@ -378,7 +389,11 @@ impl Profiles {
     }
 
     /// `ix` written at the file's read rev `at` (`put_if`; under the root lock), its rev raised; the new rev.
-    fn write_index(&self, ix: &mut Index, at: Option<u64>) -> Result<Option<u64>, Error> {
+    pub(crate) fn write_index(
+        &self,
+        ix: &mut Index,
+        at: Option<u64>,
+    ) -> Result<Option<u64>, Error> {
         let path = self.root.join(index::FILE);
         if rev_at(&read_bounded(&path, index::MAX)?) != at {
             return Err(Error::StoreConflict);
@@ -425,16 +440,14 @@ impl Profiles {
     pub fn create(&self, name: &str) -> Result<ProfileInfo, Error> {
         let name = check_name(name)?;
         let id = new_id()?;
-        let tag: String = random::<8>()?.iter().map(|b| format!("{b:02x}")).collect();
-        let tmp = self.p.join(format!(".tmp-{tag}"));
-        mkdir(&tmp)?;
+        let tmp = self.new_tmp()?;
         let r = (|| {
             let _build = lock_file(&tmp.join(BUILD_LOCK))?;
             let env = Envelope::unprotected(&id, &name).json()?;
             file::write(&tmp, &tmp.join(envelope::FILE), &env)?;
             mkdir(&tmp.join("g0"))?;
             let _root = self.root_lock()?;
-            self.commit_create(&tmp, &id, &name)
+            self.commit_create(&tmp, &id, Some(&name))
         })();
         if r.is_err() {
             let _ = remove_dir(&tmp);
@@ -447,14 +460,25 @@ impl Profiles {
         })
     }
 
-    fn commit_create(&self, tmp: &Path, id: &str, name: &str) -> Result<(), Error> {
-        if self.scan()?.len() >= DIRS_MAX {
-            return Err(Error::ProfileLimit);
-        }
-        let (mut ix, at) = self.index_locked()?;
-        if ix.profiles.iter().any(|r| same_name(&r.name, name)) {
-            return Err(Error::ProfileNameTaken);
-        }
+    /// Under the root lock: room checked, the journal, `tmp` renamed to `p/<id>/`, its row added (`row`: the visible name;
+    /// `None` for a hidden profile, which reads and writes no index byte), the journal removed.
+    pub(crate) fn commit_create(
+        &self,
+        tmp: &Path,
+        id: &str,
+        row: Option<&str>,
+    ) -> Result<(), Error> {
+        self.room(true, row.is_none())?;
+        let ix = match row {
+            Some(name) => {
+                let (ix, at) = self.index_locked()?;
+                if ix.profiles.iter().any(|r| same_name(&r.name, name)) {
+                    return Err(Error::ProfileNameTaken);
+                }
+                Some((ix, at, name))
+            }
+            None => None,
+        };
         let journal = Journal {
             op: "create".into(),
             id: id.into(),
@@ -466,13 +490,40 @@ impl Profiles {
         std::fs::rename(tmp, &dir).map_err(|_| Error::VaultIo)?;
         sync_dir(&self.p)?;
         remove_file(&dir.join(BUILD_LOCK))?;
-        ix.profiles.push(Row {
-            id: id.into(),
-            name: name.into(),
-        });
-        self.write_index(&mut ix, at)?;
+        if let Some((mut ix, at, name)) = ix {
+            ix.profiles.push(Row {
+                id: id.into(),
+                name: name.into(),
+            });
+            self.write_index(&mut ix, at)?;
+        }
         remove_file(&jpath)?;
         sync_dir(&self.p)
+    }
+
+    /// A new `p/.tmp-<random>/` to build a profile in (spec §5, §10).
+    pub(crate) fn new_tmp(&self) -> Result<PathBuf, Error> {
+        let tag: String = random::<8>()?.iter().map(|b| format!("{b:02x}")).collect();
+        let tmp = self.p.join(format!(".tmp-{tag}"));
+        mkdir(&tmp)?;
+        Ok(tmp)
+    }
+
+    /// Room for one more profile directory (`new_dir`; `ProfileLimit` at 32) and one more hidden profile (`hidden`;
+    /// `ProfileHiddenLimit` at 16, spec §8: an envelope without a public name).
+    pub(crate) fn room(&self, new_dir: bool, hidden: bool) -> Result<(), Error> {
+        let scan = self.scan()?;
+        if new_dir && scan.len() >= DIRS_MAX {
+            return Err(Error::ProfileLimit);
+        }
+        let n = scan
+            .iter()
+            .filter(|(_, e)| e.as_ref().is_some_and(|e| e.name.is_none()))
+            .count();
+        match hidden && n >= crate::hidden::HIDDEN_MAX {
+            true => Err(Error::ProfileHiddenLimit),
+            false => Ok(()),
+        }
     }
 
     /// Opens profile `id` (spec §10 "open"): its instance lock (`ProfileInUse` when held) before its envelope is read; the
@@ -503,7 +554,7 @@ impl Profiles {
         };
         let mut name = hint.clone();
         if let Some(keys) = &keys {
-            let label = self.label(keys, &env).inspect_err(|_| keys.lock())?;
+            let label = open_label(keys, &env).inspect_err(|_| keys.lock())?;
             if label.hidden {
                 // a planted hint on a hidden profile: removed, its row dropped, nothing else written (spec §6)
                 keys.lock();
@@ -516,39 +567,7 @@ impl Profiles {
             }
             name = label.name.to_string();
         }
-        let core = Core::open(CoreOpen {
-            dir: dir.clone(),
-            id: id.into(),
-            gen: env.gen,
-            keys: keys.clone(),
-            keychain: self.keychain.clone(),
-            envelope: Head::of(env.rev, &bytes),
-            migration_pending: env.migration.is_some(),
-        });
-        let core = Arc::new(core.inspect_err(|_| {
-            if let Some(k) = &keys {
-                k.lock()
-            }
-        })?);
-        // spec §7.3: a lower generation (a crash between a re-seal's commit and its clean-up) only now, after the wrap opened
-        // and the anchor check, beside the live `g<gen>/`
-        for g in &lower {
-            remove_dir(g)?;
-        }
-        let opened = OpenProfile {
-            info: ProfileInfo {
-                id: id.into(),
-                name: name.clone(),
-                protected: keys.is_some(),
-            },
-            core,
-            instance: Mutex::new(Some(instance)),
-            heavy: self.heavy.clone(),
-            kdf_max_kib: self.kdf_max_kib,
-            keychain: self.keychain.clone(),
-            #[cfg(feature = "test-hooks")]
-            hook: Mutex::new(None),
-        };
+        let opened = self.finish(instance, &env, &bytes, keys, &name, &lower)?;
         if name != hint {
             let mut e = env;
             e.name = Some(name.clone());
@@ -557,14 +576,62 @@ impl Profiles {
             file::write(&dir, &dir.join(envelope::FILE), &b)?;
             opened.core.set_envelope(Head::of(e.rev, &b))?;
         }
+        if self.after_open(id, &name)? || name != hint {
+            self.event(ProfileEvent::ProfileIndexMismatch);
+        }
+        Ok(opened)
+    }
+
+    /// An open's end, under the instance lock `instance` of `p/<env.id>/`, after the envelope's checks and its wrap and label opened: the store
+    /// core opened against the anchor, a lower generation removed (spec §7.3), the keychain's `protected` marker written when
+    /// missing. `keys` are locked on a failure.
+    pub(crate) fn finish(
+        &self,
+        instance: File,
+        env: &Envelope,
+        bytes: &[u8],
+        keys: Option<Arc<ProfileKeys>>,
+        name: &str,
+        lower: &[PathBuf],
+    ) -> Result<OpenProfile, Error> {
+        let core = Core::open(CoreOpen {
+            dir: self.p.join(&env.id),
+            id: env.id.clone(),
+            gen: env.gen,
+            keys: keys.clone(),
+            keychain: self.keychain.clone(),
+            envelope: Head::of(env.rev, bytes),
+            migration_pending: env.migration.is_some(),
+        });
+        let core = Arc::new(core.inspect_err(|_| {
+            if let Some(k) = &keys {
+                k.lock()
+            }
+        })?);
+        let opened = OpenProfile {
+            info: Mutex::new(ProfileInfo {
+                id: env.id.clone(),
+                name: name.into(),
+                protected: keys.is_some(),
+            }),
+            core,
+            instance: Mutex::new(Some(instance)),
+            heavy: self.heavy.clone(),
+            kdf_max_kib: self.kdf_max_kib,
+            keychain: self.keychain.clone(),
+            #[cfg(feature = "test-hooks")]
+            hook: Mutex::new(None),
+        };
+        // spec §7.3: a lower generation (a crash between a re-seal's commit and its clean-up) only now, after the wrap opened
+        // and the anchor check, beside the live `g<gen>/`
+        for g in lower {
+            remove_dir(g)?;
+        }
         if let (Some(kc), true) = (&self.keychain, opened.core.protected()) {
-            let marker = keychain_name(id, "protected");
+            let marker = keychain_name(&env.id, "protected");
             if kc.get(&marker)?.is_none() {
                 kc.put(&marker, b"1")?;
             }
-        }
-        if self.after_open(id, &name)? || name != hint {
-            self.event(ProfileEvent::ProfileIndexMismatch);
         }
         Ok(opened)
     }
@@ -573,7 +640,12 @@ impl Profiles {
     /// `g<gen+1>/` removed first, then the journal; then a generation above `gen` is `ProfileDamaged` (`ProfileRollback` where
     /// an anchor names a higher `gen`: the envelope is old), never removed; a generation below `gen` is `ProfileDamaged` without
     /// `g<gen>/`, else returned, to be removed once the wrap has opened.
-    fn generations(&self, dir: &Path, id: &str, gen: u64) -> Result<Vec<PathBuf>, Error> {
+    pub(crate) fn generations(
+        &self,
+        dir: &Path,
+        id: &str,
+        gen: u64,
+    ) -> Result<Vec<PathBuf>, Error> {
         let next = gen.checked_add(1).ok_or(Error::ProfileFormat)?;
         if std::fs::symlink_metadata(dir.join(reseal::NEXT)).is_ok() {
             remove_dir(&dir.join(format!("g{next}")))?;
@@ -627,7 +699,7 @@ impl Profiles {
 
     /// The keychain marker's rules (spec §7.1): an unprotected envelope beside it `ProfileFormat`; a protected one beside it
     /// without its keychain anchor `ProfileRollback`.
-    fn check_marker(&self, id: &str, state: State) -> Result<(), Error> {
+    pub(crate) fn check_marker(&self, id: &str, state: State) -> Result<(), Error> {
         let Some(kc) = &self.keychain else {
             return Ok(());
         };
@@ -671,28 +743,31 @@ impl Profiles {
             .map_err(open_code)?;
         Ok(Arc::new(keys))
     }
+}
 
-    /// The sealed label of a protected envelope: `{name, hidden}`, the name as stored; anything else `ProfileFormat`.
-    fn label(&self, keys: &ProfileKeys, env: &Envelope) -> Result<OpenLabel, Error> {
-        let sealed = B64
-            .decode(env.label.as_deref().unwrap_or_default())
-            .map_err(|_| Error::ProfileFormat)?;
-        let pt = keys
-            .open_label(&env.id, &sealed)
-            .map_err(|_| Error::ProfileFormat)?;
-        let l: Label = serde_json::from_slice(&pt).map_err(|_| Error::ProfileFormat)?;
-        let name = Zeroizing::new(l.name);
-        if check_name(&name).ok().as_deref() != Some(name.as_str())
-            || (l.hidden && env.platform.is_some())
-        {
-            return Err(Error::ProfileFormat);
-        }
-        Ok(OpenLabel {
-            name,
-            hidden: l.hidden,
-        })
+/// The sealed label of a protected envelope: `{name, hidden}`, the name as stored; anything else (a hidden label beside a
+/// platform wrap included) `ProfileFormat`.
+pub(crate) fn open_label(keys: &ProfileKeys, env: &Envelope) -> Result<OpenLabel, Error> {
+    let sealed = B64
+        .decode(env.label.as_deref().unwrap_or_default())
+        .map_err(|_| Error::ProfileFormat)?;
+    let pt = keys
+        .open_label(&env.id, &sealed)
+        .map_err(|_| Error::ProfileFormat)?;
+    let l: Label = serde_json::from_slice(&pt).map_err(|_| Error::ProfileFormat)?;
+    let name = Zeroizing::new(l.name);
+    if check_name(&name).ok().as_deref() != Some(name.as_str())
+        || (l.hidden && env.platform.is_some())
+    {
+        return Err(Error::ProfileFormat);
     }
+    Ok(OpenLabel {
+        name,
+        hidden: l.hidden,
+    })
+}
 
+impl Profiles {
     /// After an open: the row checked against the name (rewritten; whether it differed), `last` written when it changes.
     fn after_open(&self, id: &str, name: &str) -> Result<bool, Error> {
         let mut mismatch = false;
@@ -720,7 +795,7 @@ impl Profiles {
         Ok(mismatch)
     }
 
-    fn drop_row(&self, id: &str) -> Result<(), Error> {
+    pub(crate) fn drop_row(&self, id: &str) -> Result<(), Error> {
         self.update_index(|ix| {
             let n = ix.profiles.len();
             ix.profiles.retain(|r| r.id != id);
@@ -733,9 +808,9 @@ impl Profiles {
     }
 }
 
-struct OpenLabel {
-    name: Zeroizing<String>,
-    hidden: bool,
+pub(crate) struct OpenLabel {
+    pub(crate) name: Zeroizing<String>,
+    pub(crate) hidden: bool,
 }
 
 /// The profile's Matrix store (spec §5, §7.2; CLI-UPR-29): its directory `p/<id>/matrix/` and its store key, the one key that
@@ -747,7 +822,7 @@ pub struct MatrixStore {
 
 /// An open profile: its store core, its arena and its instance lock, until [`OpenProfile::lock`] or drop. No `Debug`.
 pub struct OpenProfile {
-    pub(crate) info: ProfileInfo,
+    info: Mutex<ProfileInfo>,
     pub(crate) core: Arc<Core>,
     instance: Mutex<Option<File>>,
     /// the profiles' heavy limiter, this device's KDF maximum and the keychain: a re-seal's (spec §7.3)
@@ -763,8 +838,20 @@ impl OpenProfile {
     pub fn info(&self) -> ProfileInfo {
         ProfileInfo {
             protected: self.core.protected(),
-            ..self.info.clone()
+            ..self
+                .info
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone()
         }
+    }
+
+    /// A rename's new name (spec §10).
+    pub(crate) fn set_name(&self, name: &str) {
+        self.info
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .name = name.into();
     }
 
     /// The store core (the SDK's faces go over it).

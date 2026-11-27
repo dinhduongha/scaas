@@ -524,7 +524,12 @@ impl Core {
 
     /// After an envelope write (UP6: rename, `hide`, `show`, platform unlock): its new rev and hash; the anchor follows.
     pub fn set_envelope(&self, envelope: Head) -> Result<(), Error> {
-        let _w = self.write_lock()?;
+        let w = self.write_lock()?;
+        self.envelope_written(&w, envelope)
+    }
+
+    /// The same, for a caller that holds the store write lock `_w` (a rename, `hide`, `show`: spec §8, §10).
+    pub(crate) fn envelope_written(&self, _w: &WriteGuard, envelope: Head) -> Result<(), Error> {
         *self.envelope.lock().unwrap_or_else(PoisonError::into_inner) = envelope;
         self.write_anchor(&self.cur())
     }

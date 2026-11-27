@@ -5,7 +5,8 @@
 //! SDK. Built so far: the store's `SecureStore` face ([`PartStore`]) and the mapping of its codes (plan UP5); the profiles
 //! over the crate ([`UserProfiles`]), an open profile's `Sdk`, stores and lock ([`UserProfile`]), `Sdk::close` at lock, the
 //! events (plan UP6); the re-seal's calls and the refusal of every secret-creating call on an unprotected profile's `Sdk`
-//! (plan UP7). Outside the binding surface in wave 1. UNAUDITED.
+//! (plan UP7); hidden profiles: `create_hidden`, `open_hidden`, `hide`, `show`, `rename` (plan UP8). Outside the binding
+//! surface in wave 1. UNAUDITED.
 pub use scaas_profile::{
     keychain_name, Anchor, Core, CoreOpen, Error, Head, Item, KdfParams, Manifest, MatrixStore,
     Plain, ProfileEvent, ProfileInfo as UserProfileInfo, ProfileKeychain, ProfilePart, Verdict,
@@ -129,12 +130,43 @@ impl UserProfiles {
             None => p.open(&id, None),
         })
         .await?;
-        Ok(Arc::new(UserProfile {
+        Ok(self.profile(open))
+    }
+
+    /// A new hidden profile, open (spec §8): its name and passphrase typed; `kdf` `None` the default (64 MiB / 3).
+    /// `ProfileNameTaken` (a hidden profile with this name and passphrase), `ProfileHiddenLimit`, `ProfileLimit`,
+    /// `ProfilePassphraseWeak`, `ProfileNameInvalid`. Writes no index byte.
+    pub async fn create_hidden(
+        &self,
+        name: Arc<SecretBytes>,
+        passphrase: Arc<SecretBytes>,
+        kdf: Option<KdfParams>,
+    ) -> Result<Arc<UserProfile>, SdkError> {
+        let p = self.profiles.clone();
+        let open = run(move || name.with2(&passphrase, |n, s| p.create_hidden(n, s, kdf))).await?;
+        Ok(self.profile(open))
+    }
+
+    /// Opens a hidden profile by its name and passphrase (spec §8): the counted search over the profile directories;
+    /// `ProfileOpen` for every failure but `ProfileInUse`, `ProfileSearchTooLarge`, `ProfileKdfOutOfMemory`.
+    pub async fn open_hidden(
+        &self,
+        name: Arc<SecretBytes>,
+        passphrase: Arc<SecretBytes>,
+    ) -> Result<Arc<UserProfile>, SdkError> {
+        let p = self.profiles.clone();
+        let open = run(move || name.with2(&passphrase, |n, s| p.open_hidden(n, s))).await?;
+        Ok(self.profile(open))
+    }
+
+    fn profile(&self, open: OpenProfile) -> Arc<UserProfile> {
+        Arc::new(UserProfile {
             open: Arc::new(open),
+            profiles: self.profiles.clone(),
             sdk: tokio::sync::Mutex::new(None),
             authenticator: self.authenticator.clone(),
             limits: self.limits.clone(),
-        }))
+        })
     }
 
     /// The events since the last call (no id, no name).
@@ -150,6 +182,7 @@ impl UserProfiles {
 /// An open profile (spec §11): its `Sdk`, its stores, its lock. No `Debug`.
 pub struct UserProfile {
     open: Arc<OpenProfile>,
+    profiles: Arc<Profiles>,
     sdk: tokio::sync::Mutex<Option<Arc<Sdk>>>,
     authenticator: Option<Arc<dyn Authenticator>>,
     limits: Limits,
@@ -209,6 +242,38 @@ impl UserProfile {
     ) -> Result<(), SdkError> {
         let open = self.open.clone();
         run(move || old.with2(&new, |o, n| open.change_passphrase(o, n, kdf))).await
+    }
+
+    /// Hides this protected, visible profile (spec §8): `passphrase` typed, checked against its wrap and used for the
+    /// duplicate search (controller call UP8: the spec's `hide()` runs that search with the resulting name and passphrase);
+    /// the public name and its row dropped, the label re-sealed hidden, the wraps untouched.
+    pub async fn hide(&self, passphrase: Arc<SecretBytes>) -> Result<(), SdkError> {
+        let (p, open) = (self.profiles.clone(), self.open.clone());
+        run(move || passphrase.with(|s| p.hide(&open, s))).await
+    }
+
+    /// Shows this hidden profile (spec §8): its public name and row written (`ProfileNameTaken` when a visible profile has
+    /// the name). No passphrase.
+    pub async fn show(&self) -> Result<(), SdkError> {
+        let (p, open) = (self.profiles.clone(), self.open.clone());
+        run(move || p.show(&open)).await
+    }
+
+    /// Renames this profile (spec §10): the label re-sealed, the wraps untouched; a visible one's hint and row (no
+    /// passphrase); a hidden one needs `passphrase` (`Argument` without) for its duplicate search.
+    pub async fn rename(
+        &self,
+        name: Arc<SecretBytes>,
+        passphrase: Option<Arc<SecretBytes>>,
+    ) -> Result<(), SdkError> {
+        let (p, open) = (self.profiles.clone(), self.open.clone());
+        run(move || {
+            name.with(|n| match &passphrase {
+                Some(s) => s.with(|s| p.rename(&open, n, Some(s))),
+                None => p.rename(&open, n, None),
+            })
+        })
+        .await
     }
 
     /// The `SecureStore` face of part `part` for an app core (the part `profile` is the manifests' and no `ProfilePart`).
@@ -271,6 +336,8 @@ impl From<Error> for SdkError {
             Error::ProfileKdfTooLarge => SdkError::ProfileKdfTooLarge,
             Error::ProfileKdfOutOfMemory => SdkError::ProfileKdfOutOfMemory,
             Error::ProfilePassphraseWeak => SdkError::ProfilePassphraseWeak,
+            Error::ProfileHiddenLimit => SdkError::ProfileHiddenLimit,
+            Error::ProfileSearchTooLarge => SdkError::ProfileSearchTooLarge,
         }
     }
 }
@@ -299,7 +366,9 @@ fn store_code(e: Error) -> StoreError {
         | Error::ProfileVersion
         | Error::ProfileKdfTooLarge
         | Error::ProfileKdfOutOfMemory
-        | Error::ProfilePassphraseWeak => StoreError::Io,
+        | Error::ProfilePassphraseWeak
+        | Error::ProfileHiddenLimit
+        | Error::ProfileSearchTooLarge => StoreError::Io,
     }
 }
 
