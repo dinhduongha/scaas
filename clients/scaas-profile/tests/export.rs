@@ -459,7 +459,10 @@ mod hooks {
         assert!(r.item("keystore") == Some(KEYSTORE));
         // the operation in flight marked `imported` by the preview (spec §10.1; review E-3: the crate marks it)
         let st: Value = serde_json::from_slice(r.item("sdk.state").unwrap()).unwrap();
-        assert_eq!((st["rev"].as_u64(), &st["ops"][0]["state"]), (Some(2), &Value::from("imported")));
+        assert_eq!(
+            (st["rev"].as_u64(), &st["ops"][0]["state"]),
+            (Some(2), &Value::from("imported"))
+        );
         // an unprotected profile is not exported
         let u = p.create("plain").unwrap();
         let u = p.open(&u.id, None).unwrap();

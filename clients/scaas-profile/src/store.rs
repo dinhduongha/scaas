@@ -162,7 +162,11 @@ impl Manifest {
             return Err(Error::VaultFormat);
         }
         let j: ManifestJson = serde_json::from_slice(pt).map_err(|_| Error::VaultFormat)?;
-        if j.format != MANIFEST_FORMAT || j.v != 1 || j.part != part || j.rev != rev || rev > REV_MAX
+        if j.format != MANIFEST_FORMAT
+            || j.v != 1
+            || j.part != part
+            || j.rev != rev
+            || rev > REV_MAX
         {
             return Err(Error::VaultFormat);
         }
@@ -500,7 +504,12 @@ impl Core {
         }
         let p = g.file(keys, part.name(), name)?;
         let sealed = keys.seal_item(part.name(), name, rev, bytes).map_err(ua)?;
-        put_file_if(&g.gdir, &p, cur.map(|(r, _, _)| r), &item_json(rev, &sealed)?)?;
+        put_file_if(
+            &g.gdir,
+            &p,
+            cur.map(|(r, _, _)| r),
+            &item_json(rev, &sealed)?,
+        )?;
         self.update_manifest(&g, keys, part, |m| {
             m.tombstones.remove(name);
             m.items.insert(name.to_string(), rev);

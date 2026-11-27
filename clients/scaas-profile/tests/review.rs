@@ -67,7 +67,10 @@ impl ProfileKeychain for Keychain {
         if self.fail_put.load(SeqCst) {
             return Err(Error::VaultIo);
         }
-        self.items.lock().unwrap().insert(name.into(), bytes.to_vec());
+        self.items
+            .lock()
+            .unwrap()
+            .insert(name.into(), bytes.to_vec());
         Ok(())
     }
     fn delete(&self, name: &str) -> Result<(), Error> {
@@ -236,7 +239,10 @@ fn g2_hidden_flag_from_the_label() {
     let dir = o.core().dir().to_path_buf();
     edit_envelope(&dir, |e| e.name = Some("Planted".into()));
     p.rename(&o, b"Hid2", Some(PASS)).unwrap();
-    assert!(!index_text(&root).contains("Hid2"), "no row for a hidden profile");
+    assert!(
+        !index_text(&root).contains("Hid2"),
+        "no row for a hidden profile"
+    );
     let env = std::fs::read_to_string(dir.join("profile.envelope")).unwrap();
     assert!(!env.contains(r#""name""#), "the planted hint removed");
     edit_envelope(&dir, |e| e.name = Some("Planted".into()));
@@ -274,7 +280,9 @@ fn a8_stripped_hint_rewritten_from_the_label() {
     p.drain_events();
     let h = p.open_hidden(b"default", PASS).unwrap();
     assert!(!h.info().hidden);
-    assert!(p.drain_events().contains(&ProfileEvent::ProfileIndexMismatch));
+    assert!(p
+        .drain_events()
+        .contains(&ProfileEvent::ProfileIndexMismatch));
     assert_eq!(p.list().unwrap().len(), 1, "listed again");
     h.lock();
     p.open(&id, Some(PASS)).unwrap();
@@ -308,7 +316,10 @@ fn f5_search_before_the_store_write_lock() {
     let w = o.core().write_lock().unwrap();
     let before = ProfileKeys::kdf_runs();
     assert_eq!(code(p.hide(&o, PASS)), "ProfileBusy");
-    assert!(ProfileKeys::kdf_runs() - before >= 5, "the wrap check and the search ran");
+    assert!(
+        ProfileKeys::kdf_runs() - before >= 5,
+        "the wrap check and the search ran"
+    );
     drop(w);
     p.hide(&o, PASS).unwrap();
 }
@@ -332,7 +343,10 @@ fn g4_files_read_bounded() {
     let (p, o, id, dir) = protected(&tmp(), None);
     o.core().put_if(SDK, "a", None, &item(1, "a")).unwrap();
     assert!(o.core().get(SDK, "a").unwrap().is_some(), "control");
-    sparse(&dir.join("g1").join(o.keys().unwrap().item_file("sdk", "a").unwrap()));
+    sparse(
+        &dir.join("g1")
+            .join(o.keys().unwrap().item_file("sdk", "a").unwrap()),
+    );
     assert_eq!(code(o.core().get(SDK, "a")), "VaultFormat");
     o.lock();
     sparse(&dir.join("profile.head"));
@@ -366,9 +380,12 @@ fn g9_revs_above_2_pow_53_refused() {
 fn a4_g6_settings_strings_bounded() {
     let parse = |s: &str| code(ProfileSettings::parse(s.as_bytes()));
     let cap = |v: &str| format!(r#"{{"caps":{{"max_cost":"{v}"}}}}"#);
-    let chain_cap = |v: &str| format!(r#"{{"chains":{{"c":{{"caps":{{"max_fee_per_gas":"{v}"}}}}}}}}"#);
+    let chain_cap =
+        |v: &str| format!(r#"{{"chains":{{"c":{{"caps":{{"max_fee_per_gas":"{v}"}}}}}}}}"#);
     let url = |u: &str| {
-        format!(r#"{{"chains":{{"c":{{"endpoints":[{{"list":"rpc","label":"l","url":"{u}"}}]}}}}}}"#)
+        format!(
+            r#"{{"chains":{{"c":{{"endpoints":[{{"list":"rpc","label":"l","url":"{u}"}}]}}}}}}"#
+        )
     };
     for ok in ["1", "0", &"9".repeat(78)] {
         assert_eq!(parse(&cap(ok)), "ok", "{ok}");
@@ -428,7 +445,10 @@ fn e4_settings_written_only_when_readable() {
     assert_eq!(code(o.set_settings(&big, None)), "Argument");
     assert_eq!(o.settings().unwrap().idle_lock_s, Some(60));
     let keep = br#"{"rev":1,"unknown":true}"#;
-    assert_eq!(code(o.set_passphrase(PASS, Some(TEST), Some(keep))), "Argument");
+    assert_eq!(
+        code(o.set_passphrase(PASS, Some(TEST), Some(keep))),
+        "Argument"
+    );
     assert!(!o.info().protected);
 }
 
@@ -447,7 +467,10 @@ fn a17_item_without_rev_refused_before_the_kdf() {
         .import_preview(ImportSource::Bytes(&file(b"no json rev")), XPASS)
         .unwrap();
     let before = ProfileKeys::kdf_runs();
-    assert_eq!(code(p.import(&r, &[], PASS, None, Some(TEST))), "ProfileImportOpen");
+    assert_eq!(
+        code(p.import(&r, &[], PASS, None, Some(TEST))),
+        "ProfileImportOpen"
+    );
     assert_eq!(ProfileKeys::kdf_runs(), before, "before any KDF");
     let r = p
         .import_preview(ImportSource::Bytes(&file(br#"{"rev":1}"#)), XPASS)
@@ -524,10 +547,16 @@ fn c3_item_rollback_readable_until_accepted() {
     let (pt, rev) = c.get(SDK, "a").unwrap().unwrap();
     assert_eq!((&pt[..], rev), (&item(1, "old")[..], 1));
     assert!(p.drain_events().contains(&ProfileEvent::ProfileRollback));
-    assert_eq!(code(c.put_if(SDK, "a", Some(1), &item(2, "again"))), "ProfileRollback");
+    assert_eq!(
+        code(c.put_if(SDK, "a", Some(1), &item(2, "again"))),
+        "ProfileRollback"
+    );
     c.accept_rollback(SDK, "a").unwrap();
     c.put_if(SDK, "a", Some(1), &item(2, "again")).unwrap();
-    assert_eq!(&c.get(SDK, "a").unwrap().unwrap().0[..], &item(2, "again")[..]);
+    assert_eq!(
+        &c.get(SDK, "a").unwrap().unwrap().0[..],
+        &item(2, "again")[..]
+    );
 }
 
 /// C-3: an item its manifest lists whose file is missing is `ProfileDamaged` for reads and writes, the event reported (never
@@ -543,7 +572,10 @@ fn c3_listed_item_missing_damaged() {
     p.drain_events();
     assert_eq!(code(c.get(SDK, "a")), "ProfileDamaged");
     assert!(p.drain_events().contains(&ProfileEvent::ProfileDamaged));
-    assert_eq!(code(c.put_if(SDK, "a", None, &item(1, "b"))), "ProfileDamaged");
+    assert_eq!(
+        code(c.put_if(SDK, "a", None, &item(1, "b"))),
+        "ProfileDamaged"
+    );
     c.delete(SDK, "a").unwrap();
     c.put_if(SDK, "a", None, &item(1, "b")).unwrap();
 }
@@ -581,7 +613,13 @@ fn g10_index_reconciled_with_the_envelopes() {
     h.lock();
     let list = || -> Vec<String> { p.list().unwrap().into_iter().map(|i| i.name).collect() };
     assert_eq!(list().len(), 2, "control");
-    let def = p.list().unwrap().into_iter().find(|i| i.name == "default").unwrap().id;
+    let def = p
+        .list()
+        .unwrap()
+        .into_iter()
+        .find(|i| i.name == "default")
+        .unwrap()
+        .id;
     std::fs::write(
         root.join("profiles.json"),
         format!(
@@ -591,7 +629,10 @@ fn g10_index_reconciled_with_the_envelopes() {
     .unwrap();
     assert_eq!(code(p.create("two")), "ProfileNameTaken");
     assert!(list().contains(&"Two".to_string()));
-    assert!(!index_text(&root).contains(&hid), "the hidden profile's row dropped");
+    assert!(
+        !index_text(&root).contains(&hid),
+        "the hidden profile's row dropped"
+    );
     let twin = uuid7(1, &[3; 10]);
     let d = root.join("p").join(&twin);
     std::fs::create_dir_all(&d).unwrap();
@@ -599,7 +640,9 @@ fn g10_index_reconciled_with_the_envelopes() {
     std::fs::write(d.join("profile.envelope"), env).unwrap();
     p.drain_events();
     assert_eq!(list().len(), 3);
-    assert!(p.drain_events().contains(&ProfileEvent::ProfileIndexMismatch));
+    assert!(p
+        .drain_events()
+        .contains(&ProfileEvent::ProfileIndexMismatch));
 }
 
 /// E-3: the crate's delete of a profile holding a keystore needs the unbacked confirm (the SDK passes it after its own count
@@ -609,13 +652,20 @@ fn g10_index_reconciled_with_the_envelopes() {
 fn e3_delete_of_a_keystore_needs_the_unbacked_confirm() {
     let _k = kdf_lock();
     let (p, o, _, dir) = protected(&tmp(), None);
-    o.core().put_if(SDK, "keystore", None, br#"{"rev":1}"#).unwrap();
+    o.core()
+        .put_if(SDK, "keystore", None, br#"{"rev":1}"#)
+        .unwrap();
     assert_eq!(code(p.delete(&o, b"default", None)), "ConfirmationMissing");
-    assert!(o.core().get(SDK, "keystore").unwrap().is_some(), "still open");
-    p.delete(&o, b"default", Some(ConfirmDeleteUnbacked {})).unwrap();
+    assert!(
+        o.core().get(SDK, "keystore").unwrap().is_some(),
+        "still open"
+    );
+    p.delete(&o, b"default", Some(ConfirmDeleteUnbacked {}))
+        .unwrap();
     assert!(!dir.exists());
     let plain = p.create("Plain").unwrap();
-    p.delete(&p.open(&plain.id, None).unwrap(), b"Plain", None).unwrap();
+    p.delete(&p.open(&plain.id, None).unwrap(), b"Plain", None)
+        .unwrap();
 }
 
 /// E-3: the crate's import preview marks `sdk.state`'s operations a chain fact has not ended `imported` (spec §10.1; an app
@@ -657,7 +707,11 @@ fn e5_cli_never_writes_last() {
         let id = p.list().unwrap()[0].id.clone();
         p.open(&id, None).unwrap().lock();
         let ix = index_text(&root);
-        assert_eq!(ix.contains(&format!(r#""last":"{id}""#)), write_last, "{ix}");
+        assert_eq!(
+            ix.contains(&format!(r#""last":"{id}""#)),
+            write_last,
+            "{ix}"
+        );
     }
 }
 

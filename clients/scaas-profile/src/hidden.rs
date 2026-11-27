@@ -300,7 +300,8 @@ impl Profiles {
         if !label.hidden {
             self.rewrite_hint(&opened, env, &label.name)?;
             self.update_index(|ix| {
-                let add = !ix.profiles.iter().any(|r| r.id == f.id) && ix.profiles.len() < index::ROWS;
+                let add =
+                    !ix.profiles.iter().any(|r| r.id == f.id) && ix.profiles.len() < index::ROWS;
                 if add {
                     ix.profiles.push(Row {
                         id: f.id.clone(),
@@ -441,7 +442,11 @@ impl Profiles {
         let w = core.write_lock()?;
         let mut env = match &seen {
             Some(b) => unchanged(core, &info.id, b)?,
-            None => read_envelope(core.dir(), &info.id)?.ok_or(Error::ProfileFormat)?.0,
+            None => {
+                read_envelope(core.dir(), &info.id)?
+                    .ok_or(Error::ProfileFormat)?
+                    .0
+            }
         };
         if let Some(keys) = core.keys() {
             env.label = Some(seal_label(&keys, &info.id, &name, hidden)?);

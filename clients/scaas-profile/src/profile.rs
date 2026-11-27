@@ -480,7 +480,12 @@ impl Profiles {
         }
         let mut rows: Vec<Row> = scan
             .into_iter()
-            .filter_map(|(id, env)| Some(Row { id, name: env?.name? }))
+            .filter_map(|(id, env)| {
+                Some(Row {
+                    id,
+                    name: env?.name?,
+                })
+            })
             .collect();
         rows.truncate(index::ROWS);
         let twins = rows
@@ -527,7 +532,10 @@ impl Profiles {
     }
 
     /// `change` applied to the index under the root lock; written when it says so.
-    pub(crate) fn update_index(&self, change: impl FnOnce(&mut Index) -> bool) -> Result<(), Error> {
+    pub(crate) fn update_index(
+        &self,
+        change: impl FnOnce(&mut Index) -> bool,
+    ) -> Result<(), Error> {
         let _root = self.root_lock()?;
         let (mut ix, at) = self.index_locked()?;
         if change(&mut ix) {
@@ -1144,7 +1152,13 @@ mod tests {
     #[test]
     fn q5_root_owner_compared() {
         assert_eq!(super::same_owner(1000, 1000), Ok(()));
-        assert_eq!(super::same_owner(0, 1000), Err(crate::Error::ProfileRootUnsafe));
-        assert_eq!(super::same_owner(1001, 1000), Err(crate::Error::ProfileRootUnsafe));
+        assert_eq!(
+            super::same_owner(0, 1000),
+            Err(crate::Error::ProfileRootUnsafe)
+        );
+        assert_eq!(
+            super::same_owner(1001, 1000),
+            Err(crate::Error::ProfileRootUnsafe)
+        );
     }
 }

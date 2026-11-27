@@ -142,7 +142,9 @@ impl ProfileSettings {
         };
         let caps = |c: &Caps| cap(&c.max_fee_per_gas) && cap(&c.max_cost);
         let url = |u: &str| {
-            let rest = u.strip_prefix("https://").or_else(|| u.strip_prefix("http://"));
+            let rest = u
+                .strip_prefix("https://")
+                .or_else(|| u.strip_prefix("http://"));
             rest.is_some_and(|r| {
                 let auth = r.split(['/', '?', '#']).next().unwrap_or_default();
                 r.bytes().all(|b| b.is_ascii_graphic() && b != b'\\')

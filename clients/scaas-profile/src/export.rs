@@ -525,7 +525,8 @@ impl Profiles {
                 "",
             )?;
         }
-        let settings = settings::filter(&ProfileSettings::parse(&review.settings)?, confirmed).json()?;
+        let settings =
+            settings::filter(&ProfileSettings::parse(&review.settings)?, confirmed).json()?;
         let id = new_id()?;
         let mut env = Envelope {
             state: State::Protected,
