@@ -51,7 +51,9 @@
 #                          pqz-n2048 (wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock: --lib --bin pqz-read --test pqz_read facade_pqz_state facade_pqz pqz_backup no_oracle) and the same + vectors
 #                          (facade_pqz_state facade_pqz pqz_backup no_oracle), pqvault (--test pqvault_pass: the Argon2id reproducer of vectors/pqvault/pass.json),
 #                          user-profile (--no-default-features --features user-profile, CLI-UPR-32: the profile arena with no signing code; also
-#                          CAP= python3 runs/2026-11-27-key-handles-nm.py: no signing symbol in its rlib, the wallet build's as control); the vectors cell also: cargo test --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows; git diff --exit-code (wallet_state.json stays what its generator writes)
+#                          CAP= python3 runs/2026-11-27-key-handles-nm.py: no signing symbol in its rlib, the wallet build's as control),
+#                          user-profile-vectors (--features test-hooks,vectors --test profile: the profile rows of clientkeys' generator, byte for byte,
+#                          user-profiles review E-2); the vectors cell also: cargo test --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows; git diff --exit-code (wallet_state.json stays what its generator writes)
 #   ua-rs-features:        plan T42: in clients/ua-rs, bash runs/fam-sizes.sh: cargo build --locked --release --example fam_size with no family, each
 #                          fam-<row> alone and all on (wallet always), each probe's size printed
 #   ua-rs-targets:         compile only, no run (MD-5, plan T0 / T18), wasm32-unknown-unknown, aarch64-linux-android (NDK clang, API 24), aarch64-apple-ios (macOS): cargo build --locked --lib --target <t> <cell> in ua-rs
@@ -88,7 +90,9 @@
 #                          cargo test --locked --test feature_tree (the e2e on anvil, 6 GB, stays the local gate sdk-e2e); the shared UniFFI
 #                          surface of every UniFFI language (review T26 C-8, C-9): cargo clippy --all-targets with <the UniFFI set>,uniffi and
 #                          ,sync-api; cargo test --test binding with each, cargo test --lib binding::tests with uniffi; in clients/scaas-sdk/ffi:
-#                          cargo clippy --locked --all-targets --features sync-api and --features uniffi -- -D warnings
+#                          cargo clippy --locked --all-targets --features sync-api and --features uniffi -- -D warnings; the user profiles
+#                          (user-profiles review C-2): cargo test --locked --features user-profile,test-hooks --test user_profile and --lib
+#                          user_profile; cargo clippy --locked --all-targets --features user-profile,test-hooks -- -D warnings
 #   scaas-sdk-wasm:        in clients/scaas-sdk: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet,evm
 #   scaas-sdk-bindings     one matrix cell per language of clients/scaas-sdk/bindings/langs (decisions CLI-SDK-33 (102)):
 #   [dart]:                SCAAS_GEN=dart clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check (flutter_rust_bridge_codegen 2.13.0 with cargo-expand 1.0.127: the
@@ -145,7 +149,7 @@
 #                          the chain_ and e2e runs (anvil, Docker, Synapse: gates pqc-chain, pqc-e2e) stay local
 #   scaas-profile:         in clients/scaas-profile (the profile store, owner 2026-11-27): cargo test --locked; cargo test --locked
 #                          --features test-hooks; cargo clippy --locked --all-targets -- -D warnings, default and --features test-hooks;
-#                          cargo deny check (its deny.toml)
+#                          cargo deny check (its deny.toml) and cargo audit (user-profiles review E-12)
 #   scaas-matrix:          in clients/scaas-matrix (CLI-MTX-01): cargo test --locked --features testing (tests/deps.rs: no SDK or pqchat-core
 #                          in its graph; the policy, record, profile and store-key tests); cargo clippy --locked --all-targets --features testing -- -D warnings; cargo deny check
 #                          and cargo audit (its deny.toml, .cargo/audit.toml); in clients/pqchat-transport cargo clippy --locked; the e2e
@@ -966,6 +970,11 @@ jobs:
           # owner 2026-11-27 (user-profiles O15, CLI-UPR-32): the profile arena alone (`key-handles`), no signing code compiled in
           - cell: user-profile
             features: --no-default-features --features user-profile
+          # user-profiles review E-2: the profile rows (smartcontracts/vectors/profile) reproduced byte for byte; fixed nonces
+          # need `vectors`
+          - cell: user-profile-vectors
+            features: --features test-hooks,vectors
+            tests: --test profile
     defaults:
       run:
         working-directory: clients/ua-rs
@@ -1426,7 +1435,7 @@ jobs:
       #   && flutter_rust_bridge_codegen generate && git diff --exit-code
 
   # the SDK apps call (CLI-SDK-01, plan T20): its tests at the full feature set and the minimal one, the raw entry, clippy, each
-  # PQZ set's build and its set-sensitive tests, one PQZ set in the feature tree
+  # PQZ set's build and its set-sensitive tests, one PQZ set in the feature tree, the user profiles
   scaas-sdk:
     needs: changes
     if: needs.changes.outputs.scaas_sdk == 'true'
@@ -1496,6 +1505,13 @@ jobs:
         run: |
           cargo clippy --locked --all-targets --features sync-api -- -D warnings
           cargo clippy --locked --all-targets --features uniffi -- -D warnings
+      # user-profiles review C-2 (= E-2): the profile layer (`user_profile`, the secrets gate, `close`) and its tests, with the
+      # test hooks (the test KDF set)
+      - name: the user profiles
+        run: |
+          cargo test --locked --features user-profile,test-hooks --test user_profile
+          cargo test --locked --features user-profile,test-hooks --lib user_profile
+          cargo clippy --locked --all-targets --features user-profile,test-hooks -- -D warnings
 
   scaas-sdk-wasm:
     needs: changes
@@ -1668,7 +1684,7 @@ jobs:
           cargo audit
 
   # the profile store (owner 2026-11-27, decisions CLI-UPR-02's Change): its own crate over ua-rs, below the SDK; its tests with
-  # and without the test hooks, its dependency check
+  # and without the test hooks, its dependency and advisory checks
   scaas-profile:
     needs: changes
     if: needs.changes.outputs.scaas_profile == 'true'
@@ -1694,7 +1710,7 @@ jobs:
           workspaces: clients/scaas-profile
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-deny@0.20.2
+          tool: cargo-deny@0.20.2,cargo-audit@0.22.2
       - name: cargo test
         run: |
           cargo test --locked
@@ -1703,8 +1719,10 @@ jobs:
         run: |
           cargo clippy --locked --all-targets -- -D warnings
           cargo clippy --locked --all-targets --features test-hooks -- -D warnings
-      - name: cargo deny
-        run: cargo deny check
+      - name: cargo deny and cargo audit
+        run: |
+          cargo deny check
+          cargo audit
 
   # the bindings (plan T20, T20b-T20h; spec §16.1, §16.4), one matrix cell per language enabled in
   # clients/scaas-sdk/bindings/langs (owner 2026-11-22, decisions CLI-SDK-33 (102)); the changes job lists the cells a change
