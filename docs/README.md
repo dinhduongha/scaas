@@ -189,6 +189,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | Doc | Covers |
 |---|---|
 | [README](networks/README.md) | Common model, chain identity (`chain_uid`), signing domains, passkeys, availability |
+| [chain-support.md](networks/chain-support.md) · [key-schemes.md](networks/key-schemes.md) | What each chain supports; the UA kinds by signature and key scheme, beside Sui, Cellframe and the families' native schemes |
 | [evm.md](networks/evm.md) · [hedera.md](networks/hedera.md) | EVM chains and their tiers; Hedera (tier 3, not yet eligible) |
 | [cosmos.md](networks/cosmos.md) · [soroban.md](networks/soroban.md) · [ton.md](networks/ton.md) | CosmWasm, Stellar / Pi, GRAM |
 | [sui.md](networks/sui.md) · [aptos.md](networks/aptos.md) · [solana.md](networks/solana.md) | Move families and Solana |
