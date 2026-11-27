@@ -713,6 +713,10 @@ through an entry the ABI does not name.
 included; a contract near its size line needs a split, which is the owner's call (`PqChat`: owner 2026-11-28).
 **Source.** Owner rulings 2026-11-27 (the three rules above) and 2026-11-27/28 (the library split of `PqChat` approved).
 
+Change (owner: yes, 2026-11-28): the rule stands in `AGENTS.md`, "Smart contracts (EVM)", beside the library-split
+bullet: no `fallback()` routing; every callable entry is declared in the contract's ABI; a size split is a linked external
+library first, a body module only behind declared forwarders.
+
 ## 2. Node — General
 
 ### NODE-GEN-01 — Node holds no subject funds or keys
