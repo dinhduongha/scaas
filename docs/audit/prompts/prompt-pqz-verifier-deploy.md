@@ -196,6 +196,12 @@ k. **The round's deploy changes** (added 2026-11-26): `DeployBase.sol` deploys a
    `deploy_pqchatstore.py` pins `IPqChat`'s new interface id; `script/pqz/e2e.py`'s send limit; `verify-blockscout.sh` and
    the completeness check cover each new child. NET-EVM-20's three EVM tiers are a classification in the docs only: check
    that no script or book reads a tier or splits a rule by it (one rule on every chain).
+l. **PENDING LANDING (`pqchat-no-fallback`): the linked library** (added 2026-11-28; ARCH-POS-29, CTR-CHAT-32):
+   `DeployBase.sol`, `Deploy.s.sol`, `script/onchain/PqChat.s.sol`, `script/onchain/groups.json` and
+   `smartcontracts/scripts/deploy.sh` deploy `PqChatRecordLib` and link it into `PqChat` at the address the verified contract
+   shows (forge places linked libraries by CREATE2 on every deploy run); a run that reuses a library already at its address
+   links that one; `verify-blockscout.sh` and the completeness check cover the library; `size-baseline.json` moves with a
+   reason.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - the attested-verify reviews `T/docs/research/attest-codex-review.md`, `attest-fable-review.md` (Fable C-1)

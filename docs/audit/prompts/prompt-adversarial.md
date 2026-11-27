@@ -134,7 +134,8 @@ concrete sequence of calls, transactions, RPC answers or messages, then trace it
 refused. A refusal you traced is a result too ("Checked and sound").
 
 **Scope (paths under `T/`):** the whole pre-freeze target, as the layer units divide it (`T/smartcontracts/evm/src/`,
-`T/pqz-core/` and `pqz-core/nethermind/`, `T/clients/{ua-rs,clientkeys,scaas-sdk,scaas-rpc,pqchat-core,pqvault-core}/`,
+`T/pqz-core/` and `pqz-core/nethermind/`, `T/clients/{ua-rs,clientkeys,scaas-sdk,scaas-rpc,pqchat-core,pqvault-core,scaas-matrix,pqchat-transport}/` (the last two added
+2026-11-28; pending landing: `T/clients/scaas-profile/` on `user-profiles`, `T/clients/scaas-tui/` on `scaas-tui`),
 `T/scaas-node/src/`, `T/scaas-pqz-verifier/src/`), with the Soroban registry and token where a rule claims one rule on every
 chain. Not in scope: `*/legacy/`, `test/` except to read what a test claims.
 
@@ -181,6 +182,16 @@ f. **A removed party.** A member that left or was removed (PqChat flat and tree,
    disable + re-add), or block; a removed device key; an auditor replaced or a verifier rotated (`pqzVerifierEpoch`); a key
    version rotated with a debit in flight. An `msig` slot disabled because its key leaked: can it sign a new record under
    an older version tag?
+g. **The roles added 2026-11-28.** A member who signs one path-less record with a wrong tag to stall unanchored joiners
+   (G-3, accepted as built: report only a worse consequence), or who holds a device's key and the epoch state (F-1: does the
+   device warn and fail closed?); a removed party that reads path-less epochs until the next path commit; a member who
+   exceeds `pathRefreshBound` by splitting Adds across commits. A Matrix homeserver or user against `scaas-matrix` (room kinds
+   mixed, ephemeral signals forced, a flood); a front-end that signs before the confirm or after a quote that changed
+   (CLI-SDK-36, CLI-PQV-18). **Pending landing:** a spammer of relayed topic writes against the node's door A at fee 0
+   (NODE-GW-09's bucket and switch, `pqchat-core-confirm`); a local attacker against the user profiles (rollback, a lowered
+   KDF cost, a hidden profile's existence, a crafted export; `user-profiles`); text controlled by others against the TUI's
+   review (`scaas-tui`); a caller that reaches a `PqChat` module by a selector not in its ABI (ARCH-POS-29,
+   `pqchat-no-fallback`).
 
 **Recovery from state alone** (CTR-CHAT-14, CTR-PQV-10, the PQZ proof path, Zether rollover): for each role, say whether an
 honest party can still recover its balance, keys, sessions or vaults from contract state alone after the attack, with no

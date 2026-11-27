@@ -129,7 +129,10 @@ a library or a module (DELEGATECALL) must keep behaviour; say so when it does no
 ## 8. Your unit: `crypto-pqchat-tree`
 
 **Finalized 2026-11-26:** the TreeKEM build merged from `pqchat-treekem` and was fixed in the review-fix round; every path
-below is under `T/`. pqchat-core's tree layer (CLI-PQC-17, plan T6a / T6b) is still SPECIFIED: list it under "Not covered".
+below is under `T/`. **Amended 2026-11-28:** pqchat-core's tree layer (CLI-PQC-17, plan T4-T10: `clients/pqchat-core/src/tree.rs`,
+the SDK's `src/pqchat_tree.rs`, the node's `tree_set.rs`), the path-less Adds round and F-1 landed on `dev`: read them
+vertically too (invariant 9); their layer units are `app-cores`, `scaas-sdk`, `scaas-node`, `ua-rs-custody`,
+`clientkeys-vectors` and `evm-pqchat`.
 
 PqChat's TreeKEM mode (`groupMode = 1`) read vertically: the key schedule, path secrets from the seed, the tree and its hash,
 the admission of node keys, post-compromise security on removal, through clientkeys `treekem.js`, `ua-rs` `wallet/tree.rs` and
@@ -206,6 +209,15 @@ This unit leads dimension 2 for the tree; unit `evm-pqchat` audits the contract 
    the trees at 0, the pin and the head (E-3 / B2-2), keep held keys when a read lies (C-6 of the fix check), never seal a
    tree key (B2-8), and follow an `msig` member's records by the reader rule with step 6 into the pin's `msigVersions` (C-4 /
    R-1). The exits (`PqChatTreeMembers`): named within `EXIT_LAG_MAX` = 16 of the head, applied at the head (C9, E-3).
+9. **Path-less Adds and F-1, read vertically** (added 2026-11-28; the delta spec
+   `T/docs/superpowers/specs/2026-11-25-treekem-pathless-add.md` R17-R20, C41-C47; F-1, C-11 / G-4, G-3 of 2026-11-28): the
+   joiner secret of a path-less Add from the parent's `next`, `hash(adds)` and the context, the chain reset by every path
+   commit, alike in `treekem.js`, `wallet/tree.rs` and pqchat-core; what a path-less Add gives a party that did not hold the
+   parent epoch (nothing, R10) and what a removed party learns from the chain until the next path commit (PCS holds only
+   from a path commit: say where a client relies on more); the seed-derived `addNonce` and the own-record test; F-1's
+   compromise warning and the fail-closed drop in every implementation; `pathRefreshBound` / `sincePath` as the contract
+   keeps them against the clients' warning `W(N)`; G-3 (one wrong-tag record stalls unanchored joiners until the next path
+   commit) is accepted as built: report only a worse consequence.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `T/docs/research/security-review-record.md` (index of every review, and what no review covered)
@@ -224,8 +236,14 @@ This unit leads dimension 2 for the tree; unit `evm-pqchat` audits the contract 
 - `T/docs/research/zether-msm-crypto-review.md`, `T/docs/research/pqz-specialised-verifier.md` §7,
   `docs/reviews/specs/2026-10-13-pqz-sv-review.md` in the main checkout (git-ignored, local), the Fable crypto reviews named in
   `T/docs/research/security-review-record.md`
+- added 2026-11-28 (local, `STATUS.md` in each): `scratchpad/treekem-t4-t9-review-20261126-1808/`,
+  `scratchpad/treekem-t4-t9-recheck-20261126-2332/`, `scratchpad/treekem-pathless-spec-review-20261125-2241/`,
+  `scratchpad/treekem-pathless-review-20261127-1527/`, `scratchpad/treekem-f1/`
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
+- added 2026-11-28: `T/runs/2026-11-27-treekem-pathless-combined-summary.txt`, `-matrix-summary.txt`, `-nethermind-rows.txt`,
+  the path-less mutant records `-p3-` to `-p9-`, `-trace-`; `T/runs/2026-11-28-treekem-f1-f1-mutants.txt`;
+  `T/runs/2026-11-27-pqchat-treekem-js-resume-mutants.txt`, `-split-mutants.txt`
 - `T/smartcontracts/evm/runs/2026-11-18-prefreeze-matrix-summary.txt`, `2026-11-19-pr-a-matrix-summary.txt`, and the tag's own
   closing matrix (every forge directory at the default set, the set-sensitive tests at the other three sets, node and e2e,
   clients, vectors)

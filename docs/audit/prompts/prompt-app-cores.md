@@ -1,7 +1,8 @@
 # AI audit prompt, unit `app-cores` (DRAFT, 2026-11-22)
 
-**Final (2026-11-24) except pqchat-core's TreeKEM layer and the biometric unlock, still FRAME (section 8).** Both crates' file
-lists are final.
+**Final (2026-11-24); amended 2026-11-28: pqchat-core's TreeKEM layer and pqvault-core's sign-after-confirm landed on `dev`;
+pqchat-core's sign-after-confirm is PENDING LANDING (branch `pqchat-core-confirm`); FRAME only for the biometric unlock
+(section 8).**
 
 Contracts audit at the pre-freeze target (owner rulings 2026-11-12: pre-freeze -> audit -> audit fixes -> freeze). This file is
 self-contained: run it as it is, with any tool (Codex, agy, a Claude workflow, Fable, ...). Placeholders the controller fills
@@ -128,12 +129,17 @@ through the padding or the Arweave path.
 ## 8. Your unit: `app-cores`
 
 **Finalized 2026-11-24 against `origin/ua-rs-sign`:** both crates are built there (`pqchat-core` T1-T12 with review rounds
-2 and 3, `pqvault-core` V10), and the pre-freeze tag carries them. **Still FRAME (not built at the time of writing):**
-`pqchat-core`'s TreeKEM layer (CLI-PQC-17: tree epoch keys from replay, the committer's path secrets from the KEM seed; it
-lands with the TreeKEM build, branch `pqchat-treekem`; until then read only what `T/` holds and list it under "Not covered"),
-and the biometric unlock of invariant (h) (scaas-app, after the pre-freeze tag, TODO 8b-3: audit only what a core already
+2 and 3, `pqvault-core` V10), and the pre-freeze tag carries them. **Still FRAME:** the biometric unlock of invariant (h) (scaas-app, after the pre-freeze tag, TODO 8b-3: audit only what a core already
 claims). The component doc `T/docs/clients/pqchat-core.md` still tags most sections **SPECIFIED** although the code is built:
 a status tag that disagrees with the code is a dimension 1 finding.
+
+**Amendment 2026-11-28** (controller call under the owner's auto-run grant of 2026-11-25; the owner may veto). (1)
+`pqchat-core`'s TreeKEM layer (CLI-PQC-17), FRAME until now, landed on `dev` with the TreeKEM client round (plan T4-T10),
+the path-less Adds round and F-1: audit it in full (invariant l). (2) `pqvault-core`'s sign-after-confirm and redacting
+item layer (CLI-SDK-36, CLI-PQV-16 H1-H3, CLI-PQV-17, CLI-PQV-18) landed on `dev` (invariant m). (3) `pqchat-core`'s
+sign-after-confirm, relayed topic writes, window sorts and pinned `contentHash` (CLI-PQC-18, CLI-PQC-21) are **PENDING
+LANDING** on branch `pqchat-core-confirm` (invariant n): the round's commit pin is set at the tag; if the branch did not
+land in it, invariant n is not run and is listed under "Not covered".
 
 The two client cores: `pqchat-core` (the PqChat client: sessions, epochs, ratchet, envelopes, the Matrix and chain message
 stores, topics, recovery) and `pqvault-core` (the PqVault client: vaults, epochs, the passphrase, items, versions and merge,
@@ -155,6 +161,16 @@ sharing, migration).
   `runs/pqc_mutants.py`, the mutant records `runs/2026-11-17-pqchat-core-t1-mutants.txt` to `-t12-`, `-r2-`, `-r3-`,
   `-e2e-`, `-sigs-mutants.txt`, the summary `runs/2026-11-17-pqchat-core-summary.txt`; `Cargo.toml`, `Cargo.lock`, `deny.toml`,
   `.cargo/audit.toml`
+- `clients/pqchat-core/` additions (2026-11-28): `src/tree.rs` (the TreeKEM layer: replay, the walk, path and path-less
+  commits, `tree_commit_plan`, the batch split, the exits; landed), `tests/tree_scenarios.rs` and the tree tests (landed);
+  **PENDING LANDING (`pqchat-core-confirm`):** `src/confirm.rs` (`Prepared<W>`, `review()`, `quote()`, `confirm`), the
+  changes to `src/session.rs`, `src/topics.rs` (relayed topic writes, the window sorts, the pinned `contentHash` check in
+  `resolve_ref`), `src/tree.rs`, `src/net.rs`, `src/matrix.rs`, `src/error.rs`, the mutant record
+  `runs/2026-11-28-pqchat-core-confirm-mutants.txt`
+- `clients/pqvault-core/` additions (landed 2026-11-27): `src/item.rs` (the redacting item layer: `Item`, `Field`, the
+  secret table `item::TABLE`, `Item::check`, the merge by canonical JSON, the 64-secret and 16,384 B bounds),
+  `src/vault.rs` `Prepared`, `confirm`, `Confirmed`, `Confirmed::within_review`, `prepare_signed`; tests
+  `tests/devices.rs`; `runs/2026-11-27-pqvault-ui-rules-summary.txt` and its mutant records (`-mutants.txt`, `-r2-`, `-r3-`)
 - `clients/pqvault-core/` (finalized 2026-11-22, branch `pqvault-core`): `src/lib.rs` (the `Net` seam over the SDK, `SdkNet`,
   `Error`, P1 `PqVault::p1`, `entry`'s JSON ABI items), `src/records.rs` (records, typed JSON of both domains, ids, scopes,
   `wrap_hash`, `item_aad`, `sig_hash`, `sig_of`'s bounded decode), `src/keys.rs` (the key schedule on handles: wrap, unwrap,
@@ -254,6 +270,28 @@ k. **The review-fix round's reader rules** (added 2026-11-26; CLI-PQC-15 and the
    `epoch_agrees`: oldest first, no `msig` version below the highest seen; C-3 / R-2, `tests/exits.rs`); the leave and remove
    builders checked at the head with the lag and the named epoch's lists (D2-4, C-5), refused by the new code `ExitLag` (29
    codes).
+l. **The TreeKEM layer** (added 2026-11-28; CLI-PQC-17, CTR-CHAT-26 / -27 and their Changes of 2026-11-26 to -28; the
+   path-less delta spec `T/docs/superpowers/specs/2026-11-25-treekem-pathless-add.md` R17-R20, C45-C47; F-1 of 2026-11-28):
+   tree epoch keys only from a verified replay (the registry's records for every KEM key a path secret goes to, epochs from
+   verified data, `joinEpoch` from the walk, served counts bounded); a path-less Add never sent while the device's own path
+   commit is staged on the head (F-5); a path-less record of the device's own `(ua, keyId)` with a reproduced nonce and a
+   foreign tag is the compromise warning (R10), after which the device takes no key and drops the chain until the next path
+   commit reaches it (F-1, C-11 / G-4); a batch of Adds over the per-transaction cap split, never refused (the owner's
+   ruling of 2026-11-27); the admins' warning when a path commit is due (R18).
+m. **pqvault-core: sign after confirm and the item layer** (added 2026-11-28; CLI-SDK-36, CLI-PQV-16 H1-H3, -17, -18):
+   nothing signed before `confirm`; a `Prepared` read-only, keyless, and what `confirm` signs is what `review` / `quote`
+   showed; `confirm` returns the signed record whatever the call did, and `prepare_signed` re-sends it with no second
+   signature; `Confirmed::within_review` sends on the first confirm only with the same payer and a `max_cost` at most the
+   reviewed one, every other case asks a second confirm (CLI-PQV-18). The item layer: every field typed by `item::TABLE`,
+   a secret only as `SecretBytes` (history included), unknown fields and `null`s written back byte for byte, the merge by
+   canonical JSON that never un-hides, at most 64 secrets per item, the canonical JSON in a 16,384 B zeroizing buffer that
+   never reallocates, `Debug` printing counts only; `items.json`'s plaintexts read and written back byte for byte.
+n. **PENDING LANDING (`pqchat-core-confirm`): pqchat-core: sign after confirm** (CLI-PQC-21, CLI-PQC-18, CLI-SDK-36):
+   `create`, `rekey`, `leave`, `remove`, `create_tree`, `tree_commit` (path and path-less), `tree_leave`, `tree_remove` and
+   the six topic writes return `Prepared<W>`, nothing signed before `confirm`; a topic write relayed by default through the
+   node's door A (NODE-GW-09) with fee 0 allowed; feeds ranked over a window by one deterministic arithmetic; a `ref`'s
+   pinned `contentHash` rebuilt from the version's nonce (CTR-CHAT-31) and checked, `HashUnchecked` only where the view
+   cannot give it.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - the pqchat-core spec's §14 (Fable, 2026-11-17) and the PqVault spec's §16-§17 (reviews r1 / r2)
@@ -266,6 +304,11 @@ k. **The review-fix round's reader rules** (added 2026-11-26; CLI-PQC-15 and the
   mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
   `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
   `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
+- added 2026-11-28 (local, `STATUS.md` in each): the TreeKEM client round's review
+  `scratchpad/treekem-t4-t9-review-20261126-1808/` and re-check `scratchpad/treekem-t4-t9-recheck-20261126-2332/`; the
+  path-less review `scratchpad/treekem-pathless-review-20261127-1527/` and the F-1 notes `scratchpad/treekem-f1/`; the PqVault
+  UI rules review `scratchpad/pqvault-ui-rules-review-20261127-1556/` and re-check
+  `scratchpad/pqvault-ui-rules-recheck-20261127-1918/`; pending landing: `scratchpad/pqchat-core-confirm-review-20261128-0133/`
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - the cores' gate summaries under `T/clients/pqchat-core/runs/` and `T/clients/pqvault-core/runs/` (mutants included:
@@ -275,6 +318,10 @@ k. **The review-fix round's reader rules** (added 2026-11-26; CLI-PQC-15 and the
 - the review-fix round's client rows: `T/clients/runs/2026-11-25-review-fix-client-summary.txt`,
   `2026-11-26-review-fix3-client-summary.txt`, `2026-11-26-review-fix4-client-summary.txt` (with their `-mutants.py`
   runners), and the round's closing matrix (`T/smartcontracts/evm/runs/2026-11-26-round-matrix.sh` and its summary)
+- added 2026-11-28: `T/clients/pqvault-core/runs/2026-11-27-pqvault-ui-rules-summary.txt` and its mutant records;
+  `T/runs/2026-11-27-treekem-pathless-combined-summary.txt`, `-matrix-summary.txt`, the path-less mutant records `-p3-` to
+  `-p9-`, `-trace-`, `T/runs/2026-11-27-pqchat-treekem-split-mutants.txt`, `T/runs/2026-11-28-treekem-f1-f1-mutants.txt`;
+  pending landing: `T/clients/pqchat-core/runs/2026-11-28-pqchat-core-confirm-mutants.txt`
 
 **Also accepted for this unit (do not report):**
 - What the specs leave for later rounds: groups beyond what CLI-PQC-02 scopes, attachments in the app's first version
@@ -288,7 +335,7 @@ number (section 9).
 
 | # | Dimension | What to hunt in this unit |
 |---|---|---|
-| 1 | Conformance | CLI-PQC-01 to -17, CLI-PQV-01 to -15, CLI-SDK-19 to -21, the PqVault owner rulings O1-O9 and the PqChat state-only recovery ruling against `clients/pqchat-core/` and `clients/pqvault-core/` (the TreeKEM layer FRAME, section 8); the doc status tags against the built code; the reader rules of invariant k. |
+| 1 | Conformance | CLI-PQC-01 to -17, CLI-PQV-01 to -18, CLI-SDK-19 to -21, CLI-SDK-36 (CLI-PQC-18 and -21 pending landing), the PqVault owner rulings O1-O9 and the PqChat state-only recovery ruling against `clients/pqchat-core/` and `clients/pqvault-core/` (the TreeKEM layer in scope since 2026-11-28, invariant l); the doc status tags against the built code; the reader rules of invariant k. |
 | 2 | Cryptography | The key schedules on handles (pqvault-core `keys.rs`: wrap, unwrap, `pass_key`, `vault_key`, `seal_info`, `encrypt_item`; pqchat-core's epoch, chain and message keys through the SDK); HKDF info binding `vaultId`, `epochId`, `passKdf`; Argon2id parameters and RFC 8265 normalisation (invariant g); the ratchet rules (invariant b); padding inside the AEAD. |
 | 3 | Security | Records signed only through the SDK's typed entries (no blind signing, invariant a); a removed or departed member reads no later epoch; biometric unlock bound to one device (invariant h); a shared vault's passphrase equal to a personal one refused. |
 | 4 | Rules that do not bend | No decryption oracle (invariant e); every read that feeds a decryption or chooses a key `FeedsDecryption` (invariant d); state-only recovery (invariant f); no ciphertext kept only off chain. |

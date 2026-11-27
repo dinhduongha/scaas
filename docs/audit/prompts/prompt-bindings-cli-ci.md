@@ -185,6 +185,13 @@ h. **The vendored sources** (added 2026-11-26; ARCH-POS-24): `scripts/vendor.sh 
    that builds `ua-rs` or a crate over it, and no job builds from an unchecked tree; the wasm32 Falcon gate still runs by hand
    (FR-4, open: report it only where a doc claims CI runs it). `scripts/mutant_guard.py` (ARCH-POS-23): a deadline per
    mutant, the restore on every exit, a dirty target refused.
+i. **The new crates in CI and the supply chain** (added 2026-11-28): `clients/scaas-matrix/` and `clients/pqchat-transport/`
+   (landed): their CI jobs and `ci_changes.py` paths, `cargo deny` / `cargo audit` over matrix-sdk's tree, the format and
+   temp-path checks; **PENDING LANDING:** `clients/scaas-profile/` (branch `user-profiles`) and `clients/scaas-tui/` (branch
+   `scaas-tui`): their CI jobs, `ci_changes.py` and `format.sh` rows, `scripts/check_test_features.py`'s refusal of the
+   test-only features (`test-hooks`, `dev-profiles`) in a release build; `clients/scaas-cli/src/calls.rs`'s topic calls
+   (branch `pqchat-core-confirm`): built from named fields, signed only after the review, sent to door A as NODE-GW-09
+   takes them. The crates themselves are units `scaas-matrix`, `scaas-profile`, `scaas-tui`.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `scratchpad/review-t21/` (part 5, the boundary and wrappers), `scratchpad/sdk-binding-review/`, `scratchpad/pr-a-review/`

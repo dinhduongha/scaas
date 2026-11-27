@@ -198,6 +198,19 @@ g. **The review-fix round's seams** (added 2026-11-26): the `msig` version tag (
    contract and the node alike (A-5); the group kinds 0x0110-0x0113 judged alike by Solidity, `ua-rs` `groups.rs` and
    clientkeys `ua-group.js` on `vectors/ua/groups.json`; Falcon keys and signatures equal natively and on wasm32
    (CLI-UAL-66).
+h. **The seams added 2026-11-28** (layer units `evm-pqchat`, `ua-rs-custody`, `clientkeys-vectors`, `scaas-node`,
+   `scaas-sdk`, `app-cores`, `scaas-matrix`, `scaas-profile`, `scaas-tui`): the path-less commit (`pathless`, `confirmTag`,
+   `pathRefreshBound`, `sincePath`) built, signed, guarded and accepted alike by pqchat-core, the SDK's `pqchat_tree.rs`,
+   `ua-rs`, clientkeys, the node's whole-set guard and `PqChatTree`; F-1's warning alike in `ua-rs` and clientkeys on the
+   `pathless-faults` rows; G1 / G2 / G5's views (`postedAt`, `editedAt`, `entryRows`, the version nonce) decoded alike by
+   pqchat-core and the SDK; `quote_app_call`'s review equal to what `confirm` then signs (pqvault-core; pqchat-core and
+   `relay_app_call` pending landing on `pqchat-core-confirm`); `pqchat-transport`'s event type and bound equal in
+   `scaas-matrix` and pqchat-core. **Pending landing:** NODE-GW-09's six topic entries equal to the contract's and to what
+   pqchat-core and `scaas-cli` send (`pqchat-core-confirm`); the profile rows (`vectors/profile/`) read alike by `ua-rs`,
+   clientkeys and `scaas-profile`, and the Matrix store key handed from the profile to `scaas-matrix` (`user-profiles`);
+   the review lines the SDK makes against what `scaas-tui` draws (`scaas-tui`); ARCH-POS-29 swept over every contract under
+   `T/smartcontracts/evm/src/`: none routes a call by `fallback()`, every callable entry is declared in its own ABI
+   (`pqchat-no-fallback`; `PqChat` itself is unit `evm-pqchat`'s).
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `T/docs/research/security-review-record.md` (index of every review, and what no review covered)

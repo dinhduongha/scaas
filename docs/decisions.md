@@ -324,7 +324,7 @@ Change (2026-11-12, branch `ua-mtx-fix2-node`, Fable recheck R-6 and recheck 2 P
 | Round | Scope | Reviewers (as run) | Target | Status |
 |---|---|---|---|---|
 | Core review 2026-10-25 | `pqz-core`: part 0 (design) to part 4 (transcript and code) (`pqz-core/research/code-review-2026-10-25/`) | Codex, agy, Claude workflow; Fable on part 0 | `008e196c` | done; the part-0 fixes a + b merged. Files changed since `008e196c` are `UNAUDITED` |
-| Pre-freeze AI audit (was: Contracts audit (EVM)) | the 32 units of [audit/](audit/README.md) on the pre-freeze tag, before the freeze (owner 2026-11-12): EVM contracts, `pqz-core`, the Nethermind precompiles, `ua-rs`, the node, the SDK, the app cores, the bindings, CLI and CI, and the cross-cutting units | Fable, Codex, agy, Claude workflow | `<TAG>` | PLANNED |
+| Pre-freeze AI audit (was: Contracts audit (EVM)) | the 35 units of [audit/](audit/README.md) on the pre-freeze tag, before the freeze (owner 2026-11-12): EVM contracts, `pqz-core`, the Nethermind precompiles, `ua-rs`, the node, the SDK, the app cores, the Matrix client, the user profiles' store, the TUI, the bindings, CLI and CI, and the cross-cutting units | Fable, Codex, agy, Claude workflow | `<TAG>` | PLANNED |
 | `ua-rs-sign` T21 | `clients/ua-rs`, `ua-c` and the bindings, at audit grade | Codex, agy, Claude lenses, Fable | the pushed SHA | PLANNED |
 
 **Why.** Owner 2026-11-02: an AI audit is better than a human one; a label tied to a round and a commit cannot claim more than was reviewed.
