@@ -544,10 +544,30 @@ fn target_key(tree: &Tree, parent_epoch: u64, x: u32, k: TargetKey) -> Result<Ve
 
 /// The head's handle (the path-less delta §4.1 lifetime, §6.5): the epoch's id and tree hash, and its `next` secret, held
 /// only here and only while this epoch is the device's head: a replay keeps one, of the last epoch it holds.
+/// Its fields are this module's: a caller cannot pair a `next` with another head's ids (fable-C-6), and `next` is a handle of
+/// its own origin that no export, wrap or derivation takes (fable-C-1 = F-3 of the path-less review).
 pub struct TreeHead {
-    pub epoch_id: [u8; 32],
-    pub tree_hash: [u8; 32],
-    pub next: KeyHandle,
+    pub(crate) epoch_id: [u8; 32],
+    pub(crate) tree_hash: [u8; 32],
+    pub(crate) next: KeyHandle,
+}
+
+impl TreeHead {
+    /// The head epoch's id.
+    pub fn epoch_id(&self) -> [u8; 32] {
+        self.epoch_id
+    }
+
+    /// The head epoch's tree hash.
+    pub fn tree_hash(&self) -> [u8; 32] {
+        self.tree_hash
+    }
+
+    /// The `next` handle, for the vectors' reveal only.
+    #[cfg(feature = "vectors")]
+    pub fn next(&self) -> &KeyHandle {
+        &self.next
+    }
 }
 
 /// A built commit: the record (unsigned, in the type's field order), its pieces, the tree after it, `K_e` and the new head.
@@ -638,6 +658,11 @@ impl AppKeys {
         info: &[u8],
         rand: Rand,
     ) -> Result<Genesis> {
+        // C41: a bound above 510 is a record the contract refuses (`PqChatShape`): nothing is built or signed (fable-E-3 = C-5
+        // of the path-less review)
+        if u32j(session, "pathRefreshBound").unwrap_or(0) > PATH_REFRESH_BOUND_MAX {
+            return refuse(TreeError::Shape);
+        }
         let f = EpochFields::genesis(sc, session)?;
         let members = list(session, "members", |m| {
             Ok((b32j(m, "ua")?, u64j(m, "keyId")?))
@@ -866,7 +891,7 @@ impl AppKeys {
         Ok(TreeHead {
             epoch_id,
             tree_hash,
-            next: self.make(next, KeyUsage::Derive, Origin::Derived, None)?,
+            next: self.make(next, KeyUsage::Derive, Origin::TreeNext, None)?,
         })
     }
 
@@ -1207,8 +1232,8 @@ impl AppKeys {
     }
 
     /// The typed operation of a path-less Add (the path-less delta §6.5; one operation per kind): [`PathlessInput`] on the
-    /// device's handle of the head (`TreeHandle` for another), the nonce `addNonce` at `try_` (C47: the lowest whose record
-    /// is not in state for this parent and these Adds; `TreeAddNonce` from [`ADD_NONCE_TRIES`] on), built here, then prepared
+    /// device's handle of the head (`TreeHandle` for another), the nonce `addNonce` at `try_` (C47: the caller's counter per
+    /// head, the delta §4.1 as amended 2026-11-27; `TreeAddNonce` from [`ADD_NONCE_TRIES`] on), built here, then prepared
     /// for the author's signature with its review (§6.4: "adds without refreshing the group's keys; n of N since the last
     /// refresh"). The new handle is [`BuiltCommit::head`]. Randomness from the OS.
     pub fn tree_prepare_pathless(
@@ -2261,6 +2286,8 @@ pub struct Replay {
     /// the walk's `sincePath` at the head and whether this device is warned (R18, C46: an admin at `sincePath ≥ W(N)`)
     pub since_path: u32,
     pub path_warning: bool,
+    /// the head's admin list (sorted), from the walk: also on a resume that finds no new epoch (fable-D-3)
+    pub head_admins: Vec<[u8; 32]>,
     /// the node keys the device holds after the range (its leaf's key is its own, not here)
     pub held: BTreeMap<u32, KemKeyPair>,
     /// the head's handle with its `next` (the path-less delta §4.1), when the device holds the head's epoch; whether it is
@@ -2282,13 +2309,16 @@ pub struct Replay {
 impl Replay {
     /// A resume's replay takes `from`'s node keys it keeps on (all but the nodes its commits replaced) once the caller keeps
     /// it (D-5, U-a of the T4-T9 re-check: after the caller's last step that can fail, so a refusal, a missed read or a
-    /// failed store write leaves `from` whole); `from` is consumed. Nothing for a replay that was not resumed.
+    /// failed store write leaves `from` whole); `from` is consumed, its head's `next` dropped. Nothing for a replay that was
+    /// not resumed.
     pub fn adopt(&mut self, from: &mut Replay) {
         if let Some(replaced) = self.replaced.take() {
             let mut held = std::mem::take(&mut from.held);
             held.retain(|x, _| !replaced.contains(x));
             held.append(&mut self.held);
             self.held = held;
+            // the old head's `next` ends with its replay (the delta §4.1 lifetime; fable-F-2 = C-4 of the path-less review)
+            from.head = None;
             from.consumed = true;
         }
     }
@@ -2602,8 +2632,32 @@ impl AppKeys {
                 .is_some_and(|l| l.ua == x.ua && l.key_id == x.key_id && l.kem_hash == x.kem_hash)
         };
         let mut epochs = Vec::new();
-        let mut warnings = Vec::new();
-        let mut suspects = Vec::new();
+        // a resume carries `from`'s warnings and C45 states (the leaves under review, F-3), their leaves left recomputed at the
+        // new head: one poll past such an epoch must not drop them (fable-C-2 = G-1 of the path-less review)
+        let left = |adds: &[(u32, [u8; 32], u64)]| -> Vec<u32> {
+            adds.iter()
+                .filter(|(l, u, k)| top.leaf(*l).is_some_and(|x| x.ua == *u && x.key_id == *k))
+                .map(|(l, _, _)| *l)
+                .collect()
+        };
+        let mut warnings: Vec<Warning> = from.map_or_else(Vec::new, |f| {
+            f.warnings
+                .iter()
+                .map(|w| Warning {
+                    leaves_left: left(&w.adds),
+                    ..w.clone()
+                })
+                .collect()
+        });
+        let mut suspects: Vec<Suspect> = from.map_or_else(Vec::new, |f| {
+            f.suspects
+                .iter()
+                .map(|x| Suspect {
+                    leaves_left: left(&x.adds),
+                    ..x.clone()
+                })
+                .collect()
+        });
         for p in plan {
             let n = p.n;
             let c = a.rec(n)?.clone();
@@ -2742,7 +2796,8 @@ impl AppKeys {
             .chain(suspects.iter().flat_map(|s| s.leaves_left.iter()))
             .copied()
             .collect();
-        let is_admin = a.admins_at(head)?.contains(&dev.ua);
+        let head_admins = a.admins_at(head)?;
+        let is_admin = head_admins.contains(&dev.ua);
         let path_warning =
             is_admin && end_epoch.is_none() && top.since_path >= warn_at(top.path_bound);
         let (since_path, top_hash) = (top.since_path, top.tree_hash());
@@ -2764,6 +2819,7 @@ impl AppKeys {
             review: review.into_iter().collect(),
             since_path,
             path_warning,
+            head_admins,
             held: own,
             head: head_handle,
             anchored,

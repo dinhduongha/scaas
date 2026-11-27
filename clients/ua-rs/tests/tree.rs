@@ -142,6 +142,97 @@ fn tree_leaf_bound_512() {
     assert_eq!(back.tree.leaves, 512);
 }
 
+/// fable-C-9 of the path-less review: a tree JSON without `sincePath` or `pathBound` is refused, never read as 0 (the
+/// control: the cold tree's own JSON reads back).
+#[test]
+fn tree_json_needs_its_counter() {
+    let mut ua = [0u8; 32];
+    ua[31] = 1;
+    let t = Tree::cold_with(
+        &[Leaf {
+            ua,
+            key_id: 1,
+            kem_hash: keccak256(&ua),
+        }],
+        5,
+    )
+    .unwrap();
+    let j = t.to_json();
+    assert_eq!(Tree::vectors_from_json(&j).unwrap().to_json(), j, "control");
+    for f in ["sincePath", "pathBound"] {
+        let mut k = j.clone();
+        k.as_object_mut().unwrap().remove(f);
+        assert!(Tree::vectors_from_json(&k).is_err(), "{f} missing");
+    }
+}
+
+/// fable-E-4 of the path-less review: the two path-less refusals by name in the public walk. On a cold tree of 3 leaves with
+/// bound 2: two path-less Adds accepted (the control), three `PqChatTreePathBound`; a path-less record with a Remove, or
+/// with an admin list other than the head's, `PqChatTreePathRequired` (the head's list accepted).
+#[test]
+fn tree_pathless_refusals_by_name() {
+    let leaf = |i: u32| {
+        let mut ua = [0u8; 32];
+        ua[28..].copy_from_slice(&(i + 1).to_be_bytes());
+        Leaf {
+            ua,
+            key_id: 1,
+            kem_hash: keccak256(&ua),
+        }
+    };
+    let three: Vec<Leaf> = (0..3).map(leaf).collect();
+    let t = Tree::cold_with(&three, 2).unwrap();
+    let adds = |n: u32| -> Vec<Add> {
+        (0..n)
+            .map(|i| {
+                let l = leaf(100 + i);
+                Add {
+                    leaf: 3 + i,
+                    ua: l.ua,
+                    key_id: 1,
+                    via: ZERO,
+                    kem_hash: l.kem_hash,
+                }
+            })
+            .collect()
+    };
+    let by = |removes: Vec<Remove>, adds: Vec<Add>| Changes {
+        author: three[0].ua,
+        leaf: 0,
+        key_id: 1,
+        removes,
+        adds,
+        pathless: true,
+    };
+    assert_eq!(code(t.apply_commit(&by(vec![], adds(2)), &[])), "accepted");
+    assert_eq!(
+        code(t.apply_commit(&by(vec![], adds(3)), &[])),
+        "PqChatTreePathBound"
+    );
+    let head = vec![three[0].ua];
+    let c = by(vec![], adds(1));
+    let after = t.apply_commit(&c, &[]).unwrap().tree;
+    assert_eq!(code(t.judge_commit(&after, &c, &head, &head)), "accepted");
+    let other = vec![three[0].ua, three[1].ua];
+    assert_eq!(
+        code(t.judge_commit(&after, &c, &other, &head)),
+        "PqChatTreePathRequired"
+    );
+    let rm = by(
+        vec![Remove {
+            leaf: 2,
+            ua: three[2].ua,
+            key_id: 1,
+        }],
+        adds(1),
+    );
+    let after = t.apply_commit(&rm, &[]).unwrap().tree;
+    assert_eq!(
+        code(t.judge_commit(&after, &rm, &head, &head)),
+        "PqChatTreePathRequired"
+    );
+}
+
 // ------------------------------------------------------------------ tree.json
 
 #[test]
@@ -1371,8 +1462,8 @@ fn replay_row(keys: &AppKeys, world: &World, home: &mut Home, tag: &str, dev: &s
         "{at} pathWarning"
     );
     let head = r.head.as_ref().map(|h| {
-        json!({"epochId": hx(&h.epoch_id), "treeHash": hx(&h.tree_hash),
-            "next": hx(&keys.vectors_reveal(&h.next).unwrap())})
+        json!({"epochId": hx(&h.epoch_id()), "treeHash": hx(&h.tree_hash()),
+            "next": hx(&keys.vectors_reveal(h.next()).unwrap())})
     });
     assert_eq!(json!(head), want["head"], "{at} head");
     assert_eq!(json!(home.log), want["reads"], "{at} reads");
@@ -2843,6 +2934,42 @@ fn tree_key_never_sealed() {
     assert_eq!(o.keys.seal_key(&under, &drawn, b"").unwrap().len(), 60);
 }
 
+/// The path-less delta §4.1 (fable-C-1 = F-3 of the path-less review): the head's `next` never leaves `ua-rs`: sealed,
+/// KEM-wrapped, derived from or MACed it is refused; a drawn `Derive` key derives (the control).
+#[test]
+fn tree_next_never_leaves() {
+    let o = Own::new();
+    let mut h = o.home();
+    let r = o.replay(&mut h, 1);
+    let hd = r.head.as_ref().expect("the head's handle");
+    let under = o.keys.random_key(KeyUsage::KeyWrap).unwrap();
+    assert_eq!(code(o.keys.seal_key(&under, hd.next(), b"")), "Argument");
+    assert_eq!(
+        code(
+            o.keys
+                .kem_wrap(hd.next(), b"l", b"", &[0u8; 1600])
+                .map(|_| ())
+        ),
+        "Argument"
+    );
+    assert_eq!(
+        code(
+            o.keys
+                .derive(&[hd.next()], b"", b"x", KeyUsage::Data, false)
+        ),
+        "AppKeyUsage"
+    );
+    assert_eq!(
+        code(o.keys.mac_derive(hd.next(), b"x", KeyUsage::Data)),
+        "AppKeyUsage"
+    );
+    let d = o.keys.random_key(KeyUsage::Derive).unwrap();
+    assert!(o
+        .keys
+        .derive(&[&d], b"", b"x", KeyUsage::Data, false)
+        .is_ok());
+}
+
 /// E-3, B2-2: a replay resumed from the device's previous one walks from its pin and opens only the epochs after it, with the
 /// same K and info as a full replay; the walk keeps the trees at its start and at the head only (never one per epoch).
 #[test]
@@ -3075,7 +3202,7 @@ fn tree_pathless_handle_of_another_parent() {
         .unwrap()
         .unwrap();
     let hd = now.head.as_ref().expect("the head's handle");
-    assert_eq!(hd.epoch_id, prep.parent_epoch_id());
+    assert_eq!(hd.epoch_id(), prep.parent_epoch_id());
     assert!(keys
         .vectors_tree_prepare_pathless(SC, input(&prep), hd, 0, None, &mut rand)
         .is_ok());
@@ -3125,15 +3252,30 @@ fn tree_genesis_tag_decides() {
 fn tree_session_bound_above_the_cap_is_a_lie() {
     let o = Own::new();
     for (bound, ok) in [(510u32, true), (511, false)] {
-        let session = json!({"creator": hx(&o.ua(0)), "nonce": 1, "homeChain": hx(&[7; 32]),
+        let session = |b: u32| {
+            json!({"creator": hx(&o.ua(0)), "nonce": 1, "homeChain": hx(&[7; 32]),
             "homeChatContract": hx(&[0xc4; 20]), "admins": [hx(&o.ua(0))],
             "members": (0..3).map(|i| json!({"ua": hx(&o.ua(i)), "keyId": 1, "via": hx(&ZERO)})).collect::<Vec<_>>(),
-            "groupMode": 1, "pathRefreshBound": bound});
+            "groupMode": 1, "pathRefreshBound": b})
+        };
         let kems: Vec<KemRecord> = (0..3).map(|i| o.record(i)).collect();
-        let g = o
+        // fable-E-3 = C-5: a creation above the cap is refused before anything is built; the lying record is the 510 one
+        // with its bound changed after the build
+        if !ok {
+            assert_eq!(
+                code(
+                    o.keys
+                        .tree_create_genesis(OWN, &session(bound), &kems, INFO_A.as_bytes())
+                        .map(|_| ())
+                ),
+                "PqChatShape"
+            );
+        }
+        let mut g = o
             .keys
-            .tree_create_genesis(OWN, &session, &kems, INFO_A.as_bytes())
+            .tree_create_genesis(OWN, &session(510), &kems, INFO_A.as_bytes())
             .unwrap();
+        g.record["pathRefreshBound"] = json!(bound);
         let sig = o.sign(0, "PqChatSession", &g.record);
         let kems = (0..4).map(|i| ((o.ua(i), 1), o.record(i))).collect();
         let ua_keys = (0..4)
@@ -3155,4 +3297,55 @@ fn tree_session_bound_above_the_cap_is_a_lie() {
             assert_eq!(code(r), "TreeReadCorrupted", "bound {bound}");
         }
     }
+}
+
+/// F-3 of the path-less delta (fable-C-2 = G-1 of the path-less review): a resume past a C45 epoch keeps the leaves under
+/// review. A's replay of `pathless-faults` up to epoch 4 holds epoch 3's C45 state; resumed to the head it names the same
+/// leaves under review and the same C45 epochs as a cold replay of the head (each leaf left recomputed there).
+#[test]
+fn tree_resume_keeps_the_leaves_under_review() {
+    let v = pq("tree-secrets");
+    let (_w, keys) = keys();
+    let world = World::new(&v);
+    let sc = v["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "pathless-faults")
+        .unwrap();
+    let mut differs = vec![];
+    let mut part = scenario(&keys, &v, &world, sc, &mut differs, Some(4));
+    // the fault steps differ from a seed's own rebuild by design (KNOWN_FAULTS)
+    let mut full = scenario(&keys, &v, &world, sc, &mut differs, None);
+    let (d, kem) = &world.devices["A"];
+    let dev = TreeDevice {
+        ua: a32(&d["ua"]),
+        key_id: u(&d["keyId"]),
+        kem,
+    };
+    let mut early = keys
+        .tree_replay(SC, &mut part, &dev, None, 0)
+        .unwrap()
+        .unwrap();
+    assert!(
+        !early.review.is_empty(),
+        "control: epoch 3's C45 state names leaves"
+    );
+    let cold = keys
+        .tree_replay(SC, &mut full, &dev, None, 0)
+        .unwrap()
+        .unwrap();
+    assert!(early.head.is_some(), "control: epoch 4's head handle");
+    let resumed = keys
+        .tree_resume(SC, &mut full, &dev, &mut early, 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(resumed.review, cold.review, "the leaves under review");
+    assert_eq!(
+        resumed.suspects.iter().map(|s| s.epoch).collect::<Vec<_>>(),
+        cold.suspects.iter().map(|s| s.epoch).collect::<Vec<_>>(),
+        "the C45 epochs"
+    );
+    // fable-F-2 = C-4: `tree_resume` adopts, and the consumed replay keeps no head's `next`
+    assert!(early.head.is_none(), "the old head's next dropped by adopt");
 }

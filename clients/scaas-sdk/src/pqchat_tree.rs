@@ -753,6 +753,8 @@ pub struct PqTreeReplay {
     pub since_path: u32,
     pub path_bound: u32,
     pub path_warning: bool,
+    /// the head's admin list, from the walk (also on a resume that finds no new epoch, fable-D-3)
+    pub head_admins: Vec<String>,
     /// whether the device holds the head's epoch (its handle with `next`, inside `scaas-ua`): a path-less Add can be built
     pub holds_head: bool,
     inner: Mutex<Replay>,
@@ -1253,6 +1255,7 @@ impl AppCore {
                 since_path: r.since_path,
                 path_bound: r.pin.tree.path_bound,
                 path_warning: r.path_warning,
+                head_admins: r.head_admins.iter().map(|a| hex(a)).collect(),
                 holds_head: r.head.is_some(),
                 leaf: r.leaf,
                 join_epoch: r.join_epoch,

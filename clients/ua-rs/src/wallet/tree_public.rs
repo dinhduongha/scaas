@@ -689,8 +689,9 @@ impl Tree {
             gone_ua: set("goneUa")?,
             gone_own_key,
             gone_key: set("goneKey")?,
-            since_path: j.get("sincePath").map_or(Ok(0), |_| u32j(j, "sincePath"))?,
-            path_bound: j.get("pathBound").map_or(Ok(0), |_| u32j(j, "pathBound"))?,
+            // always there (the path-less delta §5.3): a missing counter is no "0" (the path-less review's C-9)
+            since_path: u32j(j, "sincePath")?,
+            path_bound: u32j(j, "pathBound")?,
         })
     }
 
