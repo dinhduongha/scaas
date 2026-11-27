@@ -10,6 +10,7 @@ import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
+import {PqChatRecordLib} from "../../src/pqchat/PqChatRecordLib.sol";
 import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
 import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
 import {PqChatTreeMembers} from "../../src/pqchat/PqChatTreeMembers.sol";
@@ -96,9 +97,12 @@ contract PqChatGasTest is PqTopicsBase {
     // regular 2,324,861 -> 2,331,103; state 51,606,900 -> 51,784,380 (+116 x 1,530); asked x 1.05 56,821,257 of 60 M.
     // CTR-CHAT-30 (owner 2026-11-27, G2: the `entryRows` stub and `ENTRY_ROWS_MAX`): 33,470 -> 34,029 B; regular 2,331,103
     // -> 2,368,552; state 51,784,380 -> 52,639,650 (+559 x 1,530); asked x 1.05 57,758,612 of 60 M.
-    uint256 internal constant RUNTIME = 34_029;
-    uint256 internal constant RELEASE_REGULAR = 2_368_552;
-    uint256 internal constant RELEASE_STATE = 52_639_650;
+    // CTR-CHAT-32 (owner 2026-11-28: no `fallback`, the 13 tree views declared, the signed-record step in the linked
+    // `PqChatRecordLib`): 34,029 -> 33,605 B; regular 2,368,552 -> 2,341,506; state 52,639,650 -> 51,990,930 (-424 x 1,530);
+    // asked x 1.05 57,049,057 of 60 M.
+    uint256 internal constant RUNTIME = 33_605;
+    uint256 internal constant RELEASE_REGULAR = 2_341_506;
+    uint256 internal constant RELEASE_STATE = 51_990_930;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice:
     // 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
@@ -133,6 +137,10 @@ contract PqChatGasTest is PqTopicsBase {
     uint256 internal constant MEMBERS_RUNTIME = 14_157;
     uint256 internal constant MEMBERS_REGULAR = 953_807;
     uint256 internal constant MEMBERS_STATE = 21_843_810; // asked x 1.05 23,937,497
+    // CTR-CHAT-32 (owner 2026-11-28): the linked library `PqChatRecordLib`, first pins
+    uint256 internal constant LIB_RUNTIME = 4_918;
+    uint256 internal constant LIB_REGULAR = 348_379;
+    uint256 internal constant LIB_STATE = 7_708_140; // asked x 1.05 8,459,344
 
     function _row(string memory what, uint256 regular, uint256 state) internal {
         Vm.Gas memory g = vm.lastCallGas();
@@ -175,7 +183,8 @@ contract PqChatGasTest is PqTopicsBase {
         // 345,909 / 8,082,990 -> 346,600 / 8,131,950
         // the path-less delta P4 (C24, C41-C44: the session's `pathRefreshBound` and `confirmTag`, 64 B more of record):
         // 346,600 / 8,131,950 -> 348,009 / 8,229,870
-        _row("createSession 2 members, both wraps, index 2", 348_009, 8_229_870);
+        // CTR-CHAT-32 (owner 2026-11-28: the signed-record step by DELEGATECALL into the linked PqChatRecordLib, the entry's calldata copied): regular 348,009 -> 356,047
+        _row("createSession 2 members, both wraps, index 2", 356_047, 8_229_870);
 
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(sid, ids[1], 1, 1, sid, s.admins, s.members);
         sig = _sig(e.author, h.epoch(e));
@@ -186,7 +195,8 @@ contract PqChatGasTest is PqTopicsBase {
         // regular 371,249 -> 373,424
         // TreeKEM T3a (CTR-CHAT-27: `rekey` reads the tree namespace to refuse a tree session): regular 373,424 -> 375,895
         // E-3's replica rule (`_rights` reads the session's `home` flag): regular 375,895 -> 376,487
-        _row("rekey 2 members, plain, first epoch list entry", 376_487, 8_131_950);
+        // CTR-CHAT-32 (owner 2026-11-28: the signed-record step by DELEGATECALL into the linked PqChatRecordLib, the entry's calldata copied): regular 376,487 -> 384,774
+        _row("rekey 2 members, plain, first epoch list entry", 384_774, 8_131_950);
 
         (e, ew) = _epoch(sid, ids[0], 1, 2, e1, s.admins, s.members);
         sig = _sig(e.author, h.epoch(e));
@@ -197,21 +207,24 @@ contract PqChatGasTest is PqTopicsBase {
         // regular 371,131 -> 373,306
         // TreeKEM T3a (the tree-session read in `rekey`): regular 373,306 -> 375,633
         // E-3's replica rule (`_rights` reads the session's `home` flag): regular 375,633 -> 376,225
-        _row("rekey 2 members, plain, next epoch list entry", 376_225, 8_034_030);
+        // CTR-CHAT-32 (owner 2026-11-28: the signed-record step by DELEGATECALL into the linked PqChatRecordLib, the entry's calldata copied): regular 376,225 -> 384,303
+        _row("rekey 2 members, plain, next epoch list entry", 384_303, 8_034_030);
 
         IPqChat.PqChatMessage memory m = _msg(sid, e2, ids[1], 0, 1040); // a 1,024-B bucket + the GCM-SIV tag
         sig = _sig(m.sender, h.message(m));
         vm.prank(STRANGER);
         chat.postMessage(m, sig);
         // CTR-CHAT-23: 153,744 / 2,732,580 -> 157,767 / 3,124,260
-        _row("postMessage 2 members, 1,040 B ciphertext", 160_139, 3_124_260);
+        // CTR-CHAT-32 (owner 2026-11-28: the signed-record step by DELEGATECALL into the linked PqChatRecordLib, the entry's calldata copied): regular 160,139 -> 167,129
+        _row("postMessage 2 members, 1,040 B ciphertext", 167_129, 3_124_260);
 
         m = _msg(sid, e2, ids[1], 1, 1040);
         sig = _sig(m.sender, h.message(m));
         vm.prank(STRANGER);
         chat.postMessage(m, sig);
         // CTR-CHAT-23: 153,756 / 2,536,740 -> 157,779 / 2,928,420
-        _row("postMessage 2 members, 1,040 B ciphertext, warm list", 160_151, 2_928_420);
+        // CTR-CHAT-32 (owner 2026-11-28: the signed-record step by DELEGATECALL into the linked PqChatRecordLib, the entry's calldata copied): regular 160,151 -> 167,141
+        _row("postMessage 2 members, 1,040 B ciphertext, warm list", 167_141, 2_928_420);
 
         IPqChat.PqChatLeave memory l = IPqChat.PqChatLeave(sid, e2, ids[1], 9);
         sig = _sig(ids[1], h.leave(l));
@@ -273,7 +286,8 @@ contract PqChatGasTest is PqTopicsBase {
         // 298,235 / 5,402,430 -> 298,914 / 5,451,390
         // the path-less delta P4 (C24, C41-C44: the session's `pathRefreshBound` and `confirmTag`, 64 B more of record):
         // 298,914 / 5,451,390 -> 300,271 / 5,549,310
-        _row("createSession 2 members, one wrap", 300_271, 5_549_310);
+        // CTR-CHAT-32 (owner 2026-11-28: the signed-record step by DELEGATECALL into the linked PqChatRecordLib, the entry's calldata copied): regular 300,271 -> 307,555
+        _row("createSession 2 members, one wrap", 307_555, 5_549_310);
         IPqChat.Wrap[] memory rest = _slice(w, 1, 2);
         vm.prank(STRANGER);
         chat.addWraps(sid, 1, rest);
@@ -346,7 +360,8 @@ contract PqChatGasTest is PqTopicsBase {
         // 1,540,631 / 34,521,390 -> 1,541,381 / 34,570,350
         // the path-less delta P4 (C24, C41-C44: the session's `pathRefreshBound` and `confirmTag`, 64 B more of record):
         // 1,541,381 / 34,570,350 -> 1,542,894 / 34,668,270
-        _row("createSession 20 members, first 10 wraps", 1_542_894, 34_668_270);
+        // CTR-CHAT-32 (owner 2026-11-28: the signed-record step by DELEGATECALL into the linked PqChatRecordLib, the entry's calldata copied): regular 1,542,894 -> 1,568,121
+        _row("createSession 20 members, first 10 wraps", 1_568_121, 34_668_270);
         vm.prank(STRANGER);
         chat.addWraps(sid, 10, _slice(w, 10, 20));
         _row("addWraps 10 wraps, completing 20 members", 1_231_768, 26_990_730);
@@ -383,7 +398,8 @@ contract PqChatGasTest is PqTopicsBase {
         // regular 389,335 -> 391,869
         // TreeKEM T3a (the tree-session read in `rekey`): regular 391,869 -> 394,329
         // E-3's replica rule (`_rights`, `_complete` read the session's `home` flag): regular 394,329 -> 394,875
-        _row("rekey dropping the removed member, 2 left", 394_875, 8_034_030);
+        // CTR-CHAT-32 (owner 2026-11-28: the signed-record step by DELEGATECALL into the linked PqChatRecordLib, the entry's calldata copied): regular 394,875 -> 403,229
+        _row("rekey dropping the removed member, 2 left", 403_229, 8_034_030);
     }
 
     // ----- topics (topics spec §6) -----
@@ -492,6 +508,8 @@ contract PqChatGasTest is PqTopicsBase {
         _deployModule(
             "PqChatTreeMembers", type(PqChatTreeMembers).creationCode, MEMBERS_RUNTIME, MEMBERS_REGULAR, MEMBERS_STATE
         );
+        // the linked library, its own CREATE2 as forge's deploy sends it (the factory argument is ignored by a library)
+        _deployModule("PqChatRecordLib", type(PqChatRecordLib).creationCode, LIB_RUNTIME, LIB_REGULAR, LIB_STATE);
     }
 
     function _deployModule(string memory name, bytes memory creation, uint256 rt, uint256 pr, uint256 ps) internal {

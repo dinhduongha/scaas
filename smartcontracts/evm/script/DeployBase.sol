@@ -31,6 +31,7 @@ import {RegulatedLib} from "../src/regulated/RegulatedLib.sol";
 import {ComplianceRegistry} from "../src/regulated/ComplianceRegistry.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {PqChat} from "../src/pqchat/PqChat.sol";
+import {PqChatRecordLib} from "../src/pqchat/PqChatRecordLib.sol";
 import {IPqChat} from "../src/pqchat/IPqChat.sol";
 import {PqVault} from "../src/pqvault/PqVault.sol";
 import {IPqVault} from "../src/pqvault/IPqVault.sol";
@@ -711,9 +712,13 @@ abstract contract DeployBase is DeployBook {
         address tree = _module("PqChatTree.sol:PqChatTree", abi.encode(address(f)), 3, 0); // CTR-CHAT-26
         address views = _module("PqChatTreeViews.sol:PqChatTreeViews", abi.encode(address(f)), 3, 0); // owner 2026-11-24
         address members = _module("PqChatTreeMembers.sol:PqChatTreeMembers", abi.encode(address(f)), 3, 0); // owner 2026-11-24
+        address[] memory pqLibs = new address[](1);
+        pqLibs[0] = address(PqChatRecordLib); // CTR-CHAT-32: the release's link closure, linked by forge
+        _libRows(pqLibs);
         f.publishClassEnv(3, 0, 1, f.chainUid(), _pqchatEnv(reg, topics, tree, views, members));
         address impl = _pqchatRelease(f, abi.encode(topics, tree, views, members));
         f.setClassKindEnabled(3, 0, true, f.chainUid());
+        vm.serializeAddress("deploy", "pqchat_record_lib", address(PqChatRecordLib));
         vm.serializeAddress("deploy", "pqchat_topics", topics);
         vm.serializeAddress("deploy", "pqchat_tree", tree);
         vm.serializeAddress("deploy", "pqchat_tree_views", views);
@@ -769,7 +774,8 @@ abstract contract DeployBase is DeployBook {
         }
     }
 
-    /// @notice The class env 1 of `(3, 0)`: the registry, `params[0]` the declared code-size limit, the module in `libs`.
+    /// @notice The class env 1 of `(3, 0)`: the registry, `params[0]` the declared code-size limit; in `libs` the release's
+    ///         link closure (`PqChatRecordLib`, CTR-CHAT-32), then the body modules in `modules()` order (T66b §4.5).
     function _pqchatEnv(address reg, address topics, address tree, address views, address members)
         internal
         view
@@ -778,11 +784,13 @@ abstract contract DeployBase is DeployBook {
         e.registry = reg;
         e.params = new bytes32[](1);
         e.params[0] = bytes32(_chainCodeLimit());
-        e.libs = new address[](4);
-        (e.libs[0], e.libs[1], e.libs[2], e.libs[3]) = (topics, tree, views, members);
-        e.libCodeHashes = new bytes32[](4);
-        (e.libCodeHashes[0], e.libCodeHashes[1], e.libCodeHashes[2], e.libCodeHashes[3]) =
-        (topics.codehash, tree.codehash, views.codehash, members.codehash);
+        e.libs = new address[](5);
+        (e.libs[0], e.libs[1], e.libs[2], e.libs[3], e.libs[4]) =
+        (address(PqChatRecordLib), topics, tree, views, members);
+        e.libCodeHashes = new bytes32[](5);
+        for (uint256 i; i < 5; ++i) {
+            e.libCodeHashes[i] = e.libs[i].codehash;
+        }
     }
 
     /// @notice DEX release 1 on env 1 after its gate, with the factory's chain word (Fable recheck-2 P3-1); its release row.
