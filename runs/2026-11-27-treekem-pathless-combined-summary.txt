@@ -33,7 +33,7 @@ pqc-chain | 720b3c086 | 0 | 8 passed, 0 failed, 0 ignored (22 binaries)
 pqc-e2e | 720b3c086 | 0 | 2 passed, 0 failed, 0 ignored (1 binaries)
 pqc-test | 720b3c086 | 0 | 176 passed, 0 failed, 10 ignored (25 binaries)
 pqvault-test | 720b3c086 | 0 | 26 passed, 0 failed, 5 ignored (7 binaries)
-sdk-test | 720b3c086 | 0 | 400 passed, 0 failed, 17 ignored (36 binaries)
+sdk-test | e3582a649 | 0 | 401 passed, 0 failed, 17 ignored (36 binaries)
 sets-modules-n2048-kmax1024 | 720b3c086 | 0 | at-set.sh --clean n2048-kmax1024 modules: forge: 35 tests passed, 0 failed
 sets-modules-n2560-kmax16384 | 720b3c086 | 0 | at-set.sh --clean n2560-kmax16384 modules: forge: 35 tests passed, 0 failed
 sets-modules-n2816-kmax65536 | 720b3c086 | 0 | at-set.sh --clean n2816-kmax65536 modules: forge: 35 tests passed, 0 failed
