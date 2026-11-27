@@ -85,7 +85,12 @@ fn open_entry(e: &SeedEntry, key: &Key, bip39: Option<&SecretBytes>) -> Result<W
             }
             // a PRF unlock opens the manifest and keeps the PRF key; the other vaults open on first use (owner 2026-11-18 (b))
             let prf = matches!(unlock, scaas_ua::wallet::Unlock::Prf(_));
-            for label in e.vaults.keys().filter(|l| l.as_str() != "seed") {
+            // a key-locked vault opens by its own passphrase only (CLI-UPR-24): never by the seed's unlock
+            for label in e
+                .vaults
+                .keys()
+                .filter(|l| l.as_str() != "seed" && !l.starts_with(super::KEY_LOCKED))
+            {
                 if prf && label.as_str() != "manifest" {
                     continue;
                 }

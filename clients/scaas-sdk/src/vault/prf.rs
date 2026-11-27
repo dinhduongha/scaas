@@ -46,15 +46,20 @@ fn random32() -> Result<Vec<u8>, SdkError> {
     Ok(b)
 }
 
-/// Every vault of `e`, parsed.
-fn vaults(e: &SeedEntry) -> Result<BTreeMap<String, V1>, SdkError> {
+/// Every vault of `e` rewritten by `f`, a key-locked one kept as it is (CLI-UPR-24: the re-wrap and the PRF enable and disable
+/// skip it; only its own passphrase opens it).
+fn rewritten(
+    e: &SeedEntry,
+    f: impl Fn(&V1) -> Result<V1, SdkError>,
+) -> Result<BTreeMap<String, String>, SdkError> {
     e.vaults
         .iter()
-        .map(|(k, t)| {
-            Ok((
-                k.clone(),
-                V1::from_json(t.as_bytes()).map_err(|_| SdkError::VaultFormat)?,
-            ))
+        .map(|(k, t)| match k.starts_with(super::KEY_LOCKED) {
+            true => Ok((k.clone(), t.clone())),
+            false => {
+                let v = V1::from_json(t.as_bytes()).map_err(|_| SdkError::VaultFormat)?;
+                Ok((k.clone(), f(&v)?.to_json()))
+            }
         })
         .collect()
 }
@@ -162,10 +167,7 @@ impl Sdk {
             .heavy({
                 let f = f.clone();
                 move || {
-                    let new = vaults(&e)?
-                        .iter()
-                        .map(|(k, v)| Ok((k.clone(), f(v)?.to_json())))
-                        .collect::<Result<BTreeMap<_, _>, SdkError>>()?;
+                    let new = rewritten(&e, |v| f(v))?;
                     let mut ne = e.clone();
                     ne.vaults = new.clone();
                     // review T26 A-1: the entry as read verifies under the wallet that signs it again

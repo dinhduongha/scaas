@@ -856,8 +856,10 @@ platform or biometric unlock.
 <a id="CLI-UPR-24"></a>**CLI-UPR-24** — **The key lock: an imported key under its own passphrase, opened only by typing it, untouched
 by every seed-wide operation; what a platform unlock leaves readable is stated** (controller call; BUILT in `ua-rs` and clientkeys: the label, the `prf`
 refusal, the loops' skips, the backup and link left out, `ua-rs` `tests/wallet_vault.rs` `key_lock_*`,
-`keystore_json_key_lock_rows`, clientkeys `test/vault.test.js`, `test/keystore.test.js`; SPECIFIED: the SDK's calls (`import_key`'s
-key passphrase, `unlock_key`, `lock_key`, `lock_key_separately`, `KeyLocked`, the skips in `vault/prf.rs` and `vault/seeds.rs`), wave 2). `import_key` takes an
+`keystore_json_key_lock_rows`, clientkeys `test/vault.test.js`, `test/keystore.test.js`; BUILT in the SDK (controller call
+2026-11-28): the seed-wide loops of `vault/unlock.rs` and `vault/prf.rs` (the unlock, the passphrase re-wrap, the PRF enable and
+disable) skip it, `key_locked_vault_skipped_by_seed_wide_loops`; SPECIFIED: the SDK's calls (`import_key`'s key passphrase,
+`unlock_key`, `lock_key`, `lock_key_separately`, `KeyLocked`), wave 2). `import_key` takes an
 optional key passphrase; such a key is the vault `native-import-locked:<network>:<n>` with a pin envelope only, opened by
 `unlock_key` alone, never by the seed's unlock of any kind, a passkey, a platform secret or the profile's unlock; every seed-wide loop
 (re-wrap, PRF enable and disable, same-DEK re-seal, retained-PRF open) skips it, and a reader refuses one that carries a `prf`

@@ -700,3 +700,72 @@ fn store_codes_map_by_name() {
         assert_eq!(io(e).code(), want, "{e:?}");
     }
 }
+
+/// Review R4 (CLI-UPR-24, controller call 2026-11-28): the seed-wide loops skip a `native-import-locked:` vault, which only its
+/// own passphrase opens: keystore.json's "a seed with a key-locked import vault" unlocks by the seed's passphrase (the locked
+/// key stays unopened), changes its passphrase and turns platform unlock on, the key-locked vault's text untouched each time.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn key_locked_vault_skipped_by_seed_wide_loops() {
+    const LOCKED: &str = "native-import-locked:evm:0";
+    let v = rows();
+    let text = v["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == "a seed with a key-locked import vault")
+        .unwrap()["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let ks = Keystore::parse(text.as_bytes()).unwrap();
+    let (id, locked) = (ks.seeds[0].id.clone(), ks.seeds[0].vaults[LOCKED].clone());
+    let m = MemoryStore::new();
+    m.put_if(
+        KEYSTORE.into(),
+        None,
+        text.into_bytes(),
+        StorePolicy::default(),
+    )
+    .await
+    .unwrap();
+    let s = crate::Sdk::open(crate::SdkConfig {
+        profiles: vec![],
+        store: m.clone(),
+        authenticator: Some(Arc::new(Platform)),
+        rp_id: None,
+        runtime: crate::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: crate::Limits::default(),
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    let stored = || async {
+        let e = s.entry(&id).await.unwrap();
+        e.vaults[LOCKED].clone()
+    };
+    let vault = s.vault();
+    vault
+        .unlock(id.clone(), Unlock::Passphrase(secret(PASS)))
+        .await
+        .unwrap();
+    assert!(
+        !s.open_seed(&id).unwrap().wallet.label_open(LOCKED),
+        "the key-locked key unopened"
+    );
+    const NEW: &[u8] = b"a new seed passphrase";
+    vault
+        .change_passphrase(id.clone(), secret(PASS), secret(NEW))
+        .await
+        .unwrap();
+    assert_eq!(stored().await, locked, "the re-wrap skips it");
+    let policy = crate::platform::KeyPolicy {
+        biometry_current_set: true,
+        invalidated_by_enrollment: true,
+    };
+    vault
+        .enable_platform_unlock(id.clone(), secret(NEW), policy)
+        .await
+        .unwrap();
+    assert_eq!(stored().await, locked, "the PRF enable skips it");
+}

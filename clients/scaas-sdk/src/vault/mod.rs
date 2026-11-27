@@ -37,6 +37,9 @@ use std::sync::Arc;
 pub(crate) const KEYSTORE: &str = "keystore";
 pub(crate) const PREV: &str = "keystore.prev";
 pub(crate) const HEAD: &str = "keystore.head";
+/// A key-locked import's vault label prefix (user-profiles spec §7.4, CLI-UPR-24): only its own passphrase opens it, so every
+/// seed-wide loop skips it.
+pub(crate) const KEY_LOCKED: &str = "native-import-locked:";
 /// The anchor's size contract (spec §6.9): a keychain item.
 pub(crate) const HEAD_MAX: usize = 64;
 /// Tries of a read-modify-write before `StoreConflict` reaches the caller (spec §6.3).
