@@ -1,0 +1,6 @@
+# up9 mutants (name | outcome | commit | test | first failure line)
+the clean-up removing a directory without an envelope | killed | db2c124cd | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test lifecycle -- --exact damaged_directory_reported_never_removed | panicked at tests/lifecycle.rs:219:5:
+no root lock at migration | killed | db2c124cd | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test lifecycle -- --exact hooks::concurrent_starts_make_one_default | panicked at tests/lifecycle.rs:489:13:
+migration ignoring migration: pending on resume | killed | db2c124cd | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test lifecycle -- --exact legacy_beside_profiles_reported | panicked at tests/lifecycle.rs:323:5:
+delete without the name check | killed | db2c124cd | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test lifecycle -- --exact delete_open_profile | panicked at tests/lifecycle.rs:134:5:
+4 mutants, 4 killed, 0 survived, 0 not loaded, 0 other failure

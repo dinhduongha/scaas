@@ -116,3 +116,4 @@ UP9 | sdk-clippy | 4860f0caf + UP9 files | 0 | UPF 0 warnings; default 0 warning
 UP9 | features | 4860f0caf + UP9 files | 0 | check_test_features ok; feature_tree 5 / 5
 UP9 | fmt rust toml | 4860f0caf + UP9 files | 0 | 22 parts ok
 UP9 | docs | 4860f0caf + UP9 files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
+UP9 | mutants up9 (one at a time: run "<name>") | db2c124cd | 0 | the clean-up removing a directory without an envelope: killed (lifecycle.rs:219 the second start no longer reports it: removed); no root lock at migration: killed (:489 the migration's commit met the beside start's "default": not ok); migration ignoring migration: pending on resume: killed (:323 no ProfileDamaged, items moved into the existing default); delete without the name check: killed (:134 a wrong name deleted); record 4 mutants, 4 killed, 0 survived, 0 not loaded, 0 other failure
