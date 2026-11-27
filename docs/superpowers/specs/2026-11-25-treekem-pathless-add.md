@@ -790,10 +790,11 @@ the foreground.
 | P11 | Deploy, on the owner's word: a new `PqChat` release in the factory's catalogue on the test-only chains; the node's rows drop the old selectors, so sessions of the release deployed today are no longer relayable (test-only chains: no migration); Blockscout verification of every new module | the deploy e2e; the verification completeness check |
 
 Order: P0 → P1; P0 → P2 → P3; P2 → P4 (the vectors) → P5; P3 → P6 → P7 → P7b; P8 after P4; P8b after P5 and P7; P9 after
-P3 to P8b; P9b after P9; P10 last before merge; P11 after the merge. State 2026-11-27: P8b's node-relayed half is open, recorded for the controller's
-ruling (no harness signs a tree commit for the node: the fake-chain test `a_pathless_set_lands_on_a_fake_chain` relays a
-path-less set, `chain_tree` lands path-less Adds self-relayed on anvil and the Nethermind copy; the path-less review's
-B-1 = E-1, re-check R-2). No `pqz-core` path changes: no gate there. The code
+P3 to P8b; P9b after P9; P10 last before merge; P11 after the merge. State 2026-11-27: P8b's node-relayed half moved to scaas-tui Part B's acceptance
+(controller call 2026-11-27, not blocking the merge): its 3-PTY group acceptance test submits its tree commits, path-less
+Adds included, through the node's gateway at fee 0. Here the fake-chain test `a_pathless_set_lands_on_a_fake_chain`
+relays a path-less set and `chain_tree` lands path-less Adds self-relayed on anvil and the Nethermind copy (the path-less
+review's B-1 = E-1, re-check R-2). No `pqz-core` path changes: no gate there. The code
 stays UNAUDITED until an AI audit round covers it at its commit. Merge and push on the owner's word.
 
 ## 15. Controller calls and known limits
