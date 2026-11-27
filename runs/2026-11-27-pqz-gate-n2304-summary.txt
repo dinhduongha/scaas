@@ -1,0 +1,20 @@
+# pqz-core full gate, set n2304-kmax4096, on dev's core tree (RustCrypto next generation + chain id + vendor move)
+# gate tree n2304-kmax4096-83b9e6d9a2b31568; commit 1341dd24a (the later dev commits up to 012376dda change only .md files)
+# run 2026-11-27 02:37-05:45, resumed 07:45-09:02 (ffi/wallet re-run after clients/clientkeys/node_modules was installed)
+# full logs local and git-ignored; other sets n2048-kmax1024, n2560-kmax16384, n2816-kmax65536 stopped by the owner at
+# about 25 % (moved to the manual CI workflow pqz-gate.yml as a post-check)
+step | commit | rc | counts
+kat | 1341dd24a | 0 | 19/19 cases equal to lazer-3330e48 golden; symbol scan ok
+tbox | 1341dd24a | 0 | P6-SZ, P6-L2, P6-Z21, P6-FS lazer#28, A-2 ok
+sv | 1341dd24a | 0 | sz 32/32, l2 32/32
+ct | 1341dd24a | 0 | C (clang 18.1.3) 0 and Rust (1.97.1) 0 secret-dependent reports
+ub | 1341dd24a | 0 | ub_test PASS
+diff | 1341dd24a | 0 | portable seed 1 5604 cases + seed 2 2794, 0 mismatches, 0 prg mismatches; z21diff 470 cases, 0 disagreements, 0 prove errors
+fnv | 1341dd24a | 0 | C = Rust = wasm32 on 16 relations
+vectors | 1341dd24a | 0 | 6 parts ok; wasm replay 63 cases, 0 fails; cross_id_transcript_binding ok
+ffi | 1341dd24a | 0 | test (112 differential, 1013 rejections), native, wasm, bench ok; wallet ok on re-run (first run rc 1: node_modules missing in the worktree, not a core fault)
+rust | 1341dd24a | 0 | all test binaries against the C oracle
+cargo | 1341dd24a | 0 | ok
+xcheck | 1341dd24a | 0 | ok
+fuzz | 1341dd24a | 0 | 4 targets x 60 s
+gate | 1341dd24a | 0 | n2304-kmax4096 PASS
