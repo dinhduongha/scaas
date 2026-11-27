@@ -206,6 +206,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [stack.md](clients/stack.md) | Client stack: which client crate depends on which (graph and the rules it keeps) |
 | [scaas-rpc.md](clients/scaas-rpc.md) | The shared network crate: endpoint lists, failover and strict-majority reads, sends to several nodes, the scaas-node client (BUILT on branch `scaas-sdk`: EVM, the verifier, the node's families; the rest SPECIFIED) |
 | [scaas-sdk.md](clients/scaas-sdk.md) | The one API apps call: several seeds in a vault v1 keystore, accounts, operations, confidential tokens, chat, generated bindings (SPECIFIED) |
+| [scaas-cli.md](clients/scaas-cli.md) | The command line `scaas` over `scaas-sdk`: one command per SDK call, confirm before signing or submitting, secrets by descriptor or terminal, pinned profiles, JSON output and exit codes (BUILT; user profiles and `SignReview` PLANNED) |
 | [scaas-tui.md](clients/scaas-tui.md) | The terminal front-end over `scaas-sdk`: review before signing, terminal secret handling, endpoints, accessibility (SPECIFIED) |
 | [pqchat-core.md](clients/pqchat-core.md) | The PqChat client core, an app core above `scaas-sdk`: key handles only, PqChat records through the SDK's named entries, the app's Matrix client as its store, recovery from contract state (SPECIFIED) |
 | [integration.md](integration.md) | Connecting any ERP or back office |

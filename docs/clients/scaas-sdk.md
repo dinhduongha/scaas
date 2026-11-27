@@ -600,12 +600,7 @@ the freeze, DOT deferred; owner 2026-11-22).
 
 ## 11. The CLI
 
-<a id="CLI-SDK-17"></a>**CLI-SDK-17** — **The CLI `scaas` is a thin client of the SDK** (BUILT: `clients/scaas-cli`, tests
-`clients/scaas-cli/tests/cli.rs`, `tests/e2e.rs`; the means are the T22 controller calls in decisions.md, CLI-SDK-17). One subcommand per SDK call, named
-flags, JSON or a table; it shows the review and the quote and asks before submitting. Passphrases, words and keys come from the
-terminal without echo or from a file descriptor, never from the command line or the environment; nothing secret is printed except a
-new seed's one reveal. It shares its data directory with the TUI and the app under the keystore's lock, holds no logic of its own and
-serves as the reference client of the SDK's end-to-end tests. Its profiles are pinned (owner 2026-11-17): compiled in or digest-pinned in a release build; a profile file only in a development build that says so on every run; an overlay may add a credential by file and lower caps, never change a `chain_uid`, a contract or an RPC list. It shares its call and action names with `scaas-tui`; neither calls the other.
+The CLI: [scaas-cli.md](scaas-cli.md#CLI-SDK-17).
 
 The interactive terminal front-end over the SDK is `scaas-tui`, a separate program with its own rules
 ([CLI-TUI-01](scaas-tui.md#CLI-TUI-01)): a session that follows events and reviews every operation on screen, where the CLI runs one
@@ -695,7 +690,7 @@ is offered.
 <a id="CLI-UPR-14"></a>**CLI-UPR-14** — **The instance lock is a non-blocking OS advisory lock held for the open profile's life**
 (controller call; SPECIFIED). `try_lock` before the envelope is read, released by the OS at any process end, nothing written into
 it, so no stale lock exists; the hidden search reads without a lock and locks only its match; local filesystems only; Web Locks in a
-browser. When built it replaces, for a profile, the shared-directory sentence of [CLI-SDK-17](#CLI-SDK-17) and the SDK spec §6.3:
+browser. When built it replaces, for a profile, the shared-directory sentence of [CLI-SDK-17](scaas-cli.md#CLI-SDK-17) and the SDK spec §6.3:
 clients share the root and the index, never an open profile. Owner 2026-11-27: a second instance is refused even when it only reads,
 and an app extension is refused while the app has the profile open.
 
