@@ -188,3 +188,27 @@ test("rs_vault.json: ua-rs vaults (24 and 12 words, PRF envelope, rewrapped pin)
   const pin = RS.vaults.find((r) => r.unlock.pin);
   assert.equal(await codeOf(() => V.openSeedVault(pin.vault, { pin: pin.unlock.pin + "x" })), "VaultOpen");
 });
+
+// user-profiles spec §7.4, CLI-UPR-24: the key lock `native-import-locked:<network>:<n>`, a pin envelope only
+test("vault: a key-locked label takes no PRF envelope; a reader refuses one that carries it (VaultFormat)", async () => {
+  const s = secret();
+  const prf = { output: new Uint8Array(32).fill(7), credentialId: "Yw", salt: new Uint8Array(32).fill(9) };
+  const label = "native-import-locked:evm:0";
+  const code = async (p) =>
+    p.then(
+      () => "ok",
+      (e) => e.code ?? e.message,
+    );
+  assert.equal(await code(createVault(s, { label, pin: PASS, prf })), "Argument");
+  const v = await createVault(s, { label, pin: PASS });
+  assert.equal(v.prf, undefined);
+  assert.equal(await code(enablePrf(structuredClone(v), PASS, prf)), "Argument");
+  assert.equal(bytesToHex(await openVault(v, { pin: PASS })), bytesToHex(s), "control: opens by its passphrase");
+  // the positive twin: the same key under the plain label takes and opens by a PRF envelope
+  const plain = await createVault(s, { label: "native-import:evm:0", pin: PASS, prf });
+  assert.equal(bytesToHex(await openVault(plain, { prfOutput: prf.output })), bytesToHex(s));
+  const forged = { ...v, prf: plain.prf };
+  for (const unlock of [{ pin: PASS }, { prfOutput: prf.output }])
+    assert.equal(await code(openVault(forged, unlock)), "VaultFormat");
+  assert.equal(await code(openVault({ ...v, prf: null }, { pin: PASS })), "ok", "prf null is no envelope");
+});

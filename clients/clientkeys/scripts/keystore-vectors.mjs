@@ -170,18 +170,31 @@ const reseals = [
 
 // --- keystore.json (T2b): containers. Every vault sealed under PASS by src/vault.js from a stream; every entry's MAC under its
 // seed's entropy.
-const vaultText = async (label, secret, id) =>
-  JSON.stringify(await withStream(`ks.${id}.${label}`, () => createVault(secret, { label, pin: PASS, id })));
+const vaultText = async (label, secret, id, pin = PASS) =>
+  JSON.stringify(await withStream(`ks.${id}.${label}`, () => createVault(secret, { label, pin, id })));
+// user-profiles spec §7.4 (CLI-UPR-24): a key-locked import is sealed under its own passphrase, a pin envelope only
+const KEY_PASS = "own key-lock 9 ünï";
 const emptyManifest = utf8ToBytes(
   '{"v":1,"entries":[],"natives":[],"kem":[],"imports":[],"importedUas":[],"pqzHeld":[],"backupGeneration":0,"backupSenders":[]}',
 );
 const macOf = (entropy, e) => ({ ...e, indexMac: indexMac(entropy, e) });
-const entry = async ({ id, label, entropy, origin, warnings = [], backup, accounts = [], extraVaults = {} }) => {
+const entry = async ({
+  id,
+  label,
+  entropy,
+  origin,
+  warnings = [],
+  backup,
+  accounts = [],
+  extraVaults = {},
+  locked = {},
+}) => {
   const vaults = {
     seed: await vaultText("seed", entropy, id),
     manifest: await vaultText("manifest", emptyManifest, id),
   };
   for (const [k, v] of Object.entries(extraVaults)) vaults[k] = await vaultText(k, v, id);
+  for (const [k, v] of Object.entries(locked)) vaults[k] = await vaultText(k, v, id, KEY_PASS);
   const e = {
     id,
     label,
@@ -286,6 +299,18 @@ const polkadot = ordered(
     ],
   }),
 );
+// the same key as "With an import"'s native-import:evm:0, key-locked
+const withLock = ordered(
+  await entry({
+    id: "6a3f7c4d-9c4d-4fa6-b28f-bf6dbdbd8f76",
+    label: "With a key-locked import",
+    entropy: ENTROPY,
+    origin: "generated",
+    warnings: ["imported_key"],
+    backup: "pending",
+    locked: { "native-import-locked:evm:0": imported.privateKey },
+  }),
+);
 const ks = (rev, seeds) => ({ format: "scaas.keystore", v: 2, rev, seeds });
 const validRows = [
   { id: "an empty keystore", container: ks(0, []) },
@@ -294,6 +319,7 @@ const validRows = [
   { id: "a seed with an import vault", container: ks(3, [withImport]) },
   { id: "a Polkadot row with path and ss58Prefix", container: ks(4, [polkadot]) },
   { id: "four seeds", container: ks(42, [main, short, withImport, polkadot]) },
+  { id: "a seed with a key-locked import vault", container: ks(5, [withLock]) },
 ].map((r) => ({ id: r.id, text: serialize(r.container) }));
 for (const r of validRows) must(serialize(parse(r.text)) === r.text, `valid ${r.id}`);
 const base = () => structuredClone(ks(7, [main, short]));
@@ -551,6 +577,38 @@ for (const r of refusedRows) {
   must(code === r.error, `refused ${r.id}: ${code}`);
 }
 
+// keyLocked: the key-locked vault as sealed, then with a prf envelope added (another vault's: the reader refuses it by its
+// shape, before any KDF)
+const lockedText = withLock.vaults["native-import-locked:evm:0"];
+const keyLockedRows = [
+  {
+    id: "a key-locked import vault: a pin envelope only",
+    vault: lockedText,
+    passphrase: KEY_PASS,
+    plaintext: hex(imported.privateKey),
+    error: null,
+  },
+  {
+    id: "a key-locked import vault with a prf envelope",
+    vault: JSON.stringify({ ...JSON.parse(lockedText), prf: reseals[0].vault.prf }),
+    error: "VaultFormat",
+  },
+];
+must(
+  bytesToHex(await openVault(JSON.parse(lockedText), { pin: KEY_PASS })) === bytesToHex(imported.privateKey),
+  "the key-locked vault opens by its own passphrase",
+);
+const codeOf = (p) =>
+  p.then(
+    () => null,
+    (e) => e.code,
+  );
+must((await codeOf(openVault(JSON.parse(lockedText), { pin: PASS }))) === "VaultOpen", "not by the seed's passphrase");
+must(
+  (await codeOf(openVault(JSON.parse(keyLockedRows[1].vault), { pin: KEY_PASS }))) === "VaultFormat",
+  "a key-locked vault with a prf envelope is VaultFormat",
+);
+
 const write = (name, obj) => {
   mkdirSync(OUT, { recursive: true });
   writeFileSync(join(OUT, name), JSON.stringify(obj, null, 1) + "\n");
@@ -581,11 +639,15 @@ write("keystore.json", {
     "valid: canonical containers (serialize(parse(text)) === text); refused: the base container (rev 7, the first two seeds of " +
     '"four seeds") with one rule broken each, and the error a reader names. Vaults sealed by src/vault.js under the passphrase ' +
     "\"river-otter-7 ünï\" from a fixed stream; each entry's indexMac under its seed's entropy (the repository mnemonic, or the " +
-    '12-word "abandon … about"). Only the canonical text is accepted.',
+    '12-word "abandon … about"). Only the canonical text is accepted. keyLocked (user-profiles spec §7.4, CLI-UPR-24): ' +
+    'the vault native-import-locked:evm:0 of "a seed with a key-locked import vault", sealed under its own passphrase with a ' +
+    "pin envelope only, opens by that passphrase to plaintext; the same text with a prf envelope added is refused by a vault " +
+    "reader (clientkeys openVault, ua-rs Vault::from_json) before any KDF.",
   passphrase: PASS,
   valid: validRows,
   refused: refusedRows,
+  keyLocked: keyLockedRows,
 });
 console.log(
-  `keystore vectors: ${fingerprints.length} fingerprints, ${macs.length} MACs, ${reseals.length} re-sealed vaults, ${validRows.length} containers, ${refusedRows.length} refused -> ${OUT}`,
+  `keystore vectors: ${fingerprints.length} fingerprints, ${macs.length} MACs, ${reseals.length} re-sealed vaults, ${validRows.length} containers, ${refusedRows.length} refused, ${keyLockedRows.length} key-lock rows -> ${OUT}`,
 );

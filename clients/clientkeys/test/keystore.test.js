@@ -12,8 +12,8 @@ import { fileURLToPath } from "node:url";
 import { shake256 } from "@noble/hashes/sha3.js";
 import { parse, serialize, depthOf } from "../src/keystore.js";
 import { indexMac } from "../src/keystore-mac.js";
-import { openSeedVault } from "../src/vault.js";
-import { utf8ToBytes } from "../src/bytes.js";
+import { openSeedVault, openVault } from "../src/vault.js";
+import { utf8ToBytes, bytesToHex } from "../src/bytes.js";
 
 const DIR = fileURLToPath(new URL("../../../smartcontracts/vectors/keystore/", import.meta.url));
 const K = JSON.parse(readFileSync(join(DIR, "keystore.json"), "utf8"));
@@ -129,4 +129,22 @@ test("the generator reproduces keystore.json byte for byte", () => {
   } finally {
     rmSync(out, { recursive: true, force: true });
   }
+});
+
+test("keystore.json keyLocked rows (user-profiles spec §7.4): the pin-only vault opens by its own passphrase, the one with a prf envelope is VaultFormat", async () => {
+  assert.equal(K.keyLocked.length, 2);
+  for (const r of K.keyLocked) {
+    const v = JSON.parse(r.vault);
+    assert.ok(v.label.startsWith("native-import-locked:"), r.id);
+    if (r.error === null) {
+      assert.equal(bytesToHex(await openVault(v, { pin: r.passphrase })), r.plaintext.slice(2), r.id);
+      await assert.rejects(openVault(v, { pin: K.passphrase }), (e) => e.code === "VaultOpen", "not the seed's");
+    } else {
+      assert.equal(r.error, "VaultFormat");
+      await assert.rejects(openVault(v, { pin: K.passphrase }), (e) => e.code === r.error, r.id);
+    }
+  }
+  // the container holds the label like any other vault key (both container readers accept it)
+  const c = parse(K.valid.find((x) => x.id === "a seed with a key-locked import vault").text);
+  assert.ok(Object.hasOwn(c.seeds[0].vaults, "native-import-locked:evm:0"));
 });

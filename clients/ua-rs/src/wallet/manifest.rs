@@ -12,6 +12,11 @@
 //! `pqz-held:<ua>:<version>:<pqzKeyHash>` (keyed `(ua, version, pqzKeyHash)`, spec 3g §7.2 C8 / F-14) and in the backup's
 //! `secrets` under that label; reopening either checks the key against `pqzKeyHash` before it is held.
 //!
+//! The key lock (user-profiles spec §7.4, CLI-UPR-24): an import sealed under its own passphrase is the label vault
+//! `native-import-locked:<network>:<n>` (a pin envelope only, [`super::Vault`]), still listed under `imports` and marked in the
+//! manifest's `keyLocked`; it opens by [`Wallet::open_label_vault`] with that passphrase only, the same-DEK re-seal and the
+//! retained-PRF open refuse it, and the backup and link payloads leave it out ([`Wallet::backup_left_out`] counts them).
+//!
 //! A backup ([`Wallet::backup_seal`]) is the container `scaas/backup/v1` of `BackupPayload {v: 1, generation, entropy, secrets:
 //! [{label, bytes}], manifest: {entries: [{kind, account, index, ua}]}}`, JSON in this field order (owner 2026-11-05), each
 //! seal raising `backup_generation`; the BIP-39 passphrase is never in it. [`Wallet::restore_backup`] opens it only as
@@ -25,7 +30,7 @@ use super::seal::{
     Recipient, SealedContainer, PURPOSE_BACKUP, PURPOSE_LINK,
 };
 use super::store::Arena;
-use super::vault::{PrfEnvelope, Unlock, Vault, SEED_LENGTHS};
+use super::vault::{key_locked, PrfEnvelope, Unlock, Vault, KEY_LOCKED, SEED_LENGTHS};
 use super::{
     bounded, derive, seed_of, Error, KemKeyPair, KeyId, NativeKey, Network, Result, UaKey, Wallet,
 };
@@ -97,6 +102,9 @@ pub struct Manifest {
     pub polkadot_paths: Vec<String>,
     pub kem: Vec<KemEntry>,
     pub imports: Vec<ImportEntry>,
+    /// The imports sealed key-locked (`native-import-locked:<network>:<n>`, user-profiles spec §7.4): each also under
+    /// `imports`; written after `imports` only when not empty, so earlier manifests keep their bytes.
+    pub key_locked: Vec<ImportEntry>,
     /// The UAs of imported keys (T20c): one entry per `source`, never in `entries`.
     pub imported_uas: Vec<ImportedUaEntry>,
     /// The PQZ keys rebuilt from an `msig`'s k-of-n backup (T16b): public, the `seed32` is in the arena only.
@@ -173,6 +181,12 @@ impl Manifest {
             None => self.imported_uas.push(e),
         }
     }
+    /// Marks import `e` key-locked.
+    fn lock_import(&mut self, e: ImportEntry) {
+        if !self.key_locked.contains(&e) {
+            self.key_locked.push(e);
+        }
+    }
     #[cfg(feature = "pqz")]
     pub(crate) fn add_pqz_held(&mut self, e: PqzHeldEntry) {
         if !self.pqz_held.contains(&e) {
@@ -216,12 +230,18 @@ impl Manifest {
                 .map(|k| format!("{{\"ua\":\"{}\",\"version\":{}}}", to_hex(&k.ua), k.version))
                 .collect(),
         );
-        let imports = list(
-            self.imports
-                .iter()
-                .map(|i| format!("{{\"network\":\"{}\",\"n\":{}}}", i.network.name(), i.n))
-                .collect(),
-        );
+        let import =
+            |i: &ImportEntry| format!("{{\"network\":\"{}\",\"n\":{}}}", i.network.name(), i.n);
+        let imports = list(self.imports.iter().map(import).collect());
+        // after imports, only when not empty (earlier manifests keep their bytes)
+        let locked = if self.key_locked.is_empty() {
+            String::new()
+        } else {
+            format!(
+                ",\"keyLocked\":[{}]",
+                list(self.key_locked.iter().map(import).collect())
+            )
+        };
         let imported_uas = list(self.imported_uas.iter().map(imported_ua_json).collect());
         let held = list(
             self.pqz_held
@@ -248,7 +268,7 @@ impl Manifest {
             format!(",\"bip85Next\":{}", self.bip85_next)
         };
         format!(
-            "{{\"v\":1,\"entries\":[{entries}],\"natives\":[{natives}]{paths},\"kem\":[{kem}],\"imports\":[{imports}],\"importedUas\":[{imported_uas}],\"pqzHeld\":[{held}],\"backupGeneration\":{},\
+            "{{\"v\":1,\"entries\":[{entries}],\"natives\":[{natives}]{paths},\"kem\":[{kem}],\"imports\":[{imports}]{locked},\"importedUas\":[{imported_uas}],\"pqzHeld\":[{held}],\"backupGeneration\":{},\
              \"backupSenders\":[{senders}]{bip85}}}",
             self.backup_generation
         )
@@ -314,6 +334,12 @@ fn ua_of(v: &Value) -> Option<[u8; 32]> {
 }
 fn network_of(v: &Value) -> Option<Network> {
     Network::from_name(v.get("network")?.as_str()?)
+}
+fn import_of(v: &Value) -> Option<ImportEntry> {
+    Some(ImportEntry {
+        network: network_of(v)?,
+        n: u32::try_from(v.get("n")?.as_u64()?).ok()?,
+    })
 }
 fn entry_of(v: &Value) -> Option<ManifestEntry> {
     let kind = u16::try_from(v.get("kind")?.as_u64()?).ok()?;
@@ -396,13 +422,16 @@ fn parse_manifest(v: &Value) -> Option<Manifest> {
             .collect::<Option<_>>()?,
         imports: list(v, "imports")?
             .iter()
-            .map(|i| {
-                Some(ImportEntry {
-                    network: network_of(i)?,
-                    n: u32::try_from(i.get("n")?.as_u64()?).ok()?,
-                })
-            })
+            .map(import_of)
             .collect::<Option<_>>()?,
+        // absent in a manifest without a key-locked import: none
+        key_locked: match v.get("keyLocked") {
+            None => vec![],
+            Some(_) => list(v, "keyLocked")?
+                .iter()
+                .map(import_of)
+                .collect::<Option<_>>()?,
+        },
         // absent in a manifest written before T20c: none
         imported_uas: match v.get("importedUas") {
             None => vec![],
@@ -448,6 +477,8 @@ fn pqz_held_of(v: &Value) -> Option<PqzHeldEntry> {
 enum Held {
     /// `native-import:<network>:<n>`
     Import(ImportEntry),
+    /// `native-import-locked:<network>:<n>` (the key lock): never in a backup or link payload
+    Locked(ImportEntry),
     /// `pqz-held:<ua>:<version>:<pqzKeyHash>` (T16b)
     Pqz(PqzHeldEntry),
 }
@@ -456,6 +487,7 @@ impl Held {
     fn label(&self) -> String {
         match self {
             Held::Import(i) => format!("{IMPORT}{}:{}", i.network.name(), i.n),
+            Held::Locked(i) => format!("{KEY_LOCKED}{}:{}", i.network.name(), i.n),
             Held::Pqz(p) => format!(
                 "{PQZ_HELD}{}:{}:{}",
                 to_hex(&p.ua),
@@ -465,16 +497,21 @@ impl Held {
         }
     }
 
-    /// `native-import:<network>:<n>` or `pqz-held:<ua>:<version>:<pqzKeyHash>`, each field canonical (decimal; `0x` and 64
-    /// lower-case hex digits), else `Argument`.
+    /// `native-import:<network>:<n>`, `native-import-locked:<network>:<n>` (the same fields) or
+    /// `pqz-held:<ua>:<version>:<pqzKeyHash>`, each field canonical (decimal; `0x` and 64 lower-case hex digits), else
+    /// `Argument`.
     fn parse(label: &str) -> Result<Held> {
-        let h = if let Some(r) = label.strip_prefix(IMPORT) {
+        let import = |r: &str| -> Result<ImportEntry> {
             let (net, n) = r.split_once(':').ok_or(Error::Argument)?;
-            let network = Network::from_name(net).ok_or(Error::Argument)?;
-            Held::Import(ImportEntry {
-                network,
+            Ok(ImportEntry {
+                network: Network::from_name(net).ok_or(Error::Argument)?,
                 n: n.parse().map_err(|_| Error::Argument)?,
             })
+        };
+        let h = if let Some(r) = label.strip_prefix(IMPORT) {
+            Held::Import(import(r)?)
+        } else if let Some(r) = label.strip_prefix(KEY_LOCKED) {
+            Held::Locked(import(r)?)
         } else {
             let r = label.strip_prefix(PQZ_HELD).ok_or(Error::Argument)?;
             let h32 = |x: &str| from_hex(x).and_then(|b| <[u8; 32]>::try_from(b).ok());
@@ -492,10 +529,13 @@ impl Held {
     }
 
     /// Its secret, if the manifest lists it and the arena holds it, else `Argument` (a `pqz-held:` secret on a build without
-    /// `pqz` too).
+    /// `pqz` too; a key-locked import under its plain label, so no seed-wide vault holds it again).
     fn secret(&self, a: &Arena, m: &Manifest) -> Result<Zeroizing<Vec<u8>>> {
         let id = match self {
-            Held::Import(i) => m.imports.contains(i).then_some(KeyId::Import(i.n)),
+            Held::Import(i) => {
+                (m.imports.contains(i) && !m.key_locked.contains(i)).then_some(KeyId::Import(i.n))
+            }
+            Held::Locked(i) => m.imports.contains(i).then_some(KeyId::Import(i.n)),
             #[cfg(feature = "pqz")]
             Held::Pqz(p) => m
                 .pqz_held
@@ -510,12 +550,18 @@ impl Held {
     }
 }
 
-/// Every secret the manifest lists outside the derivations: the imported keys, then the rebuilt PQZ keys.
+/// Every secret the manifest lists outside the derivations: the imported keys (key-locked ones as such), then the rebuilt
+/// PQZ keys.
 fn held(m: &Manifest) -> impl Iterator<Item = Held> + '_ {
     m.imports
         .iter()
-        .copied()
-        .map(Held::Import)
+        .map(|i| {
+            if m.key_locked.contains(i) {
+                Held::Locked(*i)
+            } else {
+                Held::Import(*i)
+            }
+        })
         .chain(m.pqz_held.iter().copied().map(Held::Pqz))
 }
 
@@ -617,8 +663,11 @@ fn parse_payload(v: &Value) -> Option<BackupPayload> {
             .as_array()?
             .iter()
             .map(|s| {
+                // the payload has no key-locked form (user-profiles spec §7.4)
                 Some((
-                    Held::parse(s.get("label")?.as_str()?).ok()?,
+                    Held::parse(s.get("label")?.as_str()?)
+                        .ok()
+                        .filter(|h| !matches!(h, Held::Locked(_)))?,
                     b64(s.get("bytes")?)?,
                 ))
             })
@@ -681,6 +730,14 @@ impl Wallet {
         self.store.manifest()
     }
 
+    /// How many imported keys [`Wallet::backup_seal`] and [`Wallet::link_seal`] leave out: the key-locked ones (user-profiles
+    /// spec §7.4: the payload has no key-locked form), held or not.
+    pub fn backup_left_out(&self) -> usize {
+        held(&self.store.manifest())
+            .filter(|h| matches!(h, Held::Locked(_)))
+            .count()
+    }
+
     /// Records `ua` as a UA whose backups this wallet agreed to hold (the restore's approved sender set).
     pub fn add_backup_sender(&self, ua: [u8; 32]) {
         self.store.note(|m| {
@@ -723,7 +780,7 @@ impl Wallet {
     /// listed in the manifest and the backup. `Argument` for another length or an invalid secret; `WalletLocked` while locked.
     // ponytail: raw 32-byte secrets only; a Stellar `S…` strkey or a 64-byte Solana keypair is the caller's to split.
     pub fn import_native_key(&self, network: Network, secret: &[u8]) -> Result<NativeKey> {
-        let n = self.import_at(network, None, secret)?;
+        let n = self.import_at(network, None, secret, false)?;
         self.imported_key(network, n)
     }
 
@@ -780,8 +837,15 @@ impl Wallet {
 
     /// `secret` as import `n` of `network` (`None`: the next free number, picked under the store's write lock, so two imports at
     /// once get two numbers): already held with the same bytes, a no-op; listed (a manifest vault opened first) and not held,
-    /// installed; another network or other bytes under the same `n`: `Argument`. Returns `n`.
-    fn import_at(&self, network: Network, n: Option<u32>, secret: &[u8]) -> Result<u32> {
+    /// installed; another network or other bytes under the same `n`: `Argument`; `locked`: also marked key-locked, in the
+    /// same write. Returns `n`.
+    fn import_at(
+        &self,
+        network: Network,
+        n: Option<u32>,
+        secret: &[u8],
+        locked: bool,
+    ) -> Result<u32> {
         // the native networks of NATIVE_NETWORKS have no import (ua-rs-native spec §4.1)
         if secret.len() != 32 || network.scheme_kind().is_none() {
             return Err(Error::Argument);
@@ -810,13 +874,18 @@ impl Wallet {
             if !m.imports.contains(&e) {
                 m.imports.push(e);
             }
+            if locked {
+                m.lock_import(e);
+            }
             Ok(n)
         })
     }
 
-    /// A vault of label `manifest` (the manifest JSON), `native-import:<network>:<n>` (that imported key) or
-    /// `pqz-held:<ua>:<version>:<pqzKeyHash>` (that rebuilt PQZ key's `seed32`, T16b), as [`Wallet::seal_vault`]; `Argument`
-    /// for another label or a key the wallet does not hold.
+    /// A vault of label `manifest` (the manifest JSON), `native-import:<network>:<n>` (that imported key),
+    /// `native-import-locked:<network>:<n>` (that imported key under its own passphrase, a pin envelope only: `prf` given is
+    /// `Argument`; the import is then marked key-locked and its plain label refused) or `pqz-held:<ua>:<version>:<pqzKeyHash>`
+    /// (that rebuilt PQZ key's `seed32`, T16b), as [`Wallet::seal_vault`]; `Argument` for another label or a key the wallet
+    /// does not hold.
     /// The new vault's DEK is held in the arena while it is open (scaas-sdk spec §6.10), for [`Wallet::reseal_label_vault`].
     pub fn seal_label_vault(
         &self,
@@ -830,6 +899,9 @@ impl Wallet {
         let (vault, dek) =
             Vault::seal_dek(&self.vault_id()?, label, &secret, vault_passphrase, prf)?;
         self.hold_dek(&dek, &vault);
+        if let Ok(Held::Locked(e)) = Held::parse(label) {
+            self.store.note(|m| m.lock_import(e));
+        }
         Ok(vault)
     }
 
@@ -838,8 +910,12 @@ impl Wallet {
     /// `resealData`; scaas-sdk spec §6.10): a change made in a session opened by passphrase, passkey or platform secret persists
     /// without asking for the passphrase, and the PRF envelope survives. The DEK is held from [`Wallet::open_label_vault`] or
     /// [`Wallet::seal_label_vault`] until `lock()`: `Argument` for a label it holds none for (after a `lock()` too, until the
-    /// vault is opened again), `WalletLocked` while locked.
+    /// vault is opened again), `WalletLocked` while locked. A key-locked label is `Argument`: a seed-wide re-seal skips it
+    /// (user-profiles spec §7.4).
     pub fn reseal_label_vault(&self, label: &str) -> Result<Vault> {
+        if key_locked(label) {
+            return Err(Error::Argument);
+        }
         let _lease = self.store.lease();
         let secret = self.label_secret(label)?;
         super::store::copied();
@@ -878,7 +954,8 @@ impl Wallet {
     /// Opens a vault of [`Wallet::seal_label_vault`] into this wallet: `manifest` replaces the manifest (while unlocked only
     /// if this wallet's seed derives its first entry's UA and it names each held import under that import's network, else
     /// `WalletMismatch` and the manifest stays as it was; locked, the next unlock checks it), `native-import:…`
-    /// installs that key, `pqz-held:…` installs that PQZ key only if its `seed32` gives a key of the label's `pqzKeyHash`
+    /// installs that key, `native-import-locked:…` installs it marked key-locked (its own passphrase only: the vault has no
+    /// PRF envelope), `pqz-held:…` installs that PQZ key only if its `seed32` gives a key of the label's `pqzKeyHash`
     /// (`Argument` otherwise, nothing held; `KindUnavailable` on a build without `pqz`). `Argument` for another label (the
     /// seed vault opens with [`Wallet::open_vault`]); errors of the vault as [`Wallet::open_vault`].
     /// The vault's DEK is held in the arena while it is open (scaas-sdk spec §6.10), for [`Wallet::reseal_label_vault`].
@@ -907,8 +984,12 @@ impl Wallet {
     }
 
     /// [`Wallet::open_label_vault`] through the vault's PRF envelope with the key [`Wallet::retain_prf_key`] kept: `Argument`
-    /// when none is kept or the vault has no PRF envelope, `VaultOpen` for a vault of another key, `WalletLocked` while locked.
+    /// when none is kept, the vault has no PRF envelope or is key-locked (never opened by the seed's key, user-profiles spec
+    /// §7.4), `VaultOpen` for a vault of another key, `WalletLocked` while locked.
     pub fn open_label_vault_retained(&self, vault: &Vault) -> Result<()> {
+        if key_locked(vault.label()) {
+            return Err(Error::Argument);
+        }
         self.same_vault_id(vault)?;
         let kek = self
             .store
@@ -932,7 +1013,12 @@ impl Wallet {
 
     fn install_held(&self, h: Held, secret: &[u8]) -> Result<()> {
         match h {
-            Held::Import(e) => self.import_at(e.network, Some(e.n), secret).map(|_| ()),
+            Held::Import(e) => self
+                .import_at(e.network, Some(e.n), secret, false)
+                .map(|_| ()),
+            Held::Locked(e) => self
+                .import_at(e.network, Some(e.n), secret, true)
+                .map(|_| ()),
             Held::Pqz(p) => self.install_pqz_held(p, secret),
         }
     }
@@ -952,7 +1038,7 @@ impl Wallet {
 
     /// The backup of this wallet (spec §6.3, §8.4): `backup_generation` raised once, then one container `scaas/backup/v1` per
     /// recipient of `BackupPayload {v: 1, generation, entropy, secrets, manifest: {entries}}` (the entropy at its own length,
-    /// the imported keys, the UA entries with `sender`'s), signed by `sender`, a UA key of this wallet of a kind that signs
+    /// the imported keys but the key-locked ones, [`Wallet::backup_left_out`], the UA entries with `sender`'s), signed by `sender`, a UA key of this wallet of a kind that signs
     /// containers (`Argument` otherwise, or for no recipient); `created` the clock. The BIP-39 passphrase is never in it.
     // ponytail: the payload is built once for every recipient; per-recipient generations if a holder ever needs its own.
     pub fn backup_seal(
@@ -1030,13 +1116,16 @@ impl Wallet {
             .filter(|_| is_sender_kind(sender.kind) && sender.secret.of_store(&self.store))
             .ok_or(Error::Argument)?;
         self.store.with_all(|a, m| {
+            // key-locked keys left out (user-profiles spec §7.4), with their imported UAs
             let secrets = held(m)
+                .filter(|h| !matches!(h, Held::Locked(_)))
                 .map(|h| Ok((h, h.secret(a, m)?)))
                 .collect::<Result<Vec<_>>>()?;
             // each listed imported UA with the id its secret gives (the manifest is never a trust anchor)
             let imported_uas = m
                 .imported_uas
                 .iter()
+                .filter(|e| !m.key_locked.contains(&e.source))
                 .map(|e| {
                     let (_, s) = secrets
                         .iter()

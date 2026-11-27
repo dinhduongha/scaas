@@ -34,6 +34,12 @@ const LOG_N_NEW: u8 = 17;
 const PRF_INFO: &[u8] = b"scaas-clientkeys-vault-v1/prf";
 /// The BIP-39 entropy lengths of 12, 15, 18, 21, 24 words.
 pub(crate) const SEED_LENGTHS: [usize; 5] = [16, 20, 24, 28, 32];
+/// The label prefix of a key-locked import (user-profiles spec §7.4, CLI-UPR-24): a pin envelope only.
+pub(crate) const KEY_LOCKED: &str = "native-import-locked:";
+/// Whether `label` is a key-locked import's.
+pub(crate) fn key_locked(label: &str) -> bool {
+    label.starts_with(KEY_LOCKED)
+}
 /// A vault's JSON: a 1 MiB secret in base64url and its envelopes; `{pin: {…}}` is depth 2.
 const VAULT_JSON: usize = 2 << 20;
 const VAULT_DEPTH: usize = 2;
@@ -216,7 +222,7 @@ impl Vault {
         Ok(Vault::seal_dek(id, label, secret, pin, prf)?.0)
     }
 
-    /// [`Vault::seal`] and the new DEK; `Argument` for an `id` not a lower-case UUID v4.
+    /// [`Vault::seal`] and the new DEK; `Argument` for an `id` not a lower-case UUID v4 or a PRF envelope on a key-locked label.
     pub(crate) fn seal_dek(
         id: &str,
         label: &str,
@@ -225,7 +231,7 @@ impl Vault {
         prf: Option<&PrfEnvelope>,
     ) -> Result<(Vault, Dek)> {
         check_passphrase(pin)?;
-        if !is_vault_id(id) {
+        if !is_vault_id(id) || (prf.is_some() && key_locked(label)) {
             return Err(Error::Argument);
         }
         let dek = Zeroizing::new(random::<32>()?);
@@ -341,8 +347,11 @@ impl Vault {
         })
     }
 
-    /// The vault with a PRF envelope (replacing one it had), opened by the passphrase once.
+    /// The vault with a PRF envelope (replacing one it had), opened by the passphrase once; `Argument` for a key-locked label.
     pub fn enable_prf(&self, pin: &str, prf: &PrfEnvelope) -> Result<Vault> {
+        if key_locked(&self.label) {
+            return Err(Error::Argument);
+        }
         let dek = self.dek(Unlock::VaultPassphrase(pin))?;
         Ok(Vault {
             prf: Some(prf_envelope(&self.id, &self.label, &dek, prf)?),
@@ -395,15 +404,16 @@ impl Vault {
     }
 
     /// The named fields of a vault JSON: `Argument` past 2 MiB or depth 2, for a malformed field or an `id` not a lower-case UUID
-    /// v4; `VaultVersion` for any `v` other than 2 and for the tombstone `{v: 2, moved}` (before any other field is read). A
-    /// non-integer `N`, `r` or `p` is kept as 0 (refused on open).
+    /// v4, or a key-locked label (`native-import-locked:`) with a `prf` envelope (user-profiles spec §7.4: the SDK reports it
+    /// `VaultFormat`); `VaultVersion` for any `v` other than 2 and for the tombstone `{v: 2, moved}` (before any other field
+    /// is read). A non-integer `N`, `r` or `p` is kept as 0 (refused on open).
     pub fn from_json(json: &[u8]) -> Result<Vault> {
         let v = bounded::json(json, VAULT_JSON, VAULT_DEPTH)?;
         if v.get("v").and_then(Value::as_u64) != Some(2) || v.get("moved").is_some() {
             return Err(Error::VaultVersion);
         }
         parse(&v)
-            .filter(|x| is_vault_id(&x.id))
+            .filter(|x| is_vault_id(&x.id) && !(x.prf.is_some() && key_locked(&x.label)))
             .ok_or(Error::Argument)
     }
 }

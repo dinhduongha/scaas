@@ -5,8 +5,9 @@
 //! Every pin envelope runs scrypt (N = 2^15 … 2^17, 128 MiB at 2^17). UNAUDITED.
 use scaas_ua::keccak256;
 use scaas_ua::wallet::{
-    check_passphrase, AllowRollback, ContainerExpect, Error, ExpectedSender, KemKeyPair, Network,
-    PrfEnvelope, Recipient, RecipientId, SealedContainer, Unlock, Vault, Wallet, PURPOSE_BACKUP,
+    check_passphrase, AllowRollback, ContainerExpect, Error, ExpectedSender, ImportEntry,
+    KemKeyPair, Manifest, Network, PrfEnvelope, Recipient, RecipientId, SealedContainer, Unlock,
+    Vault, Wallet, PURPOSE_BACKUP,
 };
 use serde_json::Value;
 
@@ -1197,4 +1198,309 @@ fn a_label_vault_of_another_seed_is_refused() {
         "{{\"v\":2,\"id\":\"{}\",\"label\":\"manifest\"",
         seed.id()
     )));
+}
+
+// --- the key lock (user-profiles spec §7.4, CLI-UPR-24): `native-import-locked:<network>:<n>` ---
+
+const LOCKED: &str = "native-import-locked:evm:1";
+const KEY_PASS: &str = "own key-lock 9 ünï";
+const OUT: [u8; 32] = [7; 32];
+fn prf() -> PrfEnvelope<'static> {
+    PrfEnvelope {
+        output: &OUT,
+        credential_id: "Yw",
+        salt: &[9; 32],
+    }
+}
+/// A wallet with import 0 (`native-import:evm:0`) and import 1 sealed key-locked; the locked vault.
+fn key_locked() -> (Wallet, Vault) {
+    let w = wallet("twelve_words");
+    w.ua_key(0x0102, 0, 0).unwrap();
+    w.import_native_key(Network::Evm, &[3; 32]).unwrap();
+    w.import_native_key(Network::Evm, &[4; 32]).unwrap();
+    let v = w.seal_label_vault(LOCKED, KEY_PASS, None).unwrap();
+    (w, v)
+}
+
+/// The label takes `native-import:`'s field rules and a pin envelope only: a PRF envelope is refused at the seal, at
+/// `enable_prf`, and at the read (`Argument`, the reader's malformed-vault name, which the SDK reports `VaultFormat`).
+#[test]
+fn key_lock_label_form() {
+    let (w, v) = key_locked();
+    assert_eq!(
+        code(w.seal_label_vault(LOCKED, KEY_PASS, Some(&prf()))),
+        "Argument"
+    );
+    for bad in [
+        "native-import-locked:evm:01",
+        "native-import-locked:evm:2",
+        "native-import-locked:nope:1",
+        "native-import-locked:evm",
+        "native-import-locked:",
+    ] {
+        assert_eq!(
+            code(w.seal_label_vault(bad, KEY_PASS, None)),
+            "Argument",
+            "{bad}"
+        );
+    }
+    assert_eq!(v.label(), LOCKED);
+    assert_eq!(v.prf_params(), None);
+    assert_eq!(code(v.enable_prf(KEY_PASS, &prf())), "Argument");
+    // the reader, one change at a time: the vault parses; with a PRF envelope it does not; a plain import's with one does
+    let mut j: Value = serde_json::from_str(&v.to_json()).unwrap();
+    assert_eq!(code(vault(&j)), "ok", "control");
+    let with: Value = serde_json::from_str(
+        &w.seal_label_vault("native-import:evm:0", PASS_SEED, Some(&prf()))
+            .unwrap()
+            .to_json(),
+    )
+    .unwrap();
+    assert_eq!(
+        code(vault(&with)),
+        "ok",
+        "the positive twin: a native-import: vault with a PRF envelope"
+    );
+    j["prf"] = with["prf"].clone();
+    assert_eq!(code(vault(&j)), "Argument");
+    j["prf"] = Value::Null;
+    assert_eq!(code(vault(&j)), "ok", "prf null is no envelope");
+}
+
+const PASS_SEED: &str = "river-otter-7";
+
+/// A key-locked vault opens only with its own passphrase (not the seed's, not a PRF secret); the manifest marks the import
+/// `keyLocked` (written only when not empty) and keeps it under `imports`; its plain label is refused once it is locked.
+#[test]
+fn key_lock_opens_only_by_its_passphrase() {
+    let (w, v) = key_locked();
+    let m = w.manifest();
+    assert_eq!(
+        m.key_locked,
+        [ImportEntry {
+            network: Network::Evm,
+            n: 1
+        }]
+    );
+    assert_eq!(m.imports.len(), 2);
+    assert!(m
+        .to_json()
+        .contains(",\"keyLocked\":[{\"network\":\"evm\",\"n\":1}],"));
+    assert_eq!(Manifest::from_json(m.to_json().as_bytes()).unwrap(), m);
+    assert_eq!(
+        code(w.seal_label_vault("native-import:evm:1", PASS_SEED, None)),
+        "Argument",
+        "the key's plain label once it is locked"
+    );
+    let vm = w.seal_label_vault("manifest", PASS_SEED, None).unwrap();
+    let other = wallet("twelve_words");
+    other
+        .open_label_vault(&vm, Unlock::VaultPassphrase(PASS_SEED))
+        .unwrap();
+    assert_eq!(other.manifest(), m);
+    assert_eq!(
+        code(other.open_label_vault(&v, Unlock::VaultPassphrase(PASS_SEED))),
+        "VaultOpen"
+    );
+    assert_eq!(
+        code(other.open_label_vault(&v, Unlock::Prf(&OUT))),
+        "Argument"
+    );
+    assert_eq!(
+        code(other.imported_key(Network::Evm, 1)),
+        "Argument",
+        "not held before its passphrase"
+    );
+    other
+        .open_label_vault(&v, Unlock::VaultPassphrase(KEY_PASS))
+        .unwrap();
+    assert_eq!(
+        other.imported_key(Network::Evm, 1).unwrap().public_key(),
+        w.imported_key(Network::Evm, 1).unwrap().public_key()
+    );
+    assert_eq!(other.manifest(), m);
+    // a fresh wallet that opens the locked vault first: listed and marked
+    let fresh = wallet("twelve_words");
+    fresh
+        .open_label_vault(&v, Unlock::VaultPassphrase(KEY_PASS))
+        .unwrap();
+    assert_eq!(fresh.manifest().key_locked, m.key_locked);
+    // the positive twin: a plain import seals and opens with the seed's passphrase and its PRF secret
+    let twin = wallet("twelve_words");
+    twin.import_native_key(Network::Evm, &[4; 32]).unwrap();
+    let p = twin
+        .seal_label_vault("native-import:evm:0", PASS_SEED, Some(&prf()))
+        .unwrap();
+    assert!(twin.manifest().key_locked.is_empty());
+    assert!(!twin.manifest().to_json().contains("keyLocked"));
+    wallet("twelve_words")
+        .open_label_vault(&p, Unlock::VaultPassphrase(PASS_SEED))
+        .unwrap();
+    wallet("twelve_words")
+        .open_label_vault(&p, Unlock::Prf(&OUT))
+        .unwrap();
+}
+
+/// The same-DEK re-seal and the retained-PRF open refuse a key-locked label even while it is open (`Argument`): neither
+/// rewrites it nor opens it with the seed's key. Positive twins: the plain import's vault.
+#[test]
+fn key_lock_skipped_by_reseal_and_retained_open() {
+    let (w, v) = key_locked();
+    assert!(w.label_open(LOCKED), "its DEK is held");
+    assert_eq!(code(w.reseal_label_vault(LOCKED)), "Argument");
+    w.seal_label_vault("native-import:evm:0", PASS_SEED, Some(&prf()))
+        .unwrap();
+    assert_eq!(
+        code(w.reseal_label_vault("native-import:evm:0")),
+        "ok",
+        "the positive twin"
+    );
+    let other = wallet("twelve_words");
+    other
+        .open_label_vault(&v, Unlock::VaultPassphrase(KEY_PASS))
+        .unwrap();
+    assert_eq!(
+        code(other.reseal_label_vault(LOCKED)),
+        "Argument",
+        "opened by its passphrase"
+    );
+    other.retain_prf_key(&OUT).unwrap();
+    assert_eq!(code(other.open_label_vault_retained(&v)), "Argument");
+    let plain = w
+        .seal_label_vault("native-import:evm:0", PASS_SEED, Some(&prf()))
+        .unwrap();
+    assert_eq!(
+        code(other.open_label_vault_retained(&plain)),
+        "ok",
+        "the positive twin"
+    );
+}
+
+/// The backup and the device link leave a key-locked key out (held or not, its imported UA too) and `backup_left_out` says
+/// how many; the positive twin: the same key as a plain import travels in both.
+#[test]
+fn key_lock_left_out_of_backup_and_link() {
+    let (_o, kk) = opener();
+    let (w, _) = key_locked();
+    let key = w.ua_key(0x0102, 0, 0).unwrap();
+    w.imported_ua_key(Network::Evm, 1, 0x0108).unwrap();
+    w.imported_ua_key(Network::Evm, 0, 0x0108).unwrap();
+    assert_eq!(w.backup_left_out(), 1);
+    let check = |r: &Wallet| {
+        assert!(
+            r.imported_key(Network::Evm, 0).is_ok(),
+            "the plain import travels"
+        );
+        assert_eq!(
+            code(r.imported_key(Network::Evm, 1)),
+            "Argument",
+            "the key-locked one does not"
+        );
+        assert_eq!(
+            r.manifest().imports,
+            [ImportEntry {
+                network: Network::Evm,
+                n: 0
+            }]
+        );
+        assert!(r.manifest().key_locked.is_empty());
+        assert_eq!(r.manifest().imported_uas.len(), 1);
+        assert_eq!(r.manifest().imported_uas[0].source.n, 0);
+    };
+    let c = w.backup_seal(&key, &[recipient_of(&kk)]).unwrap().remove(0);
+    let sender = key.ua().unwrap();
+    check(&restore(&kk, &c, sender, None, None, "").unwrap().unwrap());
+    let session = scaas_ua::wallet::LinkSession::new().unwrap();
+    let x = ContainerExpect {
+        purpose: "scaas/link/v1",
+        sender: ExpectedSender::Ua(sender),
+        recipient: session.recipient(),
+    };
+    let l = w
+        .link_seal(&key, &session.kem_pk(), &session.short_code())
+        .unwrap();
+    check(&Wallet::from_link(session, &l, &x, &none, &|_| None, None, "").unwrap());
+    // not held (locked, then unlocked by the seed and the plain import's vault): still left out, the backup still seals
+    let pk1 = w.imported_key(Network::Evm, 1).unwrap().public_key();
+    let s = w.seal_vault(PASS_SEED, None).unwrap();
+    let vi = w
+        .seal_label_vault("native-import:evm:0", PASS_SEED, None)
+        .unwrap();
+    w.lock();
+    w.unlock(&s, Unlock::VaultPassphrase(PASS_SEED), "")
+        .unwrap();
+    w.open_label_vault(&vi, Unlock::VaultPassphrase(PASS_SEED))
+        .unwrap();
+    assert!(!w.label_open(LOCKED));
+    assert_eq!(w.backup_left_out(), 1);
+    let key = w.ua_key(0x0102, 0, 0).unwrap();
+    let c = w.backup_seal(&key, &[recipient_of(&kk)]).unwrap().remove(0);
+    check(&restore(&kk, &c, sender, None, None, "").unwrap().unwrap());
+    // the positive twin: the same key imported plainly travels
+    let twin = wallet("twelve_words");
+    let tk = twin.ua_key(0x0102, 0, 0).unwrap();
+    twin.import_native_key(Network::Evm, &[4; 32]).unwrap();
+    assert_eq!(twin.backup_left_out(), 0);
+    let c = twin
+        .backup_seal(&tk, &[recipient_of(&kk)])
+        .unwrap()
+        .remove(0);
+    let r = restore(&kk, &c, sender, None, None, "").unwrap().unwrap();
+    assert_eq!(r.imported_key(Network::Evm, 0).unwrap().public_key(), pk1);
+}
+
+/// smartcontracts/vectors/keystore/keystore.json `keyLocked` (clientkeys' rows): the pin-only vault parses and opens with its
+/// own passphrase to its key; the one with a `prf` envelope is refused by the reader (`VaultFormat` there, `Argument` here,
+/// which the SDK's `vault_of` reports `VaultFormat`).
+#[test]
+fn keystore_json_key_lock_rows() {
+    let p = format!(
+        "{}/../../smartcontracts/vectors/keystore/keystore.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let f: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+    let rows = arr(&f, "keyLocked");
+    assert_eq!(rows.len(), 2);
+    for r in rows {
+        let got = Vault::from_json(r["vault"].as_str().unwrap().as_bytes());
+        if r["error"].is_null() {
+            let v = got.unwrap();
+            assert!(
+                v.label().starts_with("native-import-locked:evm:"),
+                "{}",
+                r["id"]
+            );
+            assert_eq!(v.prf_params(), None);
+            let n: u32 = v.label().rsplit(':').next().unwrap().parse().unwrap();
+            let w = wallet("twelve_words");
+            let pass = r["passphrase"].as_str().unwrap();
+            assert_eq!(
+                code(w.open_label_vault(
+                    &v,
+                    Unlock::VaultPassphrase(f["passphrase"].as_str().unwrap())
+                )),
+                "VaultOpen",
+                "not the seed's"
+            );
+            w.open_label_vault(&v, Unlock::VaultPassphrase(pass))
+                .unwrap();
+            let want = wallet("twelve_words")
+                .import_native_key(Network::Evm, &h(r["plaintext"].as_str().unwrap()))
+                .unwrap();
+            assert_eq!(
+                w.imported_key(Network::Evm, n).unwrap().public_key(),
+                want.public_key()
+            );
+            assert_eq!(
+                w.manifest().key_locked,
+                [ImportEntry {
+                    network: Network::Evm,
+                    n
+                }]
+            );
+        } else {
+            assert_eq!(r["error"], "VaultFormat");
+            assert_eq!(code(got), "Argument", "{}", r["id"]);
+        }
+    }
 }

@@ -20,11 +20,15 @@ const VERSION = 2;
 export const VAULT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const PIN_N = Object.freeze([2 ** 15, 2 ** 16, 2 ** 17]); // CLI-SGN-21: the only N an envelope may carry
 const PRF_INFO = utf8ToBytes("scaas-clientkeys-vault-v1/prf");
-/** An error with the status name every client shares (`VaultOpen`, `VaultParams`, `VaultVersion`, `Argument`; ua-rs-sign §8.1). */
+/** An error with the status name every client shares (`VaultOpen`, `VaultParams`, `VaultVersion`, `VaultFormat`, `Argument`;
+ *  ua-rs-sign §8.1). */
 const refuse = (code, message) => {
   throw Object.assign(new Error(message), { code });
 };
 const SEED_LENGTHS = Object.freeze([16, 20, 24, 28, 32]); // BIP-39 entropy of 12, 15, 18, 21, 24 words
+/** The key lock (user-profiles spec §7.4, CLI-UPR-24): an imported key under its own passphrase, a pin envelope only. */
+const KEY_LOCKED = "native-import-locked:";
+const keyLocked = (vault) => typeof vault.label === "string" && vault.label.startsWith(KEY_LOCKED);
 
 async function gcm(op, keyBytes, iv, data, aad) {
   const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, [op]);
@@ -130,6 +134,7 @@ export async function rewrapPin(vault, oldPin, newPin, params = SCRYPT, { policy
 }
 
 async function addPrfEnvelope(vault, dek, { output, credentialId, salt }) {
+  if (keyLocked(vault)) refuse("Argument", "A key-locked vault takes no passkey or platform unlock.");
   const kek = prfKey(output);
   try {
     vault.prf = { credentialId, salt: b64url(salt), ...(await seal(kek, dek, aad(vault, "prf"))) };
@@ -143,6 +148,8 @@ async function dekFrom(vault, { pin, prfOutput }) {
   if (vault.v !== VERSION || Object.hasOwn(vault, "moved")) refuse("VaultVersion", "Unknown vault version.");
   if (typeof vault.id !== "string" || !VAULT_ID.test(vault.id))
     refuse("Argument", "A vault id is a lower-case UUID v4.");
+  // before any KDF: a key-locked vault opens by its own typed passphrase only (null is no envelope, as ua-rs reads it)
+  if (keyLocked(vault) && vault.prf != null) refuse("VaultFormat", "A key-locked vault with a passkey envelope.");
   if (prfOutput) {
     if (!vault.prf) throw new Error("This vault has no passkey unlock.");
     const kek = prfKey(prfOutput);
