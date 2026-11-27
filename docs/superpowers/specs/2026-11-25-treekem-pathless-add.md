@@ -220,11 +220,12 @@ a path-less Add's nonce (new, C47; R4's kind of value: seed-derived):
 `next` it would publish the chain: the vectors carry `K_e`, `next_e` and `confirmTag` of one `S_e` and a row that fails
 if two labels are made equal.
 
-**`try` (C47).** The lowest value whose `epochId` is not in state for this parent and these Adds. A try is raised only when
-a record with the previous one is in state and did not complete on this parent (a rebuild after losing the slot has a new
-parent and starts at 0). A try reused after a restore, for a record that was signed but never landed, is harmless: one id
-holds one record in state, and both candidates carry the same joiner secret by construction. Above `ADD_NONCE_TRIES − 1`
-the author builds a path commit instead.
+**`try` (C47).** The device's counter per head (as built; the path-less review's E-6 = G-6, a controller call of
+2026-11-27): every path-less Add the device signs on a head takes the next `try`, a new head starts at 0 (a rebuild after
+losing the slot has a new parent). A `try` reused after a restore, its record in state, is refused `PqChatNonceUsed` at the
+send; the client reports it as `TreeStale` and the rebuild takes the next `try`. One id holds one record in state, and both
+candidates carry the same joiner secret by construction, so a reuse costs a refused send only. With every `try` below
+`ADD_NONCE_TRIES` used on a head the author builds a path commit instead.
 
 **What each binds:**
 
@@ -311,6 +312,11 @@ At acceptance (owner, R12: everything public is checked then), in `PqGroupTree._
 
 Two base codes are added (`T_PATH_REQUIRED`, `T_PATH_BOUND`), mapped by `PqChatCore._treeFail` to the two errors; the base
 keeps no app name (CTR-CHAT-26's two layers).
+
+What is pinned across the contract and the client libraries is the set of records accepted and refused. A record with
+several faults may be refused by another of its names in a client library than on the contract (the clients check the
+Removes and Adds before items 3 and 4); the rows with one fault pin its name (the path-less review's E-5, a controller
+call of 2026-11-27).
 
 ### 5.2 Completion
 
@@ -450,9 +456,9 @@ threshold `W(N)` is defined for every N (C46, controller; §15.1):
   N comes near"): N = 1 → 1, 2 → 1, 4 → 3, 24 → 18, 100 → 75, 510 → 382. From `sincePath ≥ W(N)`: "n of N; at N the next Add
   carries a key refresh". A creator who picks N above 20 is shown, in the `createSession` review, that the warning comes at
   `W(N)`, later than a session with 0.
-- **The deferred cost (D-10):** every warning and every path-less Add's quote also shows "the next refresh carries about m
-  ciphertexts, about m × 2.9 M asked" (m = the leaves owed a ciphertext, `sincePath` plus the blanked warm nodes, [E] until
-  P8).
+- **The deferred cost (D-10):** every warning and every path-less Add's quote also shows "the next refresh carries at least m
+  ciphertexts, at least m × 2.9 M asked", a lower bound (m = the leaves owed a ciphertext, `sincePath` plus the
+  blanked warm nodes, [E] until P8).
 - **Every path-less Add's review** (any author) shows "adds without refreshing the group's keys; n of N since the last
   refresh" (or "n since the last refresh" with 0).
 
@@ -581,7 +587,7 @@ admin are known limits (§15.2), recorded, not fixed.
 | A stolen non-admin UA signing key, **without** the epoch state, signs a path-less Add | it can add only keys of the victim's UA. The record is accepted; its maker cannot read the chain's epoch (no `next_e`); its tag fails at every member (C45, §6.2), the victim's device shows the compromise warning by the nonce (C47), and the added leaf is under review before any path commit gives it a key (§6.2). Weaker than today's stolen-key path commit (R10 as amended) |
 | A stolen non-admin UA signing key **with** the epoch state (a member insider) | the record, its tag and its Welcome are right, so members see nothing; **the victim's device shows the compromise warning** because no `try` of its seed reproduces the nonce (C47, F-2), naming the leaf, which is then under review (§6.2). Without C47 this would go unseen |
 | An author gives a joiner a wrong Welcome | the joiner's tag at the join fails if the tag is the chain's: "not followed", a denial of service on that joiner, no disclosure. A member that adds its own key forks only its own device. An author who also signs a tag matching its own Welcome forks the joiner (members see C45; the joiner sees "Welcome may not match" at the next honest path-less epoch, §6.3) and reads what the joiner sends until the next path commit reaching it: for an admin author a known limit (§15.2) |
-| An author signs a wrong tag on purpose | anchored members keep the chain's key and see "the author did not hold the epoch" (§6.2); it costs the author a record and stops nobody |
+| An author signs a wrong tag on purpose | anchored members keep the chain's key and see "the author did not hold the epoch" (§6.2); a device that entered the run by a path-less Welcome (unanchored) is "not followed (welcome may not match)" from that epoch to the next path commit that reaches it (§6.3). So the record stops every unanchored joiner of the run until a path commit, at the cost of one record; the admins see the C45 state and its author, and the next path commit (forced at the bound, or "add and refresh") restores them (the path-less review's G-3, 2026-11-27) |
 | **Info wipe by a cheap record (F-10 a)** | a path-less record with a wrong tag (or a `sealedInfo` that does not open) leaves every member with no info in force (C33's gap rule, which keeps the lists from suspect leaves); a member can do it with an own-key Add for about 20 M asked (today a garbage path commit to everyone, 62 M and more), and an admin must then establish the info anew under R13. The gap rule stands; the cost is this row |
 | **Bound burn (F-10 b)** | own-key leaves count (R18), so three or four members can use up N = 24 and the admin's next Add pays the path form; mild, and the forced commit is the healthy one |
 | **A path commit starved by one-transaction path-less Adds (F-5)** | after a run the tree is cold and the next path commit takes several transactions; any path-less Add of a plain record that fits one transaction takes the slot and the staged path commit is `PqChatEpochTaken` (its pieces stay in state). Honest clients build no path-less Add while a path commit is staged on the head (§6.5); with N > 0 the contract ends a hostile run at N; with 0 a member's own-key Adds are bounded by `KEYS_PER_UA_MAX` and the default of 20 (§3.1) closes most sessions; an admin doing it is a known limit |
