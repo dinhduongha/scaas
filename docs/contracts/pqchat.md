@@ -682,6 +682,12 @@ count)`, `replies(parentId, start, count)` and `byAuthor(author, start, count)` 
 most `count` ids from `start`, fewer at the end, empty past it, and the list's length; `count = 0` is the count view. No
 clamp: the call's gas bounds a page. The node's indexer may mirror them; the state is the answer.
 
+**PLANNED for the next `PqChat` release** (owner 2026-11-27, [CLI-PQC-18](../decisions.md#CLI-PQC-18)): `postedAt` packed into
+the entry's slot and `editedAt` beside each version pointer, no new slot, returned by `entryOf` and `versionAt` (G1); a batched
+view `entryRows(bytes32[] ids, bytes32 viewer)` with each entry's row without its body, its body length, `up`, `down`, the
+viewer's vote and the direct reply count (G2); the version's `nonce` in `entryOf` and `versionAt` (G5). Layout and gas pins move
+with their old and new figures; record typehashes and vectors stay.
+
 ## 10. Every external entry
 
 Status: **BUILT**. Errors are those of `IPqChat.sol`; "registry" means the bubbled `UAUnauthorized` / `UAVerifyGas` of

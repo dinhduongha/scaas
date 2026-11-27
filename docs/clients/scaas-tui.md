@@ -31,6 +31,15 @@ and `pqvault-core` (owner 2026-11-24, spec §16 Q-T2), each as a crate behind it
 own rules hold in the TUI as in any app: every signature and key operation goes through the SDK, and no key reaches an app core
 ([CLI-PQC-03](pqchat-core.md#CLI-PQC-03), [CLI-PQC-04](pqchat-core.md#CLI-PQC-04), [CLI-PQV-12](ua-libraries.md#CLI-PQV-12)).
 
+**Chat over Matrix and PqChat** (owner 2026-11-27; SPECIFIED): the TUI chats over plain Matrix too, its list holding Matrix rooms and
+PqChat sessions as two row kinds that never mix ([CLI-PQC-19](../decisions.md#CLI-PQC-19)). Its Matrix client is the crate
+`scaas-matrix` of this repository (PLANNED, [CLI-PQC-20](../decisions.md#CLI-PQC-20)), with Matrix end-to-end encryption, device
+verification and recovery, every secret in a secret field; it replaces the spec's dependency on scaas-app's `app-matrix`. Each user
+profile has its own Matrix: one `scaas-matrix` client per open profile, closed at a profile switch before the other opens.
+
+**The view-model link** (owner 2026-11-27; SPECIFIED): the TUI pins a scaas-app commit of the view-model contract and replays its
+flow fixtures in its tests, with no dependency on scaas-app: [CLI-TUI-19](../decisions.md#CLI-TUI-19).
+
 <a id="CLI-TUI-17"></a>**CLI-TUI-17** — **The build and the process hold the TUI to the SDK's surface** (controller call; SPECIFIED).
 The TUI links `scaas-sdk` as a crate and is its own one Rust library ([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12)). It holds no
 cryptography, transport, signer or byte format: everything it shows comes from an SDK call or event, everything it does is one. Its

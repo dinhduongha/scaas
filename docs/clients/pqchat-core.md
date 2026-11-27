@@ -42,6 +42,13 @@ It owns the state machine: what to build, when, from which reads, and what to sh
 of the one library `app-core-rust` (implying `scaas`), so the SDK, `app-matrix`, `pqchat-core` and `ua-rs` share one process, one
 tokio runtime and one Matrix login ([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12)'s one library per app).
 
+**The Matrix client moves into this repository** (owner 2026-11-27; PLANNED): scaas-app's planned `app-matrix` becomes the crate
+`clients/scaas-matrix` (working name), which implements `MatrixTransport` and is used by scaas-app's front-ends, `scaas-tui` and
+this crate's e2e; this crate's normal graph still holds no Matrix crate (`tests/deps.rs`). **Each user profile has its own Matrix**:
+its logins, session, store, crypto keys and device id are sealed in that profile and shared with no other; the app runs one
+`scaas-matrix` client per open profile, not per app, and a profile switch closes it before the other profile's opens. So "the app's
+live Matrix client" below is the open profile's: [CLI-PQC-20](../decisions.md#CLI-PQC-20).
+
 <a id="CLI-PQC-02"></a>**CLI-PQC-02** — **This round's scope: 1:1 sessions first, groups correct; Matrix and chain stores; public
 topics; attachments (owner 2026-11-21); no calls, no HCS, Waku or libp2p, no `msig` author** (owner 2026-11-10: the 2-person chat is the main case;
 controller call for the cut, owner may override; BUILT). In: sessions, epochs and rekeys, wraps in chunks, `leave`, `remove`,
@@ -93,6 +100,10 @@ SCaaS purpose and domain, `PURPOSE_PQCHAT`, `DS_C` and PqChat's app id and its `
 BUILT, UNAUDITED), while PqChat's own paths (the record entries, the card, the file seal) sign. So the SDK knows PqChat's record formats and none of its logic.
 Messages and leaves are signed by a leaf UA, never by an `msig` (UA-7 P13).
 
+**Sign after confirm** (owner 2026-11-27; SPECIFIED; BUILT-gap: the crate signs its session, epoch and topic records when it builds
+them): each record entry above is built and quoted for the review and signed only on the user's confirm; the message entry keeps
+its form (the send is the confirm): [CLI-SDK-36](../decisions.md#CLI-SDK-36).
+
 ## 3. The Matrix store
 
 Status: **BUILT** on the crate's side (`src/matrix.rs`, the conformance test `tests/matrix_conformance.rs`, the fake
@@ -120,6 +131,11 @@ the app's rule that ordinary conversations are encrypted from their first event 
 PqChat room as an ordinary Matrix room, never upgrades a Matrix room into a PqChat session in place, and never joins a PqChat room
 before its session is accepted (CLI-PQC-08). Without an attached client a session that lists Matrix cannot send (`MatrixDetached`)
 and its chain stores still serve reads.
+
+**Defaults in the front-ends** (owner 2026-11-27; SPECIFIED): Matrix rooms and PqChat sessions are two row kinds that never mix, in
+`scaas-tui` too; Matrix rooms send private read receipts, no typing notice and no presence by default; PqChat sends no push by
+default (`event_id_only` with a generic text on the user's opt-in) and no typing (the in-session `typing` content off by default);
+chat comes to the web build later and not to the extension: [CLI-PQC-19](../decisions.md#CLI-PQC-19).
 
 ## 4. Protocol duties
 
@@ -196,7 +212,7 @@ after finality); opens its own wraps; and, after acceptance, reads the latest me
 keyed apart, each with its own revision: the device id and its anchor check, each own sender chain's next counter, the counters seen
 per scope, the highest KEM version seen per UA, accepted and declined session ids, envelopes not yet processed, and read positions.
 It still links sessions to rooms and hints, which the chain does not show, so the app's storage keeps it encrypted at rest under the
-app's own store key (the one its Matrix store uses) and excludes it from backups. **Device binding:** the app keeps a random anchor
+app's own store key (the one its Matrix store uses) and excludes it from backups. That store key is a sealed item of the user profile ([CLI-UPR-29](../decisions.md#CLI-UPR-29)). **Device binding:** the app keeps a random anchor
 for the store in the platform's non-backed-up secret storage; at start a missing or different anchor (a restore, a copied data
 directory, a cloned phone) makes a new device id, and so does a lost store
 ([CTR-CHAT-12](../contracts/pqchat.md#CTR-CHAT-12)); a counter is never used twice. **No plaintext** is stored until the
@@ -400,6 +416,11 @@ warning, an admin's new info after a gap, the order of a commit's pieces, the cl
   the store; scheme 1 is outside [ARCH-POS-13](../decisions.md#ARCH-POS-13) by the owner's change of 2026-11-13).
 - **The home's setting** comes from pinned deployment data or a majority read and is pinned; the mode is pinned with `treeId`.
 - **The size hint.** The crate proposes the tree mode from about 7 keys where several members commit; it enforces nothing.
+
+**Public topics on the client** (owner 2026-11-27; SPECIFIED, nothing built): topic writes go relayed by default (fee 0 allowed, the
+payer's own transaction an option), drafts stay local in the profile's sealed store, the sorts work over a 256-id window with a
+visible down-vote fold, and the next `PqChat` release adds entry times, a batched row view and the version nonce (PLANNED):
+[CLI-PQC-18](../decisions.md#CLI-PQC-18).
 
 ## 5. Vectors and tests
 
