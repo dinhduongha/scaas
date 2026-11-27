@@ -2,10 +2,12 @@
 //! `pqvault-core`: PqVault's app core above `scaas-sdk` (CLI-PQV-01; spec docs/superpowers/specs/2026-11-17-pqvault.md §7).
 //! It builds, encrypts, verifies, opens and merges vault records; every signature, verification, KEM, HKDF, Argon2id, AEAD
 //! and random key runs in `scaas-ua` through the SDK's app-core surface on key handles (C1, CLI-PQV-12), every record is
-//! signed by the SDK's PqVault calls `prepare_pqvault_record` and `AppPrepared::sign` (C2, CLI-PQV-13), every chain read is the SDK's `read_app` as a
-//! read that feeds a decryption (ARCH-POS-15), and every write is a call of the contract the SDK prepares and quotes for the
-//! user to review (`AppCore::prepare_app_call`, sent by `Wallet::submit_native_send`). It opens no connection and holds no
-//! key byte. **UNAUDITED: test data only (CLI-PQV-08).**
+//! signed by the SDK's PqVault calls `prepare_pqvault_record` and `AppPrepared::sign` (C2, CLI-PQV-13) only on the user's
+//! confirm of its review (CLI-SDK-36: every write is a [`vault::Prepared`], its call quoted from the gas rows before the
+//! signature by `AppCore::quote_app_call`, signed by [`PqVault::confirm`]), every chain read is the SDK's `read_app` as a read
+//! that feeds a decryption (ARCH-POS-15), and every signed write is a call of the contract the SDK prepares and simulates
+//! (`AppCore::prepare_app_call`, sent by `Wallet::submit_native_send`). Items come out typed by one secret table
+//! ([`item`], CLI-PQV-16 H1). It opens no connection and holds no key byte. **UNAUDITED: test data only (CLI-PQV-08).**
 #![forbid(unsafe_code)]
 #![deny(
     clippy::unwrap_used,
@@ -15,17 +17,18 @@
 )]
 
 pub mod content;
+pub mod item;
 pub mod keys;
 pub mod records;
 pub mod vault;
 
-pub use content::Merge;
+pub use item::{Change, Class, Custom, Field, Item, Merge};
 pub use records::{Addr, Signed, B32};
 pub use vault::*;
 
 use records::UaSig;
 use scaas_sdk::app_core::{
-    AppCall, AppCore, AppDesc, AppKey, AppPath, AppSigned, AppWrap, MsigVersion,
+    AppCall, AppCore, AppDesc, AppKey, AppPath, AppQuote, AppSigned, AppWrap, MsigVersion,
 };
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::{Sdk, SdkError};
@@ -138,7 +141,8 @@ pub trait Net: Send + Sync {
         label: Vec<u8>,
         aad: Vec<u8>,
     ) -> Result<AppWrap, SdkError>;
-    /// `AppCore::prepare_app_call`: the entry `sig` with `args`, paid by `payer`, quoted and reviewed.
+    /// `AppCore::prepare_app_call`: the entry `sig` with `args` (a signed record), paid by `payer`, simulated, quoted and
+    /// reviewed.
     async fn call(
         &self,
         chain: &str,
@@ -147,6 +151,17 @@ pub trait Net: Send + Sync {
         args: Value,
         payer: KeyRef,
     ) -> Result<AppCall, SdkError>;
+    /// `AppCore::quote_app_call`: the entry `sig` with `args` (the record's signature empty), paid by `payer`, quoted from the
+    /// gas rows before `signer` signs the record (CLI-SDK-36); never a signing call.
+    async fn quote(
+        &self,
+        chain: &str,
+        contract: Addr,
+        sig: &str,
+        args: Value,
+        payer: KeyRef,
+        signer: KeyRef,
+    ) -> Result<AppQuote, SdkError>;
 }
 
 /// The JSON ABI item of a human-readable function, every parameter and tuple component named: `function name(<params>)
@@ -330,6 +345,26 @@ impl Net for SdkNet {
                 entry(sig)?,
                 args.to_string(),
                 payer,
+            )
+            .await
+    }
+    async fn quote(
+        &self,
+        chain: &str,
+        contract: Addr,
+        sig: &str,
+        args: Value,
+        payer: KeyRef,
+        signer: KeyRef,
+    ) -> Result<AppQuote, SdkError> {
+        self.0
+            .quote_app_call(
+                chain.into(),
+                records::hex(&contract.0),
+                entry(sig)?,
+                args.to_string(),
+                payer,
+                signer,
             )
             .await
     }

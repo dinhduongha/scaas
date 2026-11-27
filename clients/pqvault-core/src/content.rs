@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! What a ciphertext holds (spec §6.4, §6.6, §6.8): canonical JSON (UA-7 P49: keys sorted by UTF-16 code units, no
-//! whitespace, integers within ±(2^53 − 1) only), the padding buckets, the item's fields and their bounds, and the three-way
-//! merge of two edits. Pure: no key, no network. A decoder here is bounded by length and depth. UNAUDITED.
-use serde_json::{Map, Value};
+//! whitespace, integers within ±(2^53 − 1) only), written into a zeroizing buffer of a fixed capacity, the padding buckets
+//! (zeroizing too), and the item's bounds; the typed item and the merge are [`crate::item`]'s. Pure: no key, no network. A
+//! decoder here is bounded by length and depth. UNAUDITED.
+use serde_json::Value;
+use zeroize::Zeroizing;
 
 /// The largest safe integer of JSON (2^53 − 1).
 const SAFE: u64 = (1 << 53) - 1;
@@ -31,7 +33,96 @@ fn depth_ok(v: &Value, d: usize) -> bool {
     }
 }
 
-fn write(v: &Value, out: &mut String) -> Result<(), Bad> {
+/// A zeroizing output buffer of [`BUCKET_MAX`] bytes that never reallocates (a write past it is `Shape`): no copy of what it
+/// holds is left behind in freed memory.
+pub(crate) struct Out(Zeroizing<Vec<u8>>);
+
+impl Out {
+    pub(crate) fn new() -> Out {
+        Out(Zeroizing::new(Vec::with_capacity(BUCKET_MAX)))
+    }
+    pub(crate) fn put(&mut self, b: &[u8]) -> Result<(), Bad> {
+        if self.0.len() + b.len() > BUCKET_MAX {
+            return Err(Bad::Shape);
+        }
+        self.0.extend_from_slice(b);
+        Ok(())
+    }
+    pub(crate) fn bytes(&self) -> &[u8] {
+        &self.0
+    }
+    pub(crate) fn into_inner(self) -> Zeroizing<Vec<u8>> {
+        self.0
+    }
+}
+
+const HEX: &[u8; 16] = b"0123456789abcdef";
+
+/// The JSON string literal of the UTF-8 bytes `s`, as serde_json writes it: `"` and `\` escaped, `\b \t \n \f \r`, any other
+/// control byte `\u00xx` (lower-case hex), every other byte as it is.
+pub(crate) fn escape(s: &[u8], out: &mut Out) -> Result<(), Bad> {
+    out.put(b"\"")?;
+    for &c in s {
+        match c {
+            b'"' => out.put(b"\\\"")?,
+            b'\\' => out.put(b"\\\\")?,
+            8 => out.put(b"\\b")?,
+            9 => out.put(b"\\t")?,
+            10 => out.put(b"\\n")?,
+            12 => out.put(b"\\f")?,
+            13 => out.put(b"\\r")?,
+            0..=0x1f => {
+                let hex = |n: u8| HEX.get(usize::from(n)).copied().unwrap_or(b'0');
+                out.put(&[b'\\', b'u', b'0', b'0', hex(c >> 4), hex(c & 15)])?
+            }
+            _ => out.put(&[c])?,
+        }
+    }
+    out.put(b"\"")
+}
+
+/// The bytes of a JSON string literal's inside `s` as [`escape`] writes it, into a zeroizing buffer of `s`'s length (an
+/// unescaped text is never longer: it never reallocates); `None` for an escape `escape` does not write.
+pub(crate) fn unescape(s: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
+    let mut out = Zeroizing::new(Vec::with_capacity(s.len()));
+    let mut i = 0;
+    while let Some(&c) = s.get(i) {
+        if c != b'\\' {
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        let b = match *s.get(i + 1)? {
+            b'"' => b'"',
+            b'\\' => b'\\',
+            b'b' => 8,
+            b't' => 9,
+            b'n' => 10,
+            b'f' => 12,
+            b'r' => 13,
+            b'u' => {
+                let h = std::str::from_utf8(s.get(i + 2..i + 6)?).ok()?;
+                let x = u8::try_from(u16::from_str_radix(h, 16).ok()?).ok()?;
+                i += 4;
+                x
+            }
+            _ => return None,
+        };
+        out.push(b);
+        i += 2;
+    }
+    Some(out)
+}
+
+/// `v`'s canonical JSON into `out`: `Shape` for a number that is not a safe integer or a value nesting deeper than 8.
+pub(crate) fn write_value(v: &Value, out: &mut Out) -> Result<(), Bad> {
+    if !depth_ok(v, 0) {
+        return Err(Bad::Shape);
+    }
+    write(v, out)
+}
+
+fn write(v: &Value, out: &mut Out) -> Result<(), Bad> {
     match v {
         Value::Number(n) => {
             let ok = n
@@ -42,45 +133,46 @@ fn write(v: &Value, out: &mut String) -> Result<(), Bad> {
             if !ok {
                 return Err(Bad::Shape);
             }
-            out.push_str(&n.to_string());
+            out.put(n.to_string().as_bytes())?;
         }
+        Value::String(s) => escape(s.as_bytes(), out)?,
+        Value::Bool(true) => out.put(b"true")?,
+        Value::Bool(false) => out.put(b"false")?,
+        Value::Null => out.put(b"null")?,
         Value::Array(a) => {
-            out.push('[');
+            out.put(b"[")?;
             for (i, x) in a.iter().enumerate() {
                 if i > 0 {
-                    out.push(',');
+                    out.put(b",")?;
                 }
                 write(x, out)?;
             }
-            out.push(']');
+            out.put(b"]")?;
         }
         Value::Object(o) => {
             let mut keys: Vec<&String> = o.keys().collect();
             keys.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
-            out.push('{');
+            out.put(b"{")?;
             for (i, k) in keys.iter().enumerate() {
                 if i > 0 {
-                    out.push(',');
+                    out.put(b",")?;
                 }
-                out.push_str(&serde_json::to_string(k).map_err(|_| Bad::Shape)?);
-                out.push(':');
+                escape(k.as_bytes(), out)?;
+                out.put(b":")?;
                 write(o.get(*k).ok_or(Bad::Shape)?, out)?;
             }
-            out.push('}');
+            out.put(b"}")?;
         }
-        other => out.push_str(&serde_json::to_string(other).map_err(|_| Bad::Shape)?),
     }
     Ok(())
 }
 
-/// Canonical JSON of `v`: `Shape` for a number that is not a safe integer or a value nesting deeper than 8.
+/// Canonical JSON of `v` (a value that holds no secret: `sealedInfo`'s, a test's): `Shape` for a number that is not a safe
+/// integer, a value nesting deeper than 8, or one past 16,384 B.
 pub fn canonical(v: &Value) -> Result<String, Bad> {
-    if !depth_ok(v, 0) {
-        return Err(Bad::Shape);
-    }
-    let mut s = String::new();
-    write(v, &mut s)?;
-    Ok(s)
+    let mut out = Out::new();
+    write_value(v, &mut out)?;
+    String::from_utf8(out.bytes().to_vec()).map_err(|_| Bad::Shape)
 }
 
 /// The value of canonical JSON bytes, else `Unreadable` (bytes another writer could have written differently: re-serialised
@@ -93,8 +185,8 @@ pub fn parse_canonical(b: &[u8]) -> Result<Value, Bad> {
     }
 }
 
-fn pad_to(c: &[u8], n: usize) -> Vec<u8> {
-    let mut out = vec![0u8; n];
+fn pad_to(c: &[u8], n: usize) -> Zeroizing<Vec<u8>> {
+    let mut out = Zeroizing::new(vec![0u8; n]);
     let len = u32::try_from(c.len()).unwrap_or(u32::MAX).to_be_bytes();
     if let Some(h) = out.get_mut(..4) {
         h.copy_from_slice(&len);
@@ -106,7 +198,7 @@ fn pad_to(c: &[u8], n: usize) -> Vec<u8> {
 }
 
 /// `pad(c) = be32(len c) ‖ c ‖ zeros` to the smallest bucket of 256, 1,024, 4,096, 16,384 B; above: `Shape`.
-pub fn pad(c: &[u8]) -> Result<Vec<u8>, Bad> {
+pub fn pad(c: &[u8]) -> Result<Zeroizing<Vec<u8>>, Bad> {
     let n = BUCKETS
         .iter()
         .find(|b| **b >= c.len() + 4)
@@ -115,7 +207,7 @@ pub fn pad(c: &[u8]) -> Result<Vec<u8>, Bad> {
 }
 
 /// `sealedInfo`'s padding (spec §6.4, CLI-PQV-09): to 1,024 B, else the next power of two, at most 16,384 B.
-pub fn pad_info(c: &[u8]) -> Result<Vec<u8>, Bad> {
+pub fn pad_info(c: &[u8]) -> Result<Zeroizing<Vec<u8>>, Bad> {
     let need = c.len() + 4;
     if need > BUCKET_MAX {
         return Err(Bad::Shape);
@@ -123,8 +215,9 @@ pub fn pad_info(c: &[u8]) -> Result<Vec<u8>, Bad> {
     Ok(pad_to(c, need.next_power_of_two().max(1024)))
 }
 
-/// The content of a padded plaintext; anything `pad` (or `pad_info` with `info`) would not write is `Unreadable`.
-pub fn unpad(p: &[u8], info: bool) -> Result<Vec<u8>, Bad> {
+/// The content of a padded plaintext (a part of it, no copy); anything `pad` (or `pad_info` with `info`) would not write is
+/// `Unreadable`.
+pub fn unpad(p: &[u8], info: bool) -> Result<&[u8], Bad> {
     let n = p
         .get(..4)
         .and_then(|h| <[u8; 4]>::try_from(h).ok())
@@ -135,7 +228,7 @@ pub fn unpad(p: &[u8], info: bool) -> Result<Vec<u8>, Bad> {
         .ok_or(Bad::Unreadable)?;
     let again = if info { pad_info(c) } else { pad(c) };
     match again {
-        Ok(q) if q == p => Ok(c.to_vec()),
+        Ok(q) if q[..] == *p => Ok(c),
         _ => Err(Bad::Unreadable),
     }
 }
@@ -194,10 +287,12 @@ pub fn check_item(v: &Value) -> Result<(), Bad> {
                     })
             })
         }),
-        "note" => matches!(
-            o.get("mediaType").and_then(Value::as_str),
-            Some("text/plain" | "text/markdown")
-        ),
+        "note" => {
+            matches!(
+                o.get("mediaType").and_then(Value::as_str),
+                Some("text/plain" | "text/markdown")
+            ) && o.get("hideBody").is_none_or(Value::is_boolean)
+        }
         "vaultRef" => {
             o.get("vaultId").and_then(Value::as_str).is_some()
                 && matches!(
@@ -208,91 +303,6 @@ pub fn check_item(v: &Value) -> Result<(), Bad> {
         _ => true,
     };
     (ok && typed).then_some(()).ok_or(Bad::Shape)
-}
-
-/// An item's padded plaintext: canonical JSON of a checked item, padded (at most the 16,384-B bucket, VC9).
-pub fn item_plaintext(v: &Value) -> Result<Vec<u8>, Bad> {
-    check_item(v)?;
-    pad(canonical(v)?.as_bytes())
-}
-
-/// The item of a decrypted, padded plaintext: the padding, then canonical JSON, then an object with a `type` (`Unreadable`
-/// otherwise; an unknown `type` is returned as it is, for the UI to show as unsupported).
-pub fn item_of(pt: &[u8]) -> Result<Value, Bad> {
-    let v = parse_canonical(&unpad(pt, false)?)?;
-    match v.get("type").and_then(Value::as_str) {
-        Some(t) if (1..=32).contains(&t.len()) => Ok(v),
-        _ => Err(Bad::Unreadable),
-    }
-}
-
-// ------------------------------------------------------------------ merge (spec §7 "Merge")
-
-/// A three-way merge's outcome: clean, or the merged item with the fields both sides changed (the newer side's value kept,
-/// the other's recorded in `history`).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Merge {
-    Clean(Value),
-    Conflict(Value, Vec<String>),
-}
-
-/// Per field against `base` (the version an edit started from): a field only one side changed takes that side's value, one
-/// both changed alike stays, one both changed differently keeps `ours` (the edit being written is the newer) and records
-/// `theirs` in `history` (`[{field, value}]`, appended). Fields neither knows survive; `history` itself merges by union.
-pub fn merge(base: &Value, ours: &Value, theirs: &Value) -> Merge {
-    let empty = Map::new();
-    let (b, o, t) = (
-        base.as_object().unwrap_or(&empty),
-        ours.as_object().unwrap_or(&empty),
-        theirs.as_object().unwrap_or(&empty),
-    );
-    let mut out = Map::new();
-    let mut conflicts = Vec::new();
-    let mut history: Vec<Value> = o
-        .get("history")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    for h in t
-        .get("history")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        if !history.contains(h) {
-            history.push(h.clone());
-        }
-    }
-    let mut keys: Vec<&String> = b.keys().chain(o.keys()).chain(t.keys()).collect();
-    keys.sort();
-    keys.dedup();
-    for k in keys {
-        if k == "history" {
-            continue;
-        }
-        let (bv, ov, tv) = (b.get(k), o.get(k), t.get(k));
-        let pick = if ov == tv || tv == bv {
-            ov
-        } else if ov == bv {
-            tv
-        } else {
-            conflicts.push(k.clone());
-            history
-                .push(serde_json::json!({"field": k, "value": tv.cloned().unwrap_or(Value::Null)}));
-            ov
-        };
-        if let Some(v) = pick {
-            out.insert(k.clone(), v.clone());
-        }
-    }
-    if !history.is_empty() {
-        out.insert("history".into(), Value::Array(history));
-    }
-    if conflicts.is_empty() {
-        Merge::Clean(Value::Object(out))
-    } else {
-        Merge::Conflict(Value::Object(out), conflicts)
-    }
 }
 
 #[cfg(test)]
@@ -371,6 +381,7 @@ mod tests {
             json!({"type": "lo-gin", "title": "t"}),
             json!({"type": "spaceship", "title": "t"}),
             json!({"type": "note", "title": "t", "mediaType": "text/html"}),
+            json!({"type": "note", "title": "t", "mediaType": "text/plain", "hideBody": "yes"}),
             json!({"type": "deleted", "title": "t"}),
             json!({"type": "login", "title": "t", "tags": vec!["a"; 17]}),
             json!({"type": "login", "title": "t", "urls": [{"url": "x".repeat(2049), "match": "host"}]}),
@@ -379,26 +390,5 @@ mod tests {
             assert_eq!(check_item(&bad), Err(Bad::Shape), "{bad}");
         }
         assert_eq!(check_item(&json!({"type": "deleted"})), Ok(()));
-    }
-
-    #[test]
-    fn merge_three_way() {
-        let base = json!({"type": "login", "title": "a", "password": "p0", "x-new": 1});
-        let ours = json!({"type": "login", "title": "a2", "password": "p1", "x-new": 1});
-        let theirs =
-            json!({"type": "login", "title": "a", "password": "p2", "x-new": 1, "notes": "n"});
-        match merge(&base, &ours, &theirs) {
-            Merge::Conflict(m, f) => {
-                assert_eq!(f, vec!["password".to_string()]);
-                assert_eq!(m["password"], "p1");
-                assert_eq!(m["title"], "a2");
-                assert_eq!(m["notes"], "n");
-                assert_eq!(m["x-new"], 1);
-                assert_eq!(m["history"], json!([{"field": "password", "value": "p2"}]));
-            }
-            other => panic!("{other:?}"),
-        }
-        let clean = merge(&base, &ours, &base);
-        assert_eq!(clean, Merge::Clean(ours.clone()));
     }
 }

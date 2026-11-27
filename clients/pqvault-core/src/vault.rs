@@ -4,12 +4,13 @@
 //! a user signs. Reading never depends on what opened: a vault's state, its removals and the user's wraps are all read
 //! before any key is tried, and an item page is read whole, so nothing a node sees follows from a decryption (ARCH-POS-13).
 //! UNAUDITED.
-use crate::content::{self, Merge};
+use crate::item::{self, Field, Item, Merge};
 use crate::keys::{self, ItemAt};
 use crate::records::*;
 use crate::{Error, PqVault, Result};
 use scaas_sdk::app_core::{
-    msig_versions_up, AppCall, AppKey, AppKeyUsage, AppPath, AppSigned, MsigVersion, SecretBytes,
+    msig_versions_up, AppCall, AppKey, AppKeyUsage, AppPath, AppQuote, AppSigned, MsigVersion,
+    SecretBytes,
 };
 use scaas_sdk::op::KeyRef;
 use serde_json::{json, Value};
@@ -286,7 +287,8 @@ impl Unlocked {
     }
 }
 
-/// An item version read and opened (or not): `value` is the item, else `Unreadable`, shown on the device only.
+/// An item version read and opened (or not): `value` is the item, its fields typed by the table (CLI-PQV-16 H1), else
+/// `Unreadable`, shown on the device only.
 #[derive(Debug)]
 pub struct ItemVersion {
     pub item_id: B32,
@@ -294,7 +296,23 @@ pub struct ItemVersion {
     pub version_count: u32,
     pub epoch_id: B32,
     pub author: B32,
-    pub value: Result<Value>,
+    pub value: Result<Item>,
+}
+
+/// A write built for the user's review and not signed (CLI-SDK-36): the record, the wraps of a create or a rekey (empty
+/// otherwise), and the SDK's quote of its call before the signature (`AppCore::quote_app_call`: the review with the
+/// signature empty, the payer's gas from the gas rows, `None` unquoted). [`PqVault::confirm`] signs it on the user's confirm;
+/// dropped, it signed nothing. It holds no key: the record's ciphertexts, its typed data and the key references only.
+#[derive(Debug)]
+pub struct Prepared<R> {
+    pub record: R,
+    pub wraps: Vec<Wrap>,
+    pub quote: AppQuote,
+    signer: KeyRef,
+    path: AppPath,
+    at: Instance,
+    typed: String,
+    payer: KeyRef,
 }
 
 /// What a weaker rekey that links `prev` would expose (spec §6.5): the items and versions reachable through it.
@@ -980,23 +998,86 @@ impl PqVault {
 
     // ------------------------------------------------------------------ vaults and epochs (spec §5.5, §6.7)
 
-    async fn sign<R: Record>(
+    /// `r` (and its `wraps`) built for the review by `signer`, paid by `payer`: its typed data in the domain `mode` names and
+    /// its call quoted before the signature (CLI-SDK-36). No signing call.
+    #[allow(clippy::too_many_arguments)]
+    async fn prepare<R: Record>(
         &self,
-        account: &KeyRef,
+        signer: &KeyRef,
         mode: Mode,
         at: &Instance,
         home: Addr,
         r: R,
-    ) -> Result<Signed<R>> {
+        wraps: Vec<Wrap>,
+        payer: KeyRef,
+    ) -> Result<Prepared<R>> {
         let typed = typed_json(&r, domain_of(mode, at, home)).map_err(|_| Error::Shape)?;
+        let (entry, args) = call_args(&r, &wraps, &UaSig::default())?;
+        let quote = self
+            .net
+            .quote(
+                &at.chain,
+                at.contract,
+                &entry,
+                args,
+                payer.clone(),
+                signer.clone(),
+            )
+            .await?;
+        Ok(Prepared {
+            record: r,
+            wraps,
+            quote,
+            signer: signer.clone(),
+            path: path_of(mode, at),
+            at: at.clone(),
+            typed,
+            payer,
+        })
+    }
+
+    /// [`Self::prepare`] of a record of `v` signed by the unlocking account.
+    async fn prepare_in<R: Record>(
+        &self,
+        v: &Unlocked,
+        r: R,
+        payer: KeyRef,
+    ) -> Result<Prepared<R>> {
+        let home = v.state.create.home_vault_contract;
+        self.prepare(
+            &v.account,
+            v.state.mode(),
+            &v.state.at,
+            home,
+            r,
+            vec![],
+            payer,
+        )
+        .await
+    }
+
+    /// Signs `p` on the user's confirm of its review (CLI-SDK-36): the one signing call (`AppCore::prepare_pqvault_record`,
+    /// `AppPrepared::sign`), then the signed record's call prepared and simulated (`AppCore::prepare_app_call`) for
+    /// `Wallet::submit_native_send`. A refused simulation (another device's newer version, `PqVaultVersion`) is the SDK's
+    /// error: the signed record is dropped with it, nothing sent.
+    pub async fn confirm<R: Record>(&self, p: Prepared<R>) -> Result<(Signed<R>, AppCall)> {
         let s = self
             .net
-            .sign(&at.chain, account, path_of(mode, at), typed)
+            .sign(&p.at.chain, &p.signer, p.path, p.typed)
             .await?;
-        Ok(Signed {
-            record: r,
-            sig: sig_of_signed(s),
-        })
+        let sig = sig_of_signed(s);
+        let (entry, args) = call_args(&p.record, &p.wraps, &sig)?;
+        let call = self
+            .net
+            .call(&p.at.chain, p.at.contract, &entry, args, p.payer)
+            .await?;
+        Ok((
+            Signed {
+                record: p.record,
+                sig,
+            },
+            call,
+        ))
     }
 
     fn info_json(info: &VaultInfo) -> Value {
@@ -1031,7 +1112,9 @@ impl PqVault {
 
     /// Epoch 0 of a new vault by `account` at `at` (its home): P1 first; `members` (the creator included, each at the KEM key
     /// version it names), the creator its one admin, a fresh random `K_e` wrapped to each member, the passphrase (VC19) into
-    /// `P_k` with a fresh salt, `sealedInfo`; signed by the SDK's PqVault call in the domain `mode` names.
+    /// `P_k` with a fresh salt, `sealedInfo`; prepared for the review in the domain `mode` names, paid by `payer`, signed by
+    /// the SDK's PqVault call at [`Self::confirm`].
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_vault(
         &self,
         account: &KeyRef,
@@ -1040,7 +1123,8 @@ impl PqVault {
         at: &Instance,
         mode: Mode,
         pass: &Passphrase,
-    ) -> Result<(Signed<VaultCreate>, Vec<Wrap>)> {
+        payer: KeyRef,
+    ) -> Result<Prepared<VaultCreate>> {
         let seed = self.p1(account).await?;
         pass.check_new()?;
         let me = self.ua(account)?;
@@ -1084,7 +1168,8 @@ impl PqVault {
             pass_salt,
             sealed_info: Bytes(sealed),
         };
-        Ok((self.sign(account, mode, at, at.contract, rec).await?, wraps))
+        self.prepare(account, mode, at, at.contract, rec, wraps, payer)
+            .await
     }
 
     /// A new epoch of `v` by its admin (spec §6.7, VC16): `members` and `admins` (sorted here), a fresh `K_e` wrapped to each
@@ -1098,9 +1183,10 @@ impl PqVault {
         admins: &[B32],
         pass: Option<&Passphrase>,
         link: Link,
-    ) -> Result<(Signed<VaultEpoch>, Vec<Wrap>, Exposure)> {
+        payer: KeyRef,
+    ) -> Result<(Prepared<VaultEpoch>, Exposure)> {
         let (signer, me) = (v.account.clone(), v.state.me);
-        self.rekey_by(v, &signer, me, members, admins, pass, link)
+        self.rekey_by(v, &signer, me, members, admins, pass, link, payer)
             .await
     }
 
@@ -1117,7 +1203,8 @@ impl PqVault {
         admins: &[B32],
         pass: Option<&Passphrase>,
         link: Link,
-    ) -> Result<(Signed<VaultEpoch>, Vec<Wrap>, Exposure)> {
+        payer: KeyRef,
+    ) -> Result<(Prepared<VaultEpoch>, Exposure)> {
         self.p1(&v.account).await?;
         let me = author;
         let parent = v.write_epoch()?;
@@ -1207,14 +1294,14 @@ impl PqVault {
         };
         let home = v.state.create.home_vault_contract;
         Ok((
-            self.sign(signer, v.state.mode(), at, home, rec).await?,
-            wraps,
+            self.prepare(signer, v.state.mode(), at, home, rec, wraps, payer)
+                .await?,
             exposure,
         ))
     }
 
     /// The user leaves the newest epoch of `v` (O3 (b)).
-    pub async fn leave(&self, v: &Unlocked) -> Result<Signed<VaultLeave>> {
+    pub async fn leave(&self, v: &Unlocked, payer: KeyRef) -> Result<Prepared<VaultLeave>> {
         self.p1(&v.account).await?;
         let e = v.state.newest().ok_or(Error::ChainUnverified)?;
         // a member a removal already took out is the contract's PqVaultNotMember (A-4)
@@ -1228,9 +1315,7 @@ impl PqVault {
             member: v.state.me,
             nonce: Num(nonce),
         };
-        let home = v.state.create.home_vault_contract;
-        self.sign(&v.account, v.state.mode(), &v.state.at, home, rec)
-            .await
+        self.prepare_in(v, rec, payer).await
     }
 
     /// An admin removes `members` from the newest epoch (V5), and the items whose latest version they could read (through
@@ -1239,7 +1324,8 @@ impl PqVault {
         &self,
         v: &Unlocked,
         members: &[B32],
-    ) -> Result<(Signed<VaultRemove>, Vec<AffectedItem>)> {
+        payer: KeyRef,
+    ) -> Result<(Prepared<VaultRemove>, Vec<AffectedItem>)> {
         self.p1(&v.account).await?;
         let e = v.state.newest().ok_or(Error::ChainUnverified)?;
         if !e.admins.contains(&v.state.me) || members.is_empty() || members.len() > 16 {
@@ -1273,12 +1359,7 @@ impl PqVault {
                 version: *n,
             })
             .collect();
-        let home = v.state.create.home_vault_contract;
-        Ok((
-            self.sign(&v.account, v.state.mode(), &v.state.at, home, rec)
-                .await?,
-            affected,
-        ))
+        Ok((self.prepare_in(v, rec, payer).await?, affected))
     }
 
     // ------------------------------------------------------------------ items (spec §6.4, §6.8)
@@ -1289,15 +1370,15 @@ impl PqVault {
         epoch: B32,
         item: B32,
         version: u32,
-        value: &Value,
+        value: &Item,
     ) -> Result<Bytes> {
         let kv = v.keys.get(&epoch).ok_or(Error::Unreadable)?;
-        let pt = content::item_plaintext(value)?;
+        let pt = value.plaintext()?;
         let x = v.at(epoch, item, version, v.state.me);
         Ok(Bytes(keys::encrypt_item(&self.core, &v.seed, kv, &x, pt)?))
     }
 
-    fn item_record(&self, v: &Unlocked, value: &Value) -> Result<ItemRecord> {
+    fn item_record(&self, v: &Unlocked, value: &Item) -> Result<ItemRecord> {
         let e = v.write_epoch()?;
         if e.member_at(v.state.me).is_none() || e.removed().contains(&v.state.me) {
             return Err(Error::NotMember);
@@ -1313,22 +1394,28 @@ impl PqVault {
         })
     }
 
-    /// A new item (version 1) under the newest epoch; its id `itemId(vaultId, author, nonce)` known before it is signed.
-    pub async fn create_item(&self, v: &Unlocked, value: &Value) -> Result<Signed<ItemRecord>> {
+    /// A new item (version 1) under the newest epoch, prepared for the review; its id `itemId(vaultId, author, nonce)` known
+    /// before it is signed.
+    pub async fn create_item(
+        &self,
+        v: &Unlocked,
+        value: &Item,
+        payer: KeyRef,
+    ) -> Result<Prepared<ItemRecord>> {
         self.p1(&v.account).await?;
         let rec = self.item_record(v, value)?;
-        let home = v.state.create.home_vault_contract;
-        self.sign(&v.account, v.state.mode(), &v.state.at, home, rec)
-            .await
+        self.prepare_in(v, rec, payer).await
     }
 
-    /// The next version of `base`'s item (its `version_count + 1`) holding `value`, under the newest epoch.
+    /// The next version of `base`'s item (its `version_count + 1`) holding `value` (a tombstone: [`Item::deleted`]), under the
+    /// newest epoch, prepared for the review.
     pub async fn edit_item(
         &self,
         v: &Unlocked,
         base: &ItemVersion,
-        value: &Value,
-    ) -> Result<Signed<EditRecord>> {
+        value: &Item,
+        payer: KeyRef,
+    ) -> Result<Prepared<EditRecord>> {
         self.p1(&v.account).await?;
         let e = v.write_epoch()?;
         if e.member_at(v.state.me).is_none() || e.removed().contains(&v.state.me) {
@@ -1344,9 +1431,7 @@ impl PqVault {
             version: Num(u64::from(version)),
             ciphertext: self.ciphertext(v, e.id, base.item_id, version, value)?,
         };
-        let home = v.state.create.home_vault_contract;
-        self.sign(&v.account, v.state.mode(), &v.state.at, home, rec)
-            .await
+        self.prepare_in(v, rec, payer).await
     }
 
     /// An edit whose base is no longer the latest (another device wrote it first, `PqVaultVersion`): the three-way merge of
@@ -1355,27 +1440,30 @@ impl PqVault {
     pub async fn resolve(
         &self,
         v: &Unlocked,
-        base: &Value,
-        ours: &Value,
+        base: &Item,
+        ours: &Item,
         item_id: B32,
-    ) -> Result<(Signed<EditRecord>, Merge)> {
+        payer: KeyRef,
+    ) -> Result<(Prepared<EditRecord>, Merge)> {
         let history = self.history(v, item_id).await?;
         let latest = history.last().ok_or(Error::Unreadable)?;
         let theirs = latest.value.as_ref().map_err(|_| Error::Unreadable)?;
-        let m = content::merge(base, ours, theirs);
+        let m = item::merge(base, ours, theirs);
         let merged = match &m {
-            Merge::Clean(x) | Merge::Conflict(x, _) => x.clone(),
+            Merge::Clean(x) | Merge::Conflict(x, _) => x,
         };
-        Ok((self.edit_item(v, latest, &merged).await?, m))
+        Ok((self.edit_item(v, latest, merged, payer).await?, m))
     }
 
-    /// `items` as batches sized by `limits` (each under the gas bound and the SDK's 64-KiB typed-data cap), each one record.
+    /// `items` as batches sized by `limits` (each under the gas bound and the SDK's 64-KiB typed-data cap), each one record
+    /// prepared for its review.
     pub async fn create_items(
         &self,
         v: &Unlocked,
-        items: &[Value],
+        items: &[Item],
         limits: &ChainLimits,
-    ) -> Result<Vec<Signed<BatchRecord>>> {
+        payer: KeyRef,
+    ) -> Result<Vec<Prepared<BatchRecord>>> {
         self.p1(&v.account).await?;
         let e = v.write_epoch()?.id;
         let mut groups: Vec<Vec<ItemRecord>> = vec![];
@@ -1397,14 +1485,10 @@ impl PqVault {
         if !cur.is_empty() {
             groups.push(cur);
         }
-        let home = v.state.create.home_vault_contract;
         let mut out = vec![];
         for g in groups {
             let b = self.batch(v, e, g, true)?;
-            out.push(
-                self.sign(&v.account, v.state.mode(), &v.state.at, home, b)
-                    .await?,
-            );
+            out.push(self.prepare_in(v, b, payer.clone()).await?);
         }
         Ok(out)
     }
@@ -1439,7 +1523,7 @@ impl PqVault {
         epoch: B32,
         author: B32,
         ct: &[u8],
-    ) -> Result<Value> {
+    ) -> Result<Item> {
         let kv = v.keys.get(&epoch).ok_or(Error::Unreadable)?;
         keys::decrypt_item(&self.core, kv, &v.at(epoch, item, version, author), ct)
     }
@@ -1618,113 +1702,19 @@ impl PqVault {
     // ------------------------------------------------------------------ the calls (what the user reviews and the SDK sends)
 
     /// The prepared call of a signed record (`AppCore::prepare_app_call`: the entry, the contract, each argument and the
-    /// payer's quote, shown to the user before `Wallet::submit_native_send` sends it). Anyone may submit a signed record.
-    pub async fn prepare_create(
+    /// payer's quote, shown to the user before `Wallet::submit_native_send` sends it). Anyone may submit a signed record; a
+    /// record of this device is signed and called by [`Self::confirm`].
+    pub async fn prepare_signed<R: Record>(
         &self,
         at: &Instance,
-        s: &Signed<VaultCreate>,
+        s: &Signed<R>,
         wraps: &[Wrap],
         payer: KeyRef,
     ) -> Result<AppCall> {
-        let sig = format!(
-            "function createVault({} v,{WRAP}[] wraps,{UASIG} sig) returns (bytes32 vaultId)",
-            create_t()
-        );
-        let args = json!({"v": s.record, "wraps": wraps, "sig": sig_json(&s.sig)});
+        let (entry, args) = call_args(&s.record, wraps, &s.sig)?;
         Ok(self
             .net
-            .call(&at.chain, at.contract, &sig, args, payer)
-            .await?)
-    }
-
-    pub async fn prepare_rekey(
-        &self,
-        at: &Instance,
-        s: &Signed<VaultEpoch>,
-        wraps: &[Wrap],
-        payer: KeyRef,
-    ) -> Result<AppCall> {
-        let sig = format!(
-            "function rekeyVault({} e,{WRAP}[] wraps,{UASIG} sig) returns (bytes32 epochId)",
-            epoch_t()
-        );
-        let args = json!({"e": s.record, "wraps": wraps, "sig": sig_json(&s.sig)});
-        Ok(self
-            .net
-            .call(&at.chain, at.contract, &sig, args, payer)
-            .await?)
-    }
-
-    pub async fn prepare_leave(
-        &self,
-        at: &Instance,
-        s: &Signed<VaultLeave>,
-        payer: KeyRef,
-    ) -> Result<AppCall> {
-        let sig = format!("function leaveVault({LEAVE} l,{UASIG} sig)");
-        let args = json!({"l": s.record, "sig": sig_json(&s.sig)});
-        Ok(self
-            .net
-            .call(&at.chain, at.contract, &sig, args, payer)
-            .await?)
-    }
-
-    pub async fn prepare_remove(
-        &self,
-        at: &Instance,
-        s: &Signed<VaultRemove>,
-        payer: KeyRef,
-    ) -> Result<AppCall> {
-        let sig = format!("function removeVaultMembers({REMOVE} r,{UASIG} sig)");
-        let args = json!({"r": s.record, "sig": sig_json(&s.sig)});
-        Ok(self
-            .net
-            .call(&at.chain, at.contract, &sig, args, payer)
-            .await?)
-    }
-
-    pub async fn prepare_item(
-        &self,
-        at: &Instance,
-        s: &Signed<ItemRecord>,
-        payer: KeyRef,
-    ) -> Result<AppCall> {
-        let sig = format!("function createItem({ITEM} it,{UASIG} sig) returns (bytes32 itemId)");
-        let args = json!({"it": s.record, "sig": sig_json(&s.sig)});
-        Ok(self
-            .net
-            .call(&at.chain, at.contract, &sig, args, payer)
-            .await?)
-    }
-
-    pub async fn prepare_edit(
-        &self,
-        at: &Instance,
-        s: &Signed<EditRecord>,
-        payer: KeyRef,
-    ) -> Result<AppCall> {
-        let sig = format!("function editItem({EDIT} d,{UASIG} sig)");
-        let args = json!({"d": s.record, "sig": sig_json(&s.sig)});
-        Ok(self
-            .net
-            .call(&at.chain, at.contract, &sig, args, payer)
-            .await?)
-    }
-
-    pub async fn prepare_batch(
-        &self,
-        at: &Instance,
-        s: &Signed<BatchRecord>,
-        payer: KeyRef,
-    ) -> Result<AppCall> {
-        let sig = format!(
-            "function createItems({} b,{UASIG} sig) returns (bytes32 batchId)",
-            batch_t()
-        );
-        let args = json!({"b": s.record, "sig": sig_json(&s.sig)});
-        Ok(self
-            .net
-            .call(&at.chain, at.contract, &sig, args, payer)
+            .call(&at.chain, at.contract, &entry, args, payer)
             .await?)
     }
 
@@ -1738,7 +1728,7 @@ impl PqVault {
         let seed = self.p1(account).await?;
         let main = self.ua(account)?;
         let mut out: Vec<VaultState> = vec![];
-        let mut refs: BTreeMap<B32, Value> = BTreeMap::new();
+        let mut refs: BTreeMap<B32, Item> = BTreeMap::new();
         let mut personal: Vec<u32> = vec![];
         let idx_key = Self::vault_key(&seed, 0);
         let idx_ua = self.ua(&idx_key)?;
@@ -1747,12 +1737,12 @@ impl PqVault {
             let u = self.unlock(&idx_key, s.clone(), &Passphrase::Off).await?;
             for x in self.open_latest(&u).await? {
                 let Ok(r) = x.value else { continue };
-                if r.get("type").and_then(Value::as_str) == Some("vaultRef") {
+                if r.ty == "vaultRef" {
                     let id: Option<B32> = r
-                        .get("vaultId")
+                        .plain("vaultId")
                         .cloned()
                         .and_then(|v| serde_json::from_value(v).ok());
-                    if let (Some(id), Some(i)) = (id, r.get("index").and_then(Value::as_u64)) {
+                    if let (Some(id), Some(i)) = (id, r.plain("index").and_then(Value::as_u64)) {
                         personal.extend(u32::try_from(i).ok());
                         refs.insert(id, r.clone());
                     } else if let Some(id) = id {
@@ -1786,12 +1776,12 @@ impl PqVault {
             }
             let mut s = self.load(at, id, main).await?;
             let accepted = refs.get(&id).is_some_and(|r| {
-                r.get("state").and_then(Value::as_str) == Some("accepted")
-                    && r.get("mode").and_then(Value::as_u64) == Some(s.create.mode.0)
+                r.plain("state").and_then(Value::as_str) == Some("accepted")
+                    && r.plain("mode").and_then(Value::as_u64) == Some(s.create.mode.0)
             });
             if refs
                 .get(&id)
-                .and_then(|r| r.get("mode"))
+                .and_then(|r| r.plain("mode"))
                 .and_then(Value::as_u64)
                 .is_some_and(|m| m != s.create.mode.0)
             {
@@ -1822,23 +1812,29 @@ impl PqVault {
         vault: &VaultState,
         accept: bool,
         personal: Option<u32>,
-    ) -> Result<Signed<ItemRecord>> {
+        payer: KeyRef,
+    ) -> Result<Prepared<ItemRecord>> {
         self.p1(&index.account).await?;
         let e = vault.newest().ok_or(Error::ChainUnverified)?;
-        let mut r = json!({
-            "type": "vaultRef",
-            "title": "vault",
-            "vaultId": vault.vault_id,
-            "homeChain": vault.create.home_chain,
-            "homeVaultContract": vault.create.home_vault_contract,
-            "mode": vault.create.mode.0,
-            "acceptedEpoch": e.id,
-            "state": if accept { "accepted" } else { "declined" },
-        });
-        if let (Some(i), Some(o)) = (personal, r.as_object_mut()) {
-            o.insert("index".into(), json!(i));
+        let mut r = Item::new("vaultRef");
+        let p = |v: Value| Field::Plain(v);
+        r.set("title", p(json!("vault")))
+            .set("vaultId", p(json!(vault.vault_id)))
+            .set("homeChain", p(json!(vault.create.home_chain)))
+            .set(
+                "homeVaultContract",
+                p(json!(vault.create.home_vault_contract)),
+            )
+            .set("mode", p(json!(vault.create.mode.0)))
+            .set("acceptedEpoch", p(json!(e.id)))
+            .set(
+                "state",
+                p(json!(if accept { "accepted" } else { "declined" })),
+            );
+        if let Some(i) = personal {
+            r.set("index", p(json!(i)));
         }
-        self.create_item(index, &r).await
+        self.create_item(index, &r, payer).await
     }
 
     /// The migration plan of `from` (VC12): the latest version of every live item (tombstones skipped), and the warning the
@@ -1850,9 +1846,7 @@ impl PqVault {
         for (vault, latest) in from {
             for x in latest {
                 match &x.value {
-                    Ok(v) if v.get("type").and_then(Value::as_str) == Some("deleted") => {
-                        skipped += 1
-                    }
+                    Ok(v) if v.ty == "deleted" => skipped += 1,
                     Ok(_) => items.push((*vault, x.item_id)),
                     Err(_) => unreadable.push((*vault, x.item_id)),
                 }
@@ -1902,4 +1896,58 @@ fn fits(b: &BatchRecord, v: &Unlocked, limits: &ChainLimits) -> bool {
         .map(|t| t.len())
         .unwrap_or(usize::MAX);
     gas <= limits.max_gas && typed <= TYPED_MAX
+}
+
+/// The contract entry of a record (`IPqVault.sol`) and the name of its record argument.
+fn entry_of(name: &str) -> Result<(String, &'static str)> {
+    Ok(match name {
+        "PqVaultCreate" => (
+            format!(
+                "function createVault({} v,{WRAP}[] wraps,{UASIG} sig) returns (bytes32 vaultId)",
+                create_t()
+            ),
+            "v",
+        ),
+        "PqVaultEpoch" => (
+            format!(
+                "function rekeyVault({} e,{WRAP}[] wraps,{UASIG} sig) returns (bytes32 epochId)",
+                epoch_t()
+            ),
+            "e",
+        ),
+        "PqVaultLeave" => (format!("function leaveVault({LEAVE} l,{UASIG} sig)"), "l"),
+        "PqVaultRemove" => (
+            format!("function removeVaultMembers({REMOVE} r,{UASIG} sig)"),
+            "r",
+        ),
+        "PqVaultItem" => (
+            format!("function createItem({ITEM} it,{UASIG} sig) returns (bytes32 itemId)"),
+            "it",
+        ),
+        "PqVaultEdit" => (format!("function editItem({EDIT} d,{UASIG} sig)"), "d"),
+        "PqVaultBatch" => (
+            format!(
+                "function createItems({} b,{UASIG} sig) returns (bytes32 batchId)",
+                batch_t()
+            ),
+            "b",
+        ),
+        _ => return Err(Error::Shape),
+    })
+}
+
+/// The entry of `r` and its named arguments: the record, its `wraps` (a create or a rekey), the signature `sig` (empty for
+/// the quote before the signature).
+fn call_args<R: Record>(r: &R, wraps: &[Wrap], sig: &UaSig) -> Result<(String, Value)> {
+    let (entry, arg) = entry_of(R::NAME)?;
+    let mut o = serde_json::Map::new();
+    o.insert(
+        arg.into(),
+        serde_json::to_value(r).map_err(|_| Error::Shape)?,
+    );
+    o.insert("sig".into(), sig_json(sig));
+    if entry.contains("[] wraps,") {
+        o.insert("wraps".into(), json!(wraps));
+    }
+    Ok((entry, Value::Object(o)))
 }

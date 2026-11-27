@@ -78,6 +78,17 @@ impl Net for Accepting {
     ) -> Result<AppCall, SdkError> {
         Err(SdkError::Argument)
     }
+    async fn quote(
+        &self,
+        _: &str,
+        _: Addr,
+        _: &str,
+        _: Value,
+        _: KeyRef,
+        _: KeyRef,
+    ) -> Result<scaas_sdk::app_core::AppQuote, SdkError> {
+        Err(SdkError::Argument)
+    }
 }
 
 async fn vault() -> PqVault {
