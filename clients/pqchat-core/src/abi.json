@@ -126,6 +126,19 @@
   "stateMutability": "view",
   "type": "function"
  },
+ "IPqChat.ENTRY_ROWS_MAX": {
+  "inputs": [],
+  "name": "ENTRY_ROWS_MAX",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
  "IPqChat.EPOCHS_RANGE_MAX": {
   "inputs": [],
   "name": "EPOCHS_RANGE_MAX",
@@ -1138,11 +1151,154 @@
       "internalType": "uint32",
       "name": "versionCount",
       "type": "uint32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "postedAt",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "editedAt",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
      }
     ],
     "internalType": "struct IPqChat.EntryView",
     "name": "",
     "type": "tuple"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.entryRows": {
+  "inputs": [
+   {
+    "internalType": "bytes32[]",
+    "name": "entryIds",
+    "type": "bytes32[]"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "viewer",
+    "type": "bytes32"
+   }
+  ],
+  "name": "entryRows",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "topicId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "author",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "parentId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint32",
+      "name": "depth",
+      "type": "uint32"
+     },
+     {
+      "components": [
+       {
+        "internalType": "bytes32",
+        "name": "chainUid",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "address",
+        "name": "pqchat",
+        "type": "address"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "entryId",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "contentHash",
+        "type": "bytes32"
+       }
+      ],
+      "internalType": "struct IPqChat.EntryRef",
+      "name": "ref",
+      "type": "tuple"
+     },
+     {
+      "internalType": "string",
+      "name": "mediaType",
+      "type": "string"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "sigHash",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint32",
+      "name": "versionCount",
+      "type": "uint32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "postedAt",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "editedAt",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint256",
+      "name": "bodyLength",
+      "type": "uint256"
+     },
+     {
+      "internalType": "uint128",
+      "name": "up",
+      "type": "uint128"
+     },
+     {
+      "internalType": "uint128",
+      "name": "down",
+      "type": "uint128"
+     },
+     {
+      "internalType": "int8",
+      "name": "vote",
+      "type": "int8"
+     },
+     {
+      "internalType": "uint256",
+      "name": "replies",
+      "type": "uint256"
+     }
+    ],
+    "internalType": "struct IPqChat.EntryRow[]",
+    "name": "rows",
+    "type": "tuple[]"
    }
   ],
   "stateMutability": "view",
@@ -3482,6 +3638,21 @@
     "internalType": "bytes32",
     "name": "sigHash",
     "type": "bytes32"
+   },
+   {
+    "internalType": "uint64",
+    "name": "nonce",
+    "type": "uint64"
+   },
+   {
+    "internalType": "uint64",
+    "name": "postedAt",
+    "type": "uint64"
+   },
+   {
+    "internalType": "uint64",
+    "name": "editedAt",
+    "type": "uint64"
    }
   ],
   "stateMutability": "view",

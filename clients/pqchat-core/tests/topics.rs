@@ -102,7 +102,8 @@ fn topic_of(net: &FakeNet, contract: &str, tid: &str, home_uid: &str, home: &str
 fn entry_of(net: &FakeNet, contract: &str, eid: &str, tid: &str, r: &PqEntryRef, versions: u64) {
     let e = json!({"topicId": tid, "author": hex(&[0xa0; 32]), "parentId": ZERO32, "depth": "0",
         "ref": {"chainUid": r.chain_uid, "pqchat": r.pqchat, "entryId": r.entry_id, "contentHash": r.content_hash},
-        "mediaType": "text/markdown", "body": "0x6869", "sigHash": hex(&[0x5e; 32]), "versionCount": versions.to_string()});
+        "mediaType": "text/markdown", "body": "0x6869", "sigHash": hex(&[0x5e; 32]), "versionCount": versions.to_string(),
+        "postedAt": "1900000000", "editedAt": if versions > 1 { "1900000250" } else { "0" }, "nonce": "41"});
     net.answer(
         contract,
         "IPqChat.entryOf",
@@ -424,6 +425,39 @@ fn referenced(w: &World, home_uid: &str, home: &str) -> (PqEntryRef, String) {
         },
         e,
     )
+}
+
+/// CTR-CHAT-29, CTR-CHAT-31: `entryOf`'s times and latest nonce, `versionAt`'s nonce and times, as the views return them.
+#[tokio::test(flavor = "multi_thread")]
+async fn entry_and_version_times_and_nonce() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    let (t, e) = (uid(0x71), uid(0xe1));
+    entry_of(&w.net, HOME, &e, &t, &none(), 2);
+    let got = w.pq.entry(&here(), &e).await.unwrap();
+    assert_eq!(
+        (got.posted_at, got.edited_at, got.nonce),
+        (1_900_000_000, 1_900_000_250, 41)
+    );
+    w.net.answer(
+        HOME,
+        "IPqChat.versionAt",
+        json!({"entryId": e, "version": "2"}),
+        json!({"mediaType": "text/plain", "body": "0x7632", "sigHash": hex(&[0x5e; 32]), "nonce": "7",
+            "postedAt": "1900000000", "editedAt": "1900000250"}),
+    );
+    let v = w.pq.version_at(&here(), &e, 2).await.unwrap();
+    assert_eq!(
+        (
+            v.media_type.as_str(),
+            v.body.as_slice(),
+            v.nonce,
+            v.posted_at,
+            v.edited_at
+        ),
+        ("text/plain", &b"v2"[..], 7, 1_900_000_000, 1_900_000_250)
+    );
+    assert_eq!(w.net.writes(), 0);
 }
 
 /// An entry's `ref` is unresolved until read on its chain; an entry without one has none.
