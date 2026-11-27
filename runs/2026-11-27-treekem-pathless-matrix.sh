@@ -29,7 +29,7 @@ STEPS=(
     "sets-sensitive|smartcontracts/evm|sh script/pqz/at-set.sh others sensitive"
     "sets-modules|smartcontracts/evm|sh script/pqz/at-set.sh others modules"
     "deploy-e2e|smartcontracts/evm|for t in script/test_*.py; do echo \"## \$t\"; python3 \"\$t\" || exit 1; done && T=\$(mktemp -d) && $cap forge build src/pqchat/PqChatStore.sol test/forkcheck --extra-output evm.legacyAssembly --out \"\$T\"/out --cache-path \"\$T\"/cache && python3 -I script/forkcheck.py exec cancun test/forkcheck/cases.json --out \"\$T\"/out && python3 -I script/forkcheck.py control cancun --out \"\$T\"/out && python3 -I script/deploy_pqchatstore.py local --out \"\$T\"/out; r=\$?; rm -rf \"\$T\"; exit \$r"
-    "node-e2e|scaas-node|$cap cargo test --locked --test e2e -- --ignored --test-threads=1"
+    "node-e2e|scaas-node|(cd ../clients/zether-prover && $cap cargo build $C --release --bin zether-cli --features hazmat) && $cap cargo test $C --test e2e -- --ignored --test-threads=1"
 )
 for d in $DIRS; do STEPS+=("forge-$d|smartcontracts/evm|$(fdir "$d")"); done
 cmd_of() {
