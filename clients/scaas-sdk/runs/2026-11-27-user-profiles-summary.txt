@@ -107,3 +107,4 @@ UP8 | sdk-clippy | 2602c20fb + UP8 files | 0 | UPF 0 warnings; default 0 warning
 UP8 | features | 2602c20fb + UP8 files | 0 | check_test_features ok; feature_tree 5 / 5
 UP8 | fmt rust toml | 2602c20fb + UP8 files | 0 | every part ok
 UP8 | docs | 2602c20fb + UP8 files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
+UP8 | mutants up8 (one at a time: run "<name>") | d5da2f025 | 0 | an early stop at the match: killed (hidden.rs:129, 1 run for 4 candidates); a corrupt candidate ending the search: killed (:138 the match after it not found); candidates read from the index: killed (:118); hide() without the duplicate check: killed (:232); last written on a hidden open: killed (:150 the index bytes changed); name in the wraps AD: killed (:299 the reopen after rename fails); the lock taken before the search reads: killed (:87 ProfileInUse on the held candidate); record 7 mutants, 7 killed, 0 survived, 0 not loaded, 0 other failure
