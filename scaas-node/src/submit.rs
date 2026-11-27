@@ -2892,7 +2892,11 @@ pub(crate) mod tests {
                 "eth_estimateGas" if e.tree.as_ref().is_some_and(|t| t.whole_over) && {
                     let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
                     tree_args(&alloy::hex::decode(&input[2..]).unwrap())
-                        .is_some_and(|(en, a)| en == "commit" && a["cts"].as_array().is_some_and(|c| !c.is_empty()))
+                        // a commit carrying any piece (a path-less set carries wraps only) is over; the record alone fits
+                        .is_some_and(|(en, a)| {
+                            en == "commit"
+                                && ["cts", "wraps"].iter().any(|k| a[*k].as_array().is_some_and(|c| !c.is_empty()))
+                        })
                 } => Ok(json!(format!("{:#x}", 30_000_000u64))),
                 "eth_estimateGas" => Ok(json!(format!("{:#x}", e.estimate.unwrap_or(0x30000)))),
                 "eth_getTransactionByHash" if e.tx_err => Err(err(-32000, "upstream timeout", None)),
@@ -3414,6 +3418,95 @@ pub(crate) mod tests {
             let t = rpc.lock().unwrap();
             let t = t.tree.as_ref().unwrap();
             assert!(t.record && t.list && t.keys && t.cts.iter().chain(&t.wraps).all(|x| *x));
+        }
+    }
+
+    /// The path-less delta (fable-B-1 = E-1 of the path-less review): a path-less set (no list, no node key, no ciphertext)
+    /// through the same tree lane on a fake chain: over one transaction it goes as the record with wraps, then wrap runs, the
+    /// last wrap held back and sent alone; then `consumed`, nothing `dead`. Control: the same set that fits goes whole.
+    #[tokio::test]
+    async fn a_pathless_set_lands_on_a_fake_chain() {
+        let set = crate::tree_set::tests::sets()
+            .into_iter()
+            .find(|a| {
+                let n = |k: &str| a[k].as_array().map_or(0, Vec::len);
+                a["c"]["pathless"] == json!(true) && n("wraps") > 1
+            })
+            .map(|mut a| {
+                a.as_object_mut().unwrap().remove("epochId");
+                a
+            })
+            .expect("a path-less scenario commit with two wraps or more");
+        assert!(
+            set["cts"].as_array().unwrap().is_empty()
+                && set["nodeKeys"].as_array().unwrap().is_empty()
+        );
+        let adds = set["wraps"].as_array().unwrap().len();
+        for over in [true, false] {
+            let (url, rpc) = fake_evm(Evm {
+                tree: Some(FakeTree {
+                    whole_over: over,
+                    cts: vec![],
+                    wraps: vec![false; adds],
+                    signed: (
+                        set["c"]["treeHash"].as_str().unwrap().parse().unwrap(),
+                        set["c"]["ctListHash"].as_str().unwrap().parse().unwrap(),
+                    ),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })
+            .await;
+            let (external_pull, o) = fake_external_pull(Fake {
+                tokens: toks(),
+                ..Default::default()
+            })
+            .await;
+            let mut s = lane(&url, external_pull, 1, InflightSet::default()).await;
+            let op = json!({"entry": "commit", "contract": "pqchat", "token": format!("{TOKEN:#x}"),
+                "validUntil": (now() + 300).to_string(), "args": set});
+            let (w, _) = work_of_op(Some(9), &op, None).unwrap();
+            for _ in 0..12 {
+                if states(&o).iter().any(|x| x == "consumed") {
+                    break;
+                }
+                s.tree(w.clone(), None, "commit").await;
+                let hashes: Vec<B256> = rpc.lock().unwrap().sent.iter().map(|x| x.0).collect();
+                hashes.into_iter().for_each(|h| {
+                    rpc.lock().unwrap().receipts.insert(h, true);
+                });
+                s.track().await;
+            }
+            let st = states(&o);
+            assert!(
+                st.iter().any(|x| x == "consumed") && !st.iter().any(|x| x == "dead"),
+                "over {over}: {st:?}"
+            );
+            let sent = rpc.lock().unwrap().tree.as_ref().unwrap().sent.clone();
+            if !over {
+                assert_eq!(
+                    sent,
+                    [("commit".to_string(), adds)],
+                    "the whole set in one transaction"
+                );
+                continue;
+            }
+            assert_eq!(sent[0].0, "commit", "the record first: {sent:?}");
+            assert!(
+                sent.iter()
+                    .all(|x| matches!(x.0.as_str(), "commit" | "addWraps")),
+                "no path piece: {sent:?}"
+            );
+            assert_eq!(
+                sent.last(),
+                Some(&("addWraps".to_string(), 1)),
+                "the held wrap last and alone: {sent:?}"
+            );
+            assert_eq!(
+                sent.iter().map(|x| x.1).sum::<usize>(),
+                adds,
+                "every wrap once: {sent:?}"
+            );
         }
     }
 

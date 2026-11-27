@@ -5990,6 +5990,20 @@ mod tests {
             );
         }
         let c = commitCall::abi_decode(&Op::parse(&tree_jobs()[0].1, FEE).unwrap().data).unwrap();
+        // fable-B-3 of the path-less review: the node's own copy (abi.rs, what `commitOf` decodes) is this struct
+        for (entry, job) in tree_jobs().iter().filter(|x| x.0 == "commit") {
+            use alloy::sol_types::SolValue;
+            let c = commitCall::abi_decode(&Op::parse(job, FEE).unwrap().data)
+                .unwrap()
+                .c;
+            let mine = <crate::abi::PqChatCommit as SolValue>::abi_decode(&c.abi_encode())
+                .unwrap_or_else(|e| panic!("{entry}: abi.rs's PqChatCommit: {e}"));
+            assert_eq!(
+                mine.abi_encode(),
+                c.abi_encode(),
+                "abi.rs's PqChatCommit is IPqChat's"
+            );
+        }
         let rec = &d["records"][0]["record"];
         assert_eq!(
             (
