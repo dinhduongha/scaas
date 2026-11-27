@@ -1,0 +1,163 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# pqz-core full gate on CI (decisions ARCH-POS-26): pqz-core/gate.sh, every step, at the parameter sets, on demand only, as
+# a post-check. No job of scaas-ci needs it, it is no required status, and nothing waits for it: what blocks a merge stays
+# scaas-ci's `pqz` job and the affected steps (AGENTS.md "Cryptography"). A red run is a finding, fixed after.
+# Ask for a run (pqz-core/README.md, "The full gate on CI"):
+#   push a commit to a branch pqz-gate/<name> (git push origin <sha>:refs/heads/pqz-gate/<date>), all four sets; or
+#   Actions tab > pqz-gate > Run workflow (input sets: all or one set), or `gh workflow run pqz-gate.yml -f sets=all --ref <branch>`
+#   (workflow_dispatch works once this file is on the default branch).
+# Per set, two jobs (a set's whole gate does not fit the 6 h of a hosted runner; the estimate is in the README): part a runs
+# kat tbox sv ct ub diff, part b runs fnv vectors ffi rust cargo xcheck fuzz. The selection is gate.sh's own resume: before
+# gate.sh, the job writes the other part's steps into runs/gate/<set>-state at the tree gate.sh will compute (resume.sh
+# gate_tree), so gate.sh reports them "resumed" and runs only its own; a step in neither list runs in both parts. gate.sh
+# and resume.sh are not edited. The job `summary` merges each set's two parts: PASS only when both parts end PASS at one
+# tree and every step ran in one of them.
+# scripts/capped is not used: it is the owner's machine's systemd scope and slot lock; gate.sh calls no capped itself (the
+# differential runs with CAPPED=env), so each job runs gate.sh directly on its own runner.
+# Logs are public (the repository is): the jobs read no secret, print no environment, and the token has contents: read
+# only and is not kept in .git/config.
+# Output: an artifact per job (pqz-core/runs/gate/<set>-*, the step scripts' logs named gate-<set>, the wallet module's
+# logs; 30 days), the step table in each job's summary and in `summary`'s; record it in runs/<date>-pqz-gate-<sets>-summary.txt
+# with the run URL.
+name: pqz-gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      sets:
+        description: the parameter sets to gate
+        type: choice
+        options: [all, n2048-kmax1024, n2304-kmax4096, n2560-kmax16384, n2816-kmax65536]
+        default: all
+  push:
+    branches: ["pqz-gate/**"]
+
+concurrency:
+  group: pqz-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# One Rust toolchain for every job (ARCH-POS-12), as scaas-ci: 1.97.1 = the root rust-toolchain.toml.
+env:
+  RUST_TOOLCHAIN: "1.97.1"
+  RUSTUP_TOOLCHAIN: "1.97.1"
+
+jobs:
+  gate:
+    name: gate ${{ matrix.set }} part ${{ matrix.part.id }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        set: ${{ fromJSON((!inputs.sets || inputs.sets == 'all') && '["n2048-kmax1024","n2304-kmax4096","n2560-kmax16384","n2816-kmax65536"]' || format('["{0}"]', inputs.sets)) }}
+        part:
+          - { id: a, run: "kat tbox sv ct ub diff", seed: "fnv vectors ffi rust cargo xcheck fuzz" }
+          - { id: b, run: "fnv vectors ffi rust cargo xcheck fuzz", seed: "kat tbox sv ct ub diff" }
+    env:
+      PQZ_SET: ${{ matrix.set }}
+      SEED: ${{ matrix.part.seed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # the image's preinstalled SDKs the gate never uses: room for one set's cargo targets
+      - name: free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h .
+      # clang 18 (the image's default clang, and clang-18 of ub_test.sh / fuzz/build.sh), libFuzzer, wasm-ld-18 (the C
+      # core's wasm32 build, fnv/cwasm), valgrind (ct.sh), /usr/bin/time (ffi/run.sh)
+      - name: valgrind, clang 18, lld 18, libFuzzer
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends valgrind clang-18 lld-18 libclang-rt-18-dev time
+          clang --version | head -1
+          clang-18 --version | head -1
+          valgrind --version
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+      # the registry only: one set's targets are several GB and would evict scaas-ci's caches
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: pqz-gate
+          cache-targets: false
+          workspaces: |
+            pqz-core/pqzl/rust
+            pqz-core/pqzl/rust/wasm
+            pqz-core/stmt
+            pqz-core/pqzh/ligero
+            pqz-core/pqzh/stark-backup
+            pqz-core/ffi
+            pqz-core/ffi/offchain
+            pqz-core/ffi/wasm
+            pqz-core/ffi/wallet-wasm
+            pqz-core/fuzz
+      # the wallet module's test (ffi/run.sh part ffi/wallet) runs clients/clientkeys' node --test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.8.1
+          cache: npm
+          cache-dependency-path: clients/clientkeys/package-lock.json
+      - name: clientkeys dependencies
+        working-directory: clients/clientkeys
+        run: npm ci --ignore-scripts
+      # as scaas-ci's pqz job: fetched and checked only, no gate step builds or runs them (group core is ua-rs's and forge's:
+      # no pqz-core crate reads it)
+      - name: vendor/ groups kat and research at their pins
+        run: |
+          scripts/vendor.sh install kat research
+          scripts/vendor.sh check kat research
+      # the step scripts build with cargo --offline: fetch every crate they build, at its committed lockfile
+      - name: cargo fetch (locked)
+        working-directory: pqz-core
+        run: |
+          for c in pqzl/rust pqzl/rust/wasm stmt pqzh/ligero pqzh/stark-backup ffi ffi/offchain ffi/wasm ffi/wallet-wasm fuzz; do
+            cargo fetch --locked --manifest-path "$c/Cargo.toml"
+          done
+      - name: gate.sh, part ${{ matrix.part.id }} (${{ matrix.part.run }})
+        working-directory: pqz-core
+        run: |
+          GATE_ENV=$(sed -n 's/^GATE_ENV="\(.*\)"$/\1/p' gate.sh)
+          test -n "$GATE_ENV"
+          T=$(export GATE_TOP="$(git rev-parse --show-toplevel)" GATE_FZ=60 GATE_ENV && . ./resume.sh && gate_tree)
+          mkdir -p runs/gate
+          for s in $SEED; do echo "step/$s $T"; done >"runs/gate/$PQZ_SET-state"
+          echo "tree $T; recorded for the other part: $SEED"
+          ./gate.sh
+      - name: step table
+        if: always()
+        run: python3 -I .github/pqz_gate_summary.py "pqz-core/runs/gate/$PQZ_SET-progress.txt" >>"$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pqz-gate-${{ matrix.set }}-${{ matrix.part.id }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            pqz-core/runs/gate/${{ matrix.set }}-*
+            pqz-core/**/runs/**/*gate-${{ matrix.set }}*
+            pqz-core/ffi/wallet-wasm/target/out/*.log
+
+  # each set's two parts in one table, and the verdict (inside this workflow only: nothing outside needs it)
+  summary:
+    needs: gate
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pqz-gate-*
+          path: gate
+      - name: step tables of every set
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          echo "run $RUN_URL" >>"$GITHUB_STEP_SUMMARY"
+          python3 -I .github/pqz_gate_summary.py gate/*/runs/gate/*-progress.txt >>"$GITHUB_STEP_SUMMARY"
