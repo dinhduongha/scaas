@@ -188,3 +188,16 @@ R3 | fmt (format.sh --check rust toml yaml py) | 7bf024af2 + R3 files | 0 | 26 p
 R3 | docs (docs_check check; test_docs_check) | 7bf024af2 + R3 files | 0 | 0 errors, 8 warnings (budgets of docs not touched), 16 notes; test_docs_check ok
 R3 | mutants r3 (one at a time: run "<name>"; clients/scaas-sdk/runs/2026-11-28-user-profiles-r3-mutants.py; "dirty" = the runners only) | 5f7a833c1 | 0 | 13 mutants, 13 killed, 0 survived, 0 not loaded, 0 other failure; check: no stale row
 R3 | mutants re-run (rows R3 made stale on SDK files: up6 "close not called at lock" with its old text moved to `out = s.close().await`, "the closed flag not checked"; r1 "C-3 the SDK's accept_rollback does nothing", "E-3 the SDK passes no unbacked confirm") | 5f7a833c1 | 0 | up6 2 / 2, r1 2 / 2 re-run: all killed; records up6 11 / 11, r1 44 / 44
+R4 | ck (npm test) | 0a2a9f86e | 0 | 705 tests, 700 pass, 0 fail, 5 skipped
+R4 | ck-gen (profile-vectors.mjs into a mktemp dir, diff -r) | 0a2a9f86e | 0 | identical; D-7's escapes: regenerated output identical before the new rows
+R4 | keystore generator regenerate-and-diff (keystore-vectors.mjs into a mktemp dir, diff -r) | 0a2a9f86e | 0 | identical
+R4 | ua-profile (--features app-core,user-profile,test-hooks,vectors --test profile --test app_core) | 0a2a9f86e | 0 | profile 21 / 21, app_core 22 / 22
+R4 | ua-vault (--test wallet_vault --test wallet_custody --test retained_key --test wallet_import_ua; then --features vectors --test wallet_vault --test wallet_import_ua) | 0a2a9f86e | 0 | 31 + 13 + 2 + 8; vectors 33 (1 ignored) + 9
+R4 | ua-clippy (--all-targets --features app-core,user-profile,test-hooks,vectors) | 0a2a9f86e | 0 | 0 warnings
+R4 | prof (scaas-profile test; --features test-hooks; clippy --all-targets both) | 0a2a9f86e | 0 | 41; 102; 0 warnings
+R4 | sdk-up (--features user-profile,test-hooks --test user_profile; --lib user_profile) | 1b313c7f4 | 0 | 23 / 23 (first run on 0a2a9f86e: red, g9_every_refusal_row_is_import_open read the old filler: fixed in 1b313c7f4); lib 0 of 144 as R3
+R4 | sdk keystore_vectors (--test keystore_vectors) | 0a2a9f86e | 0 | 2 / 2
+R4 | fmt (format.sh --check js rust py) | 1b313c7f4 | 0 | 25 parts ok (prettier applied to the generators and tests first)
+R4 | docs (docs_check check; test_docs_check) | 1b313c7f4 | 0 | 0 errors, 8 warnings (budgets of docs not touched), 16 notes; test_docs_check ok
+R4 | mutants r4 (one at a time: run "<name>"; clients/scaas-sdk/runs/2026-11-28-user-profiles-r4-mutants.py) | 0a2a9f86e | 0 | 10 mutants, 10 killed, 0 survived, 0 not loaded, 0 other failure
+R4 | mutants re-run (rows R4 made stale: up1 5 on profile.js; r1 G-2, E-3 and A-17 (its text moved to the preview by R4: row updated) on export.rs; up10 "parse before verify", "a preview written to disk in plain form"; r3 C-7 "the store's imported marking skipped"; scaas-sdk t26 2 A2-1 rows on seal.js; "dirty" = the r1 runner's row edit only) | 0a2a9f86e | 0 | all 13 killed; records up1 5 / 5, r1 44 / 44, up10 6 / 6, r3 13 / 13, t26 95 / 95

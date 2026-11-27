@@ -138,9 +138,10 @@ MUTANTS = [
     ("E-4 set_passphrase keeps settings that do not parse",
      [(R, " || ProfileSettings::parse(b).is_err() {\n", " {\n")],
      T + "e4_settings_written_only_when_readable"),
+    # moved to the preview by R4 (its row: the r4 record)
     ("A-17 an item without rev reaches the KDF",
-     [(X, "        if review.items.iter().any(|(_, b)| rev_of(b) == u64::MAX) {\n", "        if false {\n")],
-     T + "a17_item_without_rev_refused_before_the_kdf"),
+     [(X, "        .any(|(_, b)| b.len() > MAX_BYTES || rev_of(b) == u64::MAX)\n", "        .any(|(_, b)| b.len() > MAX_BYTES)\n")],
+     T + "a17_item_without_rev_refused_at_the_preview"),
     # R1d: re-seal and create after the commit's rename
     ("A-2 a failure after the re-seal's rename reported",
      [(R, "        let _ = core.commit(gen, keys, Head::of(next.rev, &bytes));\n",

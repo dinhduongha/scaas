@@ -1,7 +1,7 @@
 # up1 mutants (name | outcome | commit | test | first failure line)
-the HMAC file name over the item name only (no part) | killed | d0b16db55 | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (5838.155808ms)
-the last-chunk flag ignored at import (either flag accepted) | killed | d0b16db55 | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (3564.298836ms)
-rev left out of the item AD | killed | d0b16db55 | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (1358.463849ms)
-name inside the wrap's public JSON | killed | d0b16db55 | ../../scripts/capped node --test test/profile.test.js | ✖ envelope: whole files (protected visible, protected hidden, unprotected) reopen (1.666029ms)
-anchorCompare: any difference is rollback (ahead not followed) | killed | d0b16db55 | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (1484.262586ms)
+the HMAC file name over the item name only (no part) | killed | 0a2a9f86e dirty | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (6947.732784ms)
+the last-chunk flag ignored at import (either flag accepted) | killed | 0a2a9f86e dirty | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (4924.521073ms)
+rev left out of the item AD | killed | 0a2a9f86e dirty | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (1145.162338ms)
+name inside the wrap's public JSON | killed | 0a2a9f86e dirty | ../../scripts/capped node --test test/profile.test.js | ✖ envelope: whole files (protected visible, protected hidden, unprotected) reopen (1.175134ms)
+anchorCompare: any difference is rollback (ahead not followed) | killed | 0a2a9f86e dirty | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (1246.582869ms)
 5 mutants, 5 killed, 0 survived, 0 not loaded, 0 other failure
