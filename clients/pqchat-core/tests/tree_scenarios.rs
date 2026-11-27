@@ -13,6 +13,7 @@
     clippy::indexing_slicing
 )]
 mod common;
+use common::{called, confirmed};
 
 use async_trait::async_trait;
 use pqchat_core::net::Net;
@@ -565,6 +566,8 @@ struct HomeNet {
     /// the list's first endpoint is down: a record the home does not hold reverts on every other endpoint, which the pool
     /// answers as a failover over endpoints that all failed, the revert kept (R2-C-4)
     failover: bool,
+    /// CLI-SDK-36: every signing call the crate made through the port
+    signs: std::sync::atomic::AtomicU64,
 }
 
 impl HomeNet {
@@ -577,6 +580,7 @@ impl HomeNet {
             reads: Mutex::new(vec![]),
             writes: Mutex::new(0),
             prepared: Mutex::new(vec![]),
+            signs: Default::default(),
             tamper,
             named,
             majority_agrees,
@@ -592,6 +596,7 @@ impl HomeNet {
             reads: Mutex::new(vec![]),
             writes: Mutex::new(0),
             prepared: Mutex::new(vec![]),
+            signs: Default::default(),
             tamper: None,
             named,
             majority_agrees: true,
@@ -662,6 +667,13 @@ impl Net for HomeNet {
     async fn submit(&self, _: AppCall) -> Result<String, PqChatError> {
         *self.writes.lock().unwrap() += 1;
         Err(PqChatError::Internal)
+    }
+    async fn sign(
+        &self,
+        u: pqchat_core::net::Unsigned,
+    ) -> Result<pqchat_core::net::Signature, PqChatError> {
+        self.signs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        pqchat_core::net::sign_now(u).await
     }
     async fn read_latest(
         &self,
@@ -1142,18 +1154,16 @@ async fn an_info_after_a_gap_needs_its_review() {
         review_acknowledged: false,
     };
     let reads = net.items().len();
-    let e =
-        r.pq.tree_commit(&s, &st, commit(false), 0)
-            .await
-            .err()
-            .unwrap();
+    let e = confirmed(&r.pq, r.pq.tree_commit(&s, &st, commit(false), 0).await)
+        .await
+        .err()
+        .unwrap();
     assert_eq!(e.code(), "TreeInfoReview");
     assert_eq!(net.items().len(), reads, "refused before any read");
-    let e =
-        r.pq.tree_commit(&s, &st, commit(true), 0)
-            .await
-            .err()
-            .map(|e| e.code());
+    let e = confirmed(&r.pq, r.pq.tree_commit(&s, &st, commit(true), 0).await)
+        .await
+        .err()
+        .map(|e| e.code());
     assert_ne!(e, Some("TreeInfoReview"), "reviewed: built further");
     assert_eq!(*net.writes.lock().unwrap(), 0);
 }
@@ -1248,16 +1258,19 @@ async fn a_changed_info_is_sealed_only_after_the_majority_read() {
             "{what}: A holds the info in force"
         );
         net.reads.lock().unwrap().clear();
-        let e =
+        let e = confirmed(
+            &r.pq,
             r.pq.tree_commit(
                 &s,
                 &st,
                 commit_req(&w, &v, "A", Some("{\"stores\":[]}"), vec![]),
                 0,
             )
-            .await
-            .err()
-            .unwrap();
+            .await,
+        )
+        .await
+        .err()
+        .unwrap();
         let built = net.items().iter().any(|i| i == "IPqChat.sessionOf");
         if named == 3 && what.ends_with("agree") {
             assert_ne!(e.code(), "TreeInfoUnconfirmed", "{what}");
@@ -1296,16 +1309,19 @@ async fn a_hidden_exit_under_the_true_tree_of_is_refused() {
     let e = replay(&r, &v, &s, "A").await.err().map(|e| e.code());
     assert_eq!(e, Some("TreeHeadRoot"), "the replay");
     assert!(pinned(&store, &tree_id).is_none(), "nothing pinned");
-    let e =
+    let e = confirmed(
+        &r.pq,
         r.pq.tree_commit(
             &s,
             &st,
             commit_req(&w, &v, "A", Some("{\"stores\":[]}"), vec![]),
             0,
         )
-        .await
-        .err()
-        .map(|e| e.code());
+        .await,
+    )
+    .await
+    .err()
+    .map(|e| e.code());
     assert_eq!(e, Some("TreeHeadRoot"), "the commit");
     assert_eq!(*net.writes.lock().unwrap(), 0);
 }
@@ -1328,11 +1344,14 @@ async fn an_add_reads_the_majority_first() {
         let r = crate_over(&w, net.clone());
         let st = replay(&r, &v, &s, "A").await.unwrap();
         net.reads.lock().unwrap().clear();
-        let e =
+        let e = confirmed(
+            &r.pq,
             r.pq.tree_commit(&s, &st, commit_req(&w, &v, "A", None, vec![add.clone()]), 0)
-                .await
-                .err()
-                .unwrap();
+                .await,
+        )
+        .await
+        .err()
+        .unwrap();
         let built = net.items().iter().any(|i| i == "IPqChat.sessionOf");
         assert_eq!(
             (e.code() == "TreeInfoUnconfirmed", built),
@@ -1358,11 +1377,14 @@ async fn a_commit_on_a_state_behind_the_head_is_refused() {
     let st = replay(&r, &v, &s, "A").await.unwrap();
     let net = HomeNet::new(Home::scenario(&v, &sc, None));
     let r = crate_with(&w, net.clone(), store);
-    let e =
+    let e = confirmed(
+        &r.pq,
         r.pq.tree_commit(&s, &st, commit_req(&w, &v, "A", None, vec![]), 0)
-            .await
-            .err()
-            .unwrap();
+            .await,
+    )
+    .await
+    .err()
+    .unwrap();
     assert_eq!(e.code(), "TreeStale");
     assert!(
         !net.items().iter().any(|i| i == "IPqChat.sessionOf"),
@@ -1772,14 +1794,27 @@ async fn a_tree_send_meets_its_child_and_an_exit_its_lag() {
     );
     let net = HomeNet::new(home);
     let r = crate_over(&w, net.clone());
-    let e =
-        r.pq.tree_leave(&s, &me, &first, 1, &payer)
-            .await
-            .err()
-            .unwrap();
+    let e = called(&r.pq, r.pq.tree_leave(&s, &me, &first, 1, &payer).await)
+        .await
+        .map(|x| x.1)
+        .err()
+        .unwrap();
     assert_eq!(e.code(), "ExitLag");
     assert!(net.prepared.lock().unwrap().is_empty(), "nothing prepared");
-    let _ = r.pq.tree_leave(&s, &me, &head, 1, &payer).await;
+    // CLI-SDK-36: built for the review, nothing signed; the confirm signs once, the dispatch prepares the call
+    let p = r.pq.tree_leave(&s, &me, &head, 1, &payer).await.unwrap();
+    assert!(
+        p.review().iter().any(|f| f.value.contains("cannot")),
+        "R14 in the review"
+    );
+    assert_eq!(net.signs.load(std::sync::atomic::Ordering::SeqCst), 0);
+    let c = r.pq.confirm(p).await.unwrap();
+    assert_eq!(net.signs.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert!(
+        net.prepared.lock().unwrap().is_empty(),
+        "the confirm sends nothing"
+    );
+    let _ = r.pq.dispatch(&c.out).await;
     assert_eq!(
         *net.prepared.lock().unwrap(),
         vec!["IPqChat.treeLeave".to_string()]
@@ -1821,6 +1856,7 @@ async fn a_record_landed_not_final_is_not_sent_again() {
         majority: None,
         latest: Some(Mutex::new(latest)),
         failover: false,
+        signs: Default::default(),
     });
     let r = crate_over(&w, net.clone());
     let payer = KeyRef::Native {
@@ -1985,6 +2021,7 @@ async fn a_record_unknown_behind_a_down_first_endpoint_is_not_landed() {
         majority: None,
         latest: None,
         failover: true,
+        signs: Default::default(),
     });
     let r = crate_over(&w, net.clone());
     let payer = KeyRef::Native {
@@ -2227,17 +2264,36 @@ async fn a_tree_removal_is_bounded_and_prepared() {
         (many, &head, "MembersInvalid"),
         (vec![ua("B")], &first, "ExitLag"),
     ] {
-        let e =
-            r.pq.tree_remove(&s, &me, epoch, members, 1, &payer)
-                .await
-                .err()
-                .unwrap();
+        let e = called(
+            &r.pq,
+            r.pq.tree_remove(&s, &me, epoch, members, 1, &payer).await,
+        )
+        .await
+        .map(|x| x.1)
+        .err()
+        .unwrap();
         assert_eq!(e.code(), want);
     }
     assert!(net.prepared.lock().unwrap().is_empty(), "nothing prepared");
-    let _ =
+    // CLI-SDK-36: built for the review, nothing signed; the confirm signs once
+    let p =
         r.pq.tree_remove(&s, &me, &head, vec![ua("C"), ua("B"), ua("C")], 1, &payer)
-            .await;
+            .await
+            .unwrap();
+    drop(p);
+    assert_eq!(
+        net.signs.load(std::sync::atomic::Ordering::SeqCst),
+        0,
+        "dropped"
+    );
+    let _ = called(
+        &r.pq,
+        r.pq.tree_remove(&s, &me, &head, vec![ua("C"), ua("B"), ua("C")], 1, &payer)
+            .await,
+    )
+    .await
+    .map(|x| x.1);
+    assert_eq!(net.signs.load(std::sync::atomic::Ordering::SeqCst), 1);
     assert_eq!(
         *net.prepared.lock().unwrap(),
         vec!["IPqChat.treeRemove".to_string()]
@@ -2438,15 +2494,17 @@ async fn a_path_commit_over_leaves_under_review_asks_first() {
         .unwrap()
         .to_ascii_lowercase()];
     c.refresh = true;
-    let e = r.pq.tree_commit(&s, &st, c.clone(), 0).await.err().unwrap();
+    let e = confirmed(&r.pq, r.pq.tree_commit(&s, &st, c.clone(), 0).await)
+        .await
+        .err()
+        .unwrap();
     assert_eq!(e.code(), "TreeLeavesUnderReview");
     assert_eq!(*net.writes.lock().unwrap(), 0, "nothing sent");
     c.review_acknowledged = true;
-    let e =
-        r.pq.tree_commit(&s, &st, c, 0)
-            .await
-            .err()
-            .map(|e| e.code());
+    let e = confirmed(&r.pq, r.pq.tree_commit(&s, &st, c, 0).await)
+        .await
+        .err()
+        .map(|e| e.code());
     assert_ne!(
         e,
         Some("TreeLeavesUnderReview"),

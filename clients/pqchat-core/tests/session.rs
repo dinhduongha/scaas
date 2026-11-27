@@ -9,6 +9,7 @@
     clippy::indexing_slicing
 )]
 mod common;
+use common::{called, confirmed};
 
 use common::sdk::*;
 use pqchat_core::message::OpenEpoch;
@@ -71,16 +72,20 @@ async fn create(
     admins: &[&Acc],
     nonce: u64,
 ) -> Result<Built, PqChatError> {
-    w.pq.create(CreateSession {
-        me: me(&w.alice),
-        chain: CHAIN.into(),
-        home: HOME.into(),
-        nonce,
-        members: members.iter().map(|a| a.ua.clone()).collect(),
-        admins: admins.iter().map(|a| a.ua.clone()).collect(),
-        info: info(),
-        payer: payer(w),
-    })
+    confirmed(
+        &w.pq,
+        w.pq.create(CreateSession {
+            me: me(&w.alice),
+            chain: CHAIN.into(),
+            home: HOME.into(),
+            nonce,
+            members: members.iter().map(|a| a.ua.clone()).collect(),
+            admins: admins.iter().map(|a| a.ua.clone()).collect(),
+            info: info(),
+            payer: payer(w),
+        })
+        .await,
+    )
     .await
 }
 
@@ -202,10 +207,14 @@ async fn session2(w: &World) -> Opened {
 }
 
 async fn plain_rekey(w: &World, o: &Opened) -> Built {
-    w.pq.rekey(
-        &sref(o),
-        &open(w, o),
-        rk(w, &w.bob, 2, &[&w.alice, &w.bob], &[&w.alice]),
+    confirmed(
+        &w.pq,
+        w.pq.rekey(
+            &sref(o),
+            &open(w, o),
+            rk(w, &w.bob, 2, &[&w.alice, &w.bob], &[&w.alice]),
+        )
+        .await,
     )
     .await
     .unwrap()
@@ -248,23 +257,29 @@ async fn membership_change_needs_an_admin() {
     let w = ready().await;
     let o = session2(&w).await;
     let all = [&w.alice, &w.bob, &w.carol];
-    let e =
+    let e = confirmed(
+        &w.pq,
         w.pq.rekey(
             &sref(&o),
             &open(&w, &o),
             rk(&w, &w.bob, 2, &all, &[&w.alice]),
         )
-        .await;
+        .await,
+    )
+    .await;
     assert_eq!(code(e), "NotAdmin");
     assert_eq!(w.net.writes(), 0);
-    let b =
+    let b = confirmed(
+        &w.pq,
         w.pq.rekey(
             &sref(&o),
             &open(&w, &o),
             rk(&w, &w.alice, 3, &all, &[&w.alice]),
         )
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     assert_eq!(uas(&b.epoch), sorted(&all));
 }
 
@@ -295,7 +310,8 @@ async fn removed_member_dropped_and_authors_nothing() {
     let w = ready().await;
     let o = session2(&w).await;
     latest(&w, &o);
-    let e =
+    let e = called(
+        &w.pq,
         w.pq.remove(
             &sref(&o),
             &o.e,
@@ -304,18 +320,26 @@ async fn removed_member_dropped_and_authors_nothing() {
             std::slice::from_ref(&w.alice.ua),
             &payer(&w),
         )
-        .await;
-    assert_eq!(code(e), "NotAdmin");
-    assert_eq!(w.net.writes(), 0);
-    w.pq.remove(
-        &sref(&o),
-        &o.e,
-        &me(&w.alice),
-        2,
-        std::slice::from_ref(&w.bob.ua),
-        &payer(&w),
+        .await,
     )
     .await
+    .map(|x| x.1);
+    assert_eq!(code(e), "NotAdmin");
+    assert_eq!(w.net.writes(), 0);
+    called(
+        &w.pq,
+        w.pq.remove(
+            &sref(&o),
+            &o.e,
+            &me(&w.alice),
+            2,
+            std::slice::from_ref(&w.bob.ua),
+            &payer(&w),
+        )
+        .await,
+    )
+    .await
+    .map(|x| x.1)
     .unwrap();
     assert_eq!(
         w.net.writes_of("IPqChat.remove")[0]["r"]["members"],
@@ -323,24 +347,30 @@ async fn removed_member_dropped_and_authors_nothing() {
     );
     flag(&w, &o, "IPqChat.removedIn", &w.bob);
     let n = w.net.writes();
-    let e =
+    let e = confirmed(
+        &w.pq,
         w.pq.rekey(
             &sref(&o),
             &open(&w, &o),
             rk(&w, &w.bob, 3, &[&w.alice, &w.bob], &[&w.alice]),
         )
-        .await;
+        .await,
+    )
+    .await;
     assert_eq!(code(e), "NotMember");
     assert_eq!(w.net.writes(), n);
     let all = [&w.alice, &w.bob, &w.carol];
-    let b =
+    let b = confirmed(
+        &w.pq,
         w.pq.rekey(
             &sref(&o),
             &open(&w, &o),
             rk(&w, &w.alice, 4, &all, &[&w.alice]),
         )
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         uas(&b.epoch),
         sorted(&[&w.alice, &w.carol]),
@@ -357,24 +387,30 @@ async fn a_non_admin_drops_a_removed_member() {
     let o = opened(&w, &[&w.alice, &w.bob, &w.carol]).await;
     child(&w.net, HOME, &o.e.id, ZERO32);
     let two = [&w.alice, &w.bob];
-    let e =
+    let e = confirmed(
+        &w.pq,
         w.pq.rekey(
             &sref(&o),
             &open(&w, &o),
             rk(&w, &w.bob, 2, &two, &[&w.alice]),
         )
-        .await;
+        .await,
+    )
+    .await;
     assert_eq!(code(e), "NotAdmin");
     flag(&w, &o, "IPqChat.removedIn", &w.carol);
     let all = [&w.alice, &w.bob, &w.carol];
-    let b =
+    let b = confirmed(
+        &w.pq,
         w.pq.rekey(
             &sref(&o),
             &open(&w, &o),
             rk(&w, &w.bob, 3, &all, &[&w.alice]),
         )
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     assert_eq!(uas(&b.epoch), sorted(&two));
 }
 
@@ -399,21 +435,31 @@ async fn exits_are_checked_at_the_head() {
     );
     macro_rules! leave {
         () => {
-            w.pq.leave(&sref(&o), &o.e, &me(&w.bob), 1, &payer(&w))
-                .await
+            called(
+                &w.pq,
+                w.pq.leave(&sref(&o), &o.e, &me(&w.bob), 1, &payer(&w))
+                    .await,
+            )
+            .await
+            .map(|x| x.1)
         };
     }
     macro_rules! remove {
         () => {
-            w.pq.remove(
-                &sref(&o),
-                &o.e,
-                &me(&w.alice),
-                2,
-                std::slice::from_ref(&w.bob.ua),
-                &payer(&w),
+            called(
+                &w.pq,
+                w.pq.remove(
+                    &sref(&o),
+                    &o.e,
+                    &me(&w.alice),
+                    2,
+                    std::slice::from_ref(&w.bob.ua),
+                    &payer(&w),
+                )
+                .await,
             )
             .await
+            .map(|x| x.1)
         };
     }
     assert_eq!(code(leave!()), "ExitLag");
@@ -472,20 +518,30 @@ async fn exits_below_the_head_are_checked_in_the_named_lists() {
     );
     macro_rules! remove {
         ($by:expr, $who:expr) => {
-            w.pq.remove(
-                &sref(&o),
-                &o.e,
-                &me($by),
-                2,
-                std::slice::from_ref($who),
-                &payer(&w),
+            called(
+                &w.pq,
+                w.pq.remove(
+                    &sref(&o),
+                    &o.e,
+                    &me($by),
+                    2,
+                    std::slice::from_ref($who),
+                    &payer(&w),
+                )
+                .await,
             )
             .await
+            .map(|x| x.1)
         };
     }
     macro_rules! leave {
         ($a:expr) => {
-            w.pq.leave(&sref(&o), &o.e, &me($a), 1, &payer(&w)).await
+            called(
+                &w.pq,
+                w.pq.leave(&sref(&o), &o.e, &me($a), 1, &payer(&w)).await,
+            )
+            .await
+            .map(|x| x.1)
         };
     }
     assert_eq!(code(leave!(&w.carol)), "NotMember");
@@ -504,31 +560,42 @@ async fn a_member_who_left_authors_nothing() {
     let o = opened(&w, &[&w.alice, &w.bob, &w.carol]).await;
     child(&w.net, HOME, &o.e.id, ZERO32);
     latest(&w, &o);
-    w.pq.leave(&sref(&o), &o.e, &me(&w.carol), 1, &payer(&w))
-        .await
-        .unwrap();
+    called(
+        &w.pq,
+        w.pq.leave(&sref(&o), &o.e, &me(&w.carol), 1, &payer(&w))
+            .await,
+    )
+    .await
+    .map(|x| x.1)
+    .unwrap();
     assert_eq!(
         w.net.writes_of("IPqChat.leave")[0]["l"]["member"],
         json!(w.carol.ua)
     );
     flag(&w, &o, "IPqChat.leftIn", &w.carol);
     let all = [&w.alice, &w.bob, &w.carol];
-    let e =
+    let e = confirmed(
+        &w.pq,
         w.pq.rekey(
             &sref(&o),
             &open(&w, &o),
             rk(&w, &w.carol, 2, &all, &[&w.alice]),
         )
-        .await;
+        .await,
+    )
+    .await;
     assert_eq!(code(e), "NotMember");
-    let b =
+    let b = confirmed(
+        &w.pq,
         w.pq.rekey(
             &sref(&o),
             &open(&w, &o),
             rk(&w, &w.bob, 3, &all, &[&w.alice]),
         )
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     assert_eq!(uas(&b.epoch), sorted(&[&w.alice, &w.bob]));
 }
 
@@ -566,13 +633,16 @@ async fn epoch_taken_rebuilt_from_the_winner() {
     put_wrap(&w.net, HOME, &wid, i, &wrap);
     child(&w.net, HOME, &o.e.id, &wid);
     child(&w.net, HOME, &wid, ZERO32);
-    let e =
+    let e = confirmed(
+        &w.pq,
         w.pq.rekey(
             &sref(&o),
             &open(&w, &o),
             rk(&w, &w.alice, 3, &[&w.alice, &w.bob], &[&w.alice]),
         )
-        .await;
+        .await,
+    )
+    .await;
     assert_eq!(code(e), "EpochTaken");
     assert_eq!(w.net.writes(), 0);
     let winner = w.pq.child_of(&sref(&o), &o.e.id).await.unwrap().unwrap();
@@ -580,14 +650,17 @@ async fn epoch_taken_rebuilt_from_the_winner() {
         w.pq.open_epoch(&sref(&o), &winner, &w.alice.key, &w.alice.ua, None)
             .await
             .unwrap();
-    let b =
+    let b = confirmed(
+        &w.pq,
         w.pq.rekey(
             &sref(&o),
             &ep,
             rk(&w, &w.alice, 4, &[&w.alice, &w.bob], &[&w.alice]),
         )
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     assert_eq!((b.epoch.epoch, b.epoch.parent.as_str()), (2, wid.as_str()));
 }
 
@@ -783,7 +856,8 @@ async fn msig_seat_expanded() {
         &inner,
         &[(KIND, &frank.ua, true), (MSIG as u16, &deep, true)],
     );
-    let b =
+    let b = confirmed(
+        &w.pq,
         w.pq.create(CreateSession {
             me: me(&w.alice),
             chain: CHAIN.into(),
@@ -794,8 +868,10 @@ async fn msig_seat_expanded() {
             info: info(),
             payer: payer(&w),
         })
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     assert_eq!(uas(&b.epoch), sorted(&[&w.alice, &w.bob, &w.carol, &frank]));
     for m in &b.epoch.members {
         let via = if m.ua == w.carol.ua || m.ua == frank.ua {
@@ -822,7 +898,8 @@ async fn msig_seat_expanded() {
     // no accepted leaf
     let empty = hex(&[0x61; 32]);
     msig(&w.net, &empty, &[(KIND, &erin.ua, false)]);
-    let e =
+    let e = confirmed(
+        &w.pq,
         w.pq.create(CreateSession {
             me: me(&w.alice),
             chain: CHAIN.into(),
@@ -833,7 +910,9 @@ async fn msig_seat_expanded() {
             info: info(),
             payer: payer(&w),
         })
-        .await;
+        .await,
+    )
+    .await;
     assert_eq!(code(e), "MembersInvalid");
 }
 
@@ -843,7 +922,8 @@ async fn msig_author_planned() {
     let _one = ONE.lock().await;
     let w = ready().await;
     let seat = hex(&[0x5e; 32]);
-    let e =
+    let e = confirmed(
+        &w.pq,
         w.pq.create(CreateSession {
             me: Me {
                 key: KeyRef::Msig {
@@ -860,7 +940,98 @@ async fn msig_author_planned() {
             info: info(),
             payer: payer(&w),
         })
-        .await;
+        .await,
+    )
+    .await;
     assert_eq!(code(e), "MsigAuthorPlanned");
     assert_eq!((w.net.reads.lock().unwrap().len(), w.net.writes()), (0, 0));
+}
+
+/// CLI-SDK-36 (owner 2026-11-27): a session, an epoch, a leave and a removal are each built for the review with no signing
+/// call and nothing sent (their quotes asked with the signature empty); a review dropped signs nothing, binds no room and
+/// accepts no session; each confirm makes exactly one signing call. The control of each: its confirmed twin.
+#[tokio::test(flavor = "multi_thread")]
+async fn nothing_is_signed_before_the_confirm() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    let o = opened(&w, &[&w.alice, &w.bob, &w.carol]).await;
+    child(&w.net, HOME, &o.e.id, ZERO32);
+    latest(&w, &o);
+    let signs = || w.net.signs.load(Ordering::SeqCst);
+    let req = |nonce| CreateSession {
+        me: me(&w.alice),
+        chain: CHAIN.into(),
+        home: HOME.into(),
+        nonce,
+        members: vec![w.bob.ua.clone()],
+        admins: vec![],
+        info: info(),
+        payer: payer(&w),
+    };
+    // a creation: reviewed and dropped, then confirmed
+    let p = w.pq.create(req(1)).await.unwrap();
+    let sid = p.facts().session_id.clone();
+    assert!(p.review().iter().any(|f| f.name == "message.creator"));
+    assert!(p.quote().is_some());
+    let q = w.net.quotes.lock().unwrap().last().cloned().unwrap();
+    assert_eq!(
+        (q.1.as_str(), &q.2["sig"]["signature"]),
+        ("IPqChat.createSession", &json!("0x"))
+    );
+    drop(p);
+    assert_eq!((signs(), w.net.writes()), (0, 0), "a creation dropped");
+    assert_eq!(w.pq.consent(&sid).unwrap(), None, "no session accepted");
+    let b =
+        w.pq.confirm(w.pq.create(req(2)).await.unwrap())
+            .await
+            .unwrap();
+    assert_eq!(signs(), 1, "the creation's confirm");
+    assert!(w.pq.consent(&b.out.session_id).unwrap().is_some());
+    // an epoch
+    let (so, oe, pay) = (sref(&o), open(&w, &o), payer(&w));
+    let (alice, carol) = (me(&w.alice), me(&w.carol));
+    macro_rules! rekey {
+        () => {
+            w.pq.rekey(
+                &so,
+                &oe,
+                rk(&w, &w.bob, 3, &[&w.alice, &w.bob, &w.carol], &[&w.alice]),
+            )
+        };
+    }
+    let writes = w.net.writes();
+    drop(rekey!().await.unwrap());
+    assert_eq!((signs(), w.net.writes()), (1, writes), "an epoch dropped");
+    w.pq.confirm(rekey!().await.unwrap()).await.unwrap();
+    assert_eq!(signs(), 2, "the epoch's confirm");
+    // a leave and a removal: their confirm signs and sends nothing; `dispatch` prepares the call
+    let bob = std::slice::from_ref(&w.bob.ua);
+    macro_rules! leave {
+        () => {
+            w.pq.leave(&so, &o.e, &carol, 4, &pay)
+        };
+    }
+    macro_rules! remove {
+        () => {
+            w.pq.remove(&so, &o.e, &alice, 5, bob, &pay)
+        };
+    }
+    let writes = w.net.writes();
+    drop(leave!().await.unwrap());
+    drop(remove!().await.unwrap());
+    assert_eq!((signs(), w.net.writes()), (2, writes), "exits dropped");
+    let l = w.pq.confirm(leave!().await.unwrap()).await.unwrap();
+    let r = w.pq.confirm(remove!().await.unwrap()).await.unwrap();
+    assert_eq!(
+        (signs(), w.net.writes()),
+        (4, writes),
+        "two confirms, nothing sent"
+    );
+    for x in [&l.out, &r.out] {
+        assert!(matches!(
+            w.pq.dispatch(x).await.unwrap(),
+            pqchat_core::confirm::Sent::Call(_)
+        ));
+    }
+    assert_eq!((signs(), w.net.writes()), (4, writes + 2));
 }

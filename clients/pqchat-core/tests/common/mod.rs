@@ -107,6 +107,29 @@ impl PqChatStore for Faulty {
     }
 }
 
+/// A write prepared, then confirmed at once (the tests whose subject is not the review): its output.
+pub async fn confirmed<W: pqchat_core::confirm::Then>(
+    pq: &pqchat_core::PqChat,
+    p: Result<pqchat_core::confirm::Prepared<W>, pqchat_core::PqChatError>,
+) -> Result<W::Out, pqchat_core::PqChatError> {
+    Ok(pq.confirm(p?).await?.out)
+}
+
+/// A record write prepared, confirmed and its call prepared on the payer's path: `(id, call)`.
+pub async fn called(
+    pq: &pqchat_core::PqChat,
+    p: Result<
+        pqchat_core::confirm::Prepared<pqchat_core::confirm::RecordWrite>,
+        pqchat_core::PqChatError,
+    >,
+) -> Result<(Option<String>, scaas_sdk::app_core::AppCall), pqchat_core::PqChatError> {
+    let w = confirmed(pq, p).await?;
+    match pq.dispatch(&w).await? {
+        pqchat_core::confirm::Sent::Call(c) => Ok((w.id, *c)),
+        pqchat_core::confirm::Sent::Relayed { .. } => Err(pqchat_core::PqChatError::Internal),
+    }
+}
+
 pub mod chain;
 pub mod epochs;
 pub mod matrix;

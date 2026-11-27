@@ -2464,7 +2464,7 @@ pub async fn settle_gas(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     /// D2-5 (plan T4): an exit refused `PqChatTreeBacklog` / `PqChatIncomplete` / `PqVaultIncomplete` waits queued; past the lag
     /// (`PqChatExitLag`) or on another refusal it does not; another entry refused the same way does not wait either. The
     /// reasons are the decoded errors (`abi::decode_revert`).
@@ -6183,7 +6183,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     /// T93 (UA-7 P32, topics P45): an RPC whose `factory` lists `instances` as `(address, contractClass, version)` through `infoOf`
     /// (the reads counted), every other address unlisted; a listed address answers no `chainUid()` (a `PqChat` record is portable),
     /// every other `eth_call` `uid`; `eth_getCode` empty.
-    async fn factory_rpc(
+    pub(crate) async fn factory_rpc(
         uid: B256,
         factory: Address,
         instances: Vec<(Address, u16, u64)>,
@@ -6254,6 +6254,8 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                         }
                         "eth_call" => Some(uid.to_vec()),
                         "eth_getCode" => Some(vec![]),
+                        // a gateway's simulation (NODE-GW-09's test): the estimate
+                        "eth_estimateGas" => Some(vec![0x52, 0x08]),
                         _ => None,
                     };
                     let result = out.map_or(serde_json::Value::Null, |b| {

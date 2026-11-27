@@ -104,9 +104,9 @@ SCaaS purpose and domain, `PURPOSE_PQCHAT`, `DS_C` and PqChat's app id and its `
 BUILT, UNAUDITED), while PqChat's own paths (the record entries, the card, the file seal) sign. So the SDK knows PqChat's record formats and none of its logic.
 Messages and leaves are signed by a leaf UA, never by an `msig` (UA-7 P13).
 
-**Sign after confirm** (owner 2026-11-27; SPECIFIED; BUILT-gap: the crate signs its session, epoch and topic records when it builds
-them): each record entry above is built and quoted for the review and signed only on the user's confirm; the message entry keeps
-its form (the send is the confirm): [CLI-SDK-36](../decisions.md#CLI-SDK-36).
+**Sign after confirm** (owner 2026-11-27, [CLI-SDK-36](../decisions.md#CLI-SDK-36); BUILT, UNAUDITED, the gap closed on branch
+`pqchat-core-confirm`): each record entry above is built and quoted for the review and signed only on the user's confirm
+([CLI-PQC-21](#CLI-PQC-21)); the message entry keeps its form (the send is the confirm).
 
 ## 3. The Matrix store
 
@@ -338,8 +338,9 @@ warning, an admin's new info after a gap, the order of a commit's pieces, the cl
   hash, the membership change and the target list, so a device restored from the seed opens its own commits and a commit
   rebuilt on another tree, session or home never repeats a secret. The nonce is random, stored before a piece leaves the device
   and never reused. A random device key recovers its commits on that device only.
-- **Signing.** One typed `ua-rs` operation builds the path, the pieces and `PqChatCommit` inside the signing boundary, shows the
-  review and signs ([CLI-PQC-04](#CLI-PQC-04)); no digest from outside is signed.
+- **Signing.** One typed `ua-rs` operation builds the path, the pieces and `PqChatCommit` inside the signing boundary for the
+  review, and signs it on the user's confirm ([CLI-PQC-04](#CLI-PQC-04), [CLI-PQC-21](#CLI-PQC-21)); no digest from outside is
+  signed.
 - **Before it encrypts** the crate refuses a head below its checkpoint (which holds the hash of the verified head record, not
   only its id; a mismatch at a pinned number is settled by a strict-majority read over at least 3 nodes, else the session
   shows "conflicting head" and nothing is built on it; **before it extends its state above a pin it compares the record
@@ -431,10 +432,61 @@ warning, an admin's new info after a gap, the order of a commit's pieces, the cl
 - **The home's setting** comes from pinned deployment data or a majority read and is pinned; the mode is pinned with `treeId`.
 - **The size hint.** The crate proposes the tree mode from about 7 keys where several members commit; it enforces nothing.
 
-**Public topics on the client** (owner 2026-11-27; SPECIFIED, nothing built): topic writes go relayed by default (fee 0 allowed, the
-payer's own transaction an option), drafts stay local in the profile's sealed store, the sorts work over a 256-id window with a
-visible down-vote fold, and the next `PqChat` release adds entry times, a batched row view and the version nonce (PLANNED):
-[CLI-PQC-18](../decisions.md#CLI-PQC-18).
+**Public topics on the client** (owner 2026-11-27, [CLI-PQC-18](../decisions.md#CLI-PQC-18)): topic writes go relayed by default
+(fee 0 allowed, the payer's own transaction an option), the sorts work over a 256-id window with a visible down-vote fold at the
+user's threshold, and a pinned `contentHash` is checked; BUILT, UNAUDITED ([CLI-PQC-21](#CLI-PQC-21)). Drafts stay local in the
+profile's sealed store: the app's, with user profiles. The contract's entry times, batched rows and version nonce are BUILT
+([CTR-CHAT-29](../contracts/pqchat.md#CTR-CHAT-29) to [CTR-CHAT-31](../contracts/pqchat.md#CTR-CHAT-31)).
+
+<a id="CLI-PQC-21"></a>**CLI-PQC-21** — **Every write is a `Prepared` until the user's confirm; a topic write is relayed by default;
+feeds are ranked over a window by one deterministic arithmetic; a pinned `contentHash` is checked** (controller calls 2026-11-28
+under CLI-SDK-36 and CLI-PQC-18; the owner may override; BUILT on branch `pqchat-core-confirm`, UNAUDITED).
+
+- **Prepared** (`src/confirm.rs`). `create`, `rekey`, `leave`, `remove`, `create_tree`, `tree_commit` (path and path-less),
+  `tree_leave`, `tree_remove` and the six topic writes return `Prepared<W>`: `review()` the SDK's review of the record as it
+  will be signed (an exit's lag line, a tree commit's lines with the leaves under review), `quote()` the SDK's
+  `quote_app_call` of the payer's call with the signature empty (`None` for a relayed write and a tree commit, whose cost is
+  `facts().plan`), `facts()` the write's own facts (ids, the UAs skipped, a tree commit's plan). Nothing is signed or sent
+  when it is built; a dropped one leaves no trace (a creation binds its room and accepts its session in the confirm, before
+  the signature). `PqChat::confirm(p) -> Confirmed { out, reviewed }` makes the one signing call through the chain port
+  (`Net::sign`, which the tests count) and builds `out`: `Built` (the first `createSession` or `rekey` fitted as before),
+  `TreeCreated`, `TreeBuilt`, or a `SignedWrite` (a topic record or an exit: the call's named arguments, no network after
+  the signature). `dispatch(&SignedWrite)` sends it by its path: `Sent::Relayed { queued }` or `Sent::Call(AppCall)`;
+  `dispatch_paid` sends a relayed one by the payer's transaction instead. `Confirmed::within_review(&fresh)` is
+  [CLI-PQV-18](pqvault-core.md#CLI-PQV-18)'s rule: the fresh call is sent on the confirm given only with the reviewed payer
+  and a `max_cost` no higher; `false` with no reviewed quote. Tests: `tests/session.rs` `nothing_is_signed_before_the_confirm`,
+  `tests/topics.rs` `topic_writes_sign_after_confirm_relayed_by_default`,
+  `a_fresh_quote_within_the_review_needs_no_second_confirm`, `tests/tree_scenarios.rs` (the exits),
+  `tests/chain_tree.rs` (a creation and a commit on a local chain).
+- **Relayed** (`Path::Relayed`, the default a front-end passes; `Path::Payer(key)` the option). Only the six topic records
+  (`net::RELAYED`); `SdkNet` relays through the SDK's `AppCore::relay_app_call` to the profile's gateways (door A,
+  [NODE-GW-09](../node/gateway.md#NODE-GW-09)); a port without gateways answers `RelayUnavailable`. Tests:
+  `tests/topics.rs` `no_relay_then_the_payers_transaction`.
+- **Rows and sorts** (`src/topics.rs`). `entry_rows(on, ids, viewer, fold_at)` reads `entryRows` in calls of 64 ids and
+  refuses an answer of another length; `page_newest(on, list, before, count)` the page below `before`, newest first;
+  `ranked(on, list, Rank, snapshot, viewer, fold_at)` reads the window (Top and Controversial the newest 256 ids before the
+  snapshot, Best the first 256), each id once, and orders it by `rank`: Top `up − down`, Controversial
+  `min · log2(up + down) / max` in Q32 integers (Reddit's order, no platform `pow`), Best the Wilson lower bound at
+  z = 1.2816 (`+ − × ÷ √` on `f64`, correctly rounded everywhere), highest first, ties by the lower index; `whole` false
+  when the list is longer than the window. A row is `folded` when `down ≥ up + fold_at` (the user's setting, default
+  `FOLD_DEFAULT` = 5; `None`: no fold), never dropped. Tests: `window_sorts_are_deterministic`,
+  `entry_rows_fold_and_newest_pages`, `a_window_is_the_newest_256`, `tests/chain_topics.rs` on a local chain.
+- **A pinned `contentHash`** (`resolve_ref`, G5): compared with the typed digest of each version rebuilt from state by the SDK
+  (`pqchat_entry_hash`: version 1's `PqTopicEntry`; `pqchat_edit_hash`: a later `PqTopicEdit`), newest first, at most
+  `REF_VERSIONS_MAX` = 64: none equal is `HashMismatch` once every version was read, else `HashUnchecked`;
+  `content_hash_at(on, entry, version)` gives the hash a writer pins. Tests: `a_pinned_content_hash_is_checked`,
+  `tests/vectors.rs` (the vectors' `typed` rows), the e2e and `tests/chain_topics.rs`.
+
+| Old (dev `9ed19e100`) | New |
+|---|---|
+| `create(r) -> Built`, `rekey(s, parent, r) -> Built` | `-> SessionWrite` (`Prepared<EpochWrite>`); `confirm(p).out: Built` |
+| `leave(s, e, me, nonce, payer) -> AppCall`, `remove(…) -> AppCall` | `-> ExitWrite`; `confirm(p).out: SignedWrite`, `dispatch(&w) -> Sent::Call(AppCall)` |
+| `create_tree(r) -> TreeCreated` | `-> TreeCreateWrite`; `confirm(p).out: TreeCreated` |
+| `tree_commit(s, st, c, leaf) -> TreeBuilt` | `-> TreeWrite` (`facts().plan`, `head_confirmed`, `adds_left`, `review`); `confirm(p).out: TreeBuilt` |
+| `tree_leave(…, payer) -> AppCall`, `tree_remove(…, payer) -> AppCall` | `-> TreeExitWrite`; `confirm`, then `dispatch` |
+| `create_topic`, `update_topic`, `set_writer`, `post`, `edit`, `vote` (…, `payer: &KeyRef`) `-> TopicWrite { id, call }` | (…, `path: &Path`) `-> TopicWrite` (`Prepared<RecordWrite>`); `confirm(p).out: SignedWrite { id, at, path }`, `dispatch(&w) -> Sent` |
+| `resolve_ref`: a pinned hash `HashUnchecked` | checked: `Verified`, `HashMismatch` or `HashUnchecked` (past 64 versions) |
+| — | `entry_rows`, `page_newest`, `ranked`, `rank`, `content_hash_at`; `Net::quote`, `Net::sign`, `Net::relay` (defaults: unquoted, the SDK's signature, `RelayUnavailable`) |
 
 ## 5. Vectors and tests
 

@@ -13,6 +13,7 @@
     clippy::indexing_slicing
 )]
 mod common;
+use common::confirmed;
 
 use base64::engine::general_purpose::{STANDARD, URL_SAFE};
 use base64::Engine as _;
@@ -140,15 +141,23 @@ async fn created_room_unencrypted_and_bound_by_create() {
         payer: payer(&w),
     };
     let other = server.ordinary(ALICE, &[], false);
-    assert_eq!(code(w.pq.create(req(&other, 1)).await), "MatrixRoom");
+    assert_eq!(
+        code(confirmed(&w.pq, w.pq.create(req(&other, 1)).await).await),
+        "MatrixRoom"
+    );
     assert_eq!(w.net.writes(), 0);
-    let b = w.pq.create(req(&room, 2)).await.unwrap();
+    let b = confirmed(&w.pq, w.pq.create(req(&room, 2)).await)
+        .await
+        .unwrap();
     assert_eq!(
         w.pq.room_session(&room).unwrap(),
         Some(b.session_id.clone())
     );
     // the room serves that session only
-    assert_eq!(code(w.pq.create(req(&room, 3)).await), "MatrixRoom");
+    assert_eq!(
+        code(confirmed(&w.pq, w.pq.create(req(&room, 3)).await).await),
+        "MatrixRoom"
+    );
 }
 
 /// Every `Bound` answer is told to the transport (`bound`), the first bind and each later use alike: a fresh device or a new
@@ -329,7 +338,8 @@ async fn alice_creates(
     nonce: u64,
 ) -> (String, OpenEpoch) {
     let room = w.pq.create_room().await.unwrap();
-    let b =
+    let b = confirmed(
+        &w.pq,
         w.pq.create(CreateSession {
             me: me(&w.alice),
             chain: CHAIN.into(),
@@ -348,8 +358,10 @@ async fn alice_creates(
             },
             payer: payer(w),
         })
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     let ep = OpenEpoch {
         chain: CHAIN.into(),
         epoch: b.epoch.clone(),
@@ -471,7 +483,8 @@ async fn room_id_in_no_chain_write() {
         StoreEntry::Matrix { room: room.clone() },
         serde_json::from_value(chain_entry(HOME)).unwrap(),
     ];
-    let b =
+    let b = confirmed(
+        &w.pq,
         w.pq.create(CreateSession {
             me: me(&w.alice),
             chain: CHAIN.into(),
@@ -487,8 +500,10 @@ async fn room_id_in_no_chain_write() {
             },
             payer: payer(&w),
         })
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     put_record(&w.net, HOME, &b.epoch);
     let s = sref(&b.epoch);
     let ep =
@@ -527,22 +542,26 @@ async fn room_id_in_no_chain_write() {
             );
         }
     }
-    w.pq.rekey(
-        &s,
-        &ep,
-        Rekey {
-            me: me(&w.alice),
-            nonce: 2,
-            members: vec![w.alice.ua.clone(), w.bob.ua.clone()],
-            admins: vec![w.alice.ua.clone()],
-            info: Info {
-                stores: st,
-                name: "t8".into(),
-                topic: String::new(),
-                matrix: Default::default(),
+    confirmed(
+        &w.pq,
+        w.pq.rekey(
+            &s,
+            &ep,
+            Rekey {
+                me: me(&w.alice),
+                nonce: 2,
+                members: vec![w.alice.ua.clone(), w.bob.ua.clone()],
+                admins: vec![w.alice.ua.clone()],
+                info: Info {
+                    stores: st,
+                    name: "t8".into(),
+                    topic: String::new(),
+                    matrix: Default::default(),
+                },
+                payer: payer(&w),
             },
-            payer: payer(&w),
-        },
+        )
+        .await,
     )
     .await
     .unwrap();

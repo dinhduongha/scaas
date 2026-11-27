@@ -523,3 +523,46 @@ async fn file_rows() {
     }
     drop(seed);
 }
+
+/// G5 (CTR-CHAT-31): the `contentHash` a `ref` pins, rebuilt through the SDK from a version's fields, is each topic row's
+/// `typed`: the post's and the reply's `PqTopicEntry`, the edit's `PqTopicEdit`; the reply's `ref` pins the post's.
+#[tokio::test(flavor = "multi_thread")]
+async fn content_hash_rows() {
+    use scaas_sdk::pqchat_records::{PqEntryRef, PqTopicEdit, PqTopicEntry};
+    let (app, _seed, _chain) = app().await;
+    let t = pq("topics");
+    let entry = |r: &Value| PqTopicEntry {
+        topic_id: s(&r["topicId"]),
+        author: s(&r["author"]),
+        nonce: r["nonce"].as_u64().unwrap(),
+        parent_id: s(&r["parentId"]),
+        entry_ref: PqEntryRef {
+            chain_uid: s(&r["ref"]["chainUid"]),
+            pqchat: s(&r["ref"]["pqchat"]),
+            entry_id: s(&r["ref"]["entryId"]),
+            content_hash: s(&r["ref"]["contentHash"]),
+        },
+        media_type: s(&r["mediaType"]),
+        body: unhex(&r["body"]),
+    };
+    for row in ["post", "reply"] {
+        let h = app.pqchat_entry_hash(entry(&t[row]["record"])).unwrap();
+        assert_eq!(h, s(&t[row]["typed"]), "{row}");
+    }
+    assert_eq!(
+        s(&t["reply"]["record"]["ref"]["contentHash"]),
+        s(&t["post"]["typed"])
+    );
+    let e = &t["edit"]["record"];
+    let h = app
+        .pqchat_edit_hash(PqTopicEdit {
+            entry_id: s(&e["entryId"]),
+            author: s(&e["author"]),
+            nonce: e["nonce"].as_u64().unwrap(),
+            version: u32::try_from(e["version"].as_u64().unwrap()).unwrap(),
+            media_type: s(&e["mediaType"]),
+            body: unhex(&e["body"]),
+        })
+        .unwrap();
+    assert_eq!(h, s(&t["edit"]["typed"]));
+}

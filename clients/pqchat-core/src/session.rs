@@ -5,14 +5,20 @@
 //! each member wrapped at the highest KEM version seen (trusted reads), a member without a usable key skipped and named; the
 //! `sealedInfo` sealed and the record signed by the SDK's PqChat entries from named fields; the wraps sent in as many chunks as
 //! the SDK's quote accepts. Every write is the SDK's prepared operation: the app shows its review, submits it, follows it.
+use crate::confirm::{Path, Prepared, RecordWrite, Then};
 use crate::message::OpenEpoch;
 use crate::model::{self, at, Epoch, Member, ZERO32};
+use crate::net::{Signature, Unsigned};
 use crate::reads::SessionRef;
+use crate::topics::At;
 use crate::{Event, PqChat, PqChatError};
+use async_trait::async_trait;
 use scaas_sdk::app_core::{AppCall, AppKey, AppUaSig};
-use scaas_sdk::op::KeyRef;
+use scaas_sdk::op::{KeyRef, ReviewField};
 use scaas_sdk::pqchat_keys::{PqEpochNew, PqSessionNew};
-use scaas_sdk::pqchat_records::{PqChatLeave, PqChatRemove, PqChatSigned, PqMemberKey, PqWrap};
+use scaas_sdk::pqchat_records::{
+    PqChatLeave, PqChatPrepared, PqChatRemove, PqChatSigned, PqMemberKey, PqWrap,
+};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -144,6 +150,77 @@ pub struct Skipped {
     pub code: &'static str,
 }
 
+/// A session or epoch built for the review, unsigned (CLI-SDK-36): [`PqChat::confirm`] signs it into a [`Built`].
+pub type SessionWrite = Prepared<EpochWrite>;
+/// A flat leave or removal built for the review, unsigned: [`PqChat::confirm`] signs it, [`PqChat::dispatch`] calls it.
+pub type ExitWrite = Prepared<RecordWrite>;
+
+/// A session or epoch's facts for its review and what its confirm sends: its ids, the UAs skipped, the record and its wraps.
+pub struct EpochWrite {
+    pub session_id: String,
+    pub epoch_id: String,
+    pub skipped: Vec<Skipped>,
+    pub(crate) epoch: Epoch,
+    pub(crate) k: Arc<AppKey>,
+    pub(crate) wraps: Vec<PqWrap>,
+    pub(crate) at: At,
+    pub(crate) payer: KeyRef,
+    pub(crate) item: &'static str,
+    pub(crate) name: &'static str,
+    pub(crate) record: Value,
+    /// a creation: the session accepted on this device and its Matrix room bound, before the signature (CLI-PQC-05)
+    pub(crate) create: Option<(SessionRef, Option<String>)>,
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+impl Then for EpochWrite {
+    type Out = Built;
+
+    async fn before(&self, chat: &PqChat) -> Result<(), PqChatError> {
+        if let Some((s, room)) = &self.create {
+            // only a room this client created for the session, bound to it before anything is signed (CLI-PQC-05)
+            if let Some(room) = room {
+                chat.bind_created(room, &s.session_id)?;
+            }
+            // the creator's own session: accepted on this device
+            chat.set_consent(s, crate::consent::Consent::Accepted, true)?;
+        }
+        Ok(())
+    }
+
+    async fn then(self, chat: &PqChat, s: Signature) -> Result<Built, PqChatError> {
+        let Signature::Record(signed) = s else {
+            return Err(PqChatError::Internal);
+        };
+        let sig = sig_json(&signed.sig);
+        let (record, wraps, name) = (&self.record, &self.wraps, self.name);
+        let (call, sent) = chat
+            .fit(
+                &self.at.chain,
+                &self.at.instance,
+                &self.payer,
+                wraps.len(),
+                self.item,
+                |n| {
+                    json!({ name: record, "wraps": wraps.iter().take(n).map(wrap_json).collect::<Vec<_>>(), "sig": sig})
+                },
+            )
+            .await?;
+        Ok(Built {
+            session_id: self.session_id,
+            epoch_id: self.epoch_id,
+            epoch: self.epoch,
+            k: self.k,
+            wraps: self.wraps,
+            signed,
+            call,
+            sent,
+            skipped: self.skipped,
+        })
+    }
+}
+
 /// A signed session or epoch ready to send: its record, key, wraps, the first write (`createSession` or `rekey`) with the wraps
 /// that fit, and the UAs skipped; the rest of the wraps go by [`PqChat::next_wraps`] once that write has landed.
 pub struct Built {
@@ -175,8 +252,8 @@ fn sorted(v: &[String], add: Option<&str>) -> Result<Vec<String>, PqChatError> {
     Ok(v)
 }
 
-fn field<'a>(s: &'a PqChatSigned, name: &str) -> Result<&'a str, PqChatError> {
-    s.review
+fn field<'a>(review: &'a [ReviewField], name: &str) -> Result<&'a str, PqChatError> {
+    review
         .iter()
         .find(|f| f.name == name)
         .map(|f| f.value.as_str())
@@ -381,8 +458,10 @@ impl PqChat {
         Ok(w)
     }
 
-    /// Builds and signs a session (S1) and prepares `createSession` with as many wraps as the quote accepts.
-    pub async fn create(&self, r: CreateSession) -> Result<Built, PqChatError> {
+    /// Builds a session (S1) for the review, unsigned (CLI-SDK-36): its `K`, the wraps, `sealedInfo` sealed and the record
+    /// prepared, the quote of `createSession` with every wrap; on the confirm the room is bound and the session accepted on
+    /// this device, the record signed and `createSession` prepared with as many wraps as the quote accepts.
+    pub async fn create(&self, r: CreateSession) -> Result<SessionWrite, PqChatError> {
         let seed = seed_of(&r.me.key)?;
         let me = r.me.ua.to_ascii_lowercase();
         let members = sorted(&r.members, Some(&me))?;
@@ -396,20 +475,7 @@ impl PqChat {
         }
         let c = self.conf(&r.chain)?.clone();
         let sid = self.app.pqchat_session_id(me.clone(), r.nonce)?;
-        // only a room this client created for the session, bound to it before anything is signed (CLI-PQC-05)
-        if let Some(room) = crate::matrix::room_of(&r.info.stores) {
-            self.bind_created(room, &sid)?;
-        }
-        // the creator's own session: accepted on this device
-        self.set_consent(
-            &SessionRef {
-                chain: r.chain.clone(),
-                home: r.home.to_ascii_lowercase(),
-                session_id: sid.clone(),
-            },
-            crate::consent::Consent::Accepted,
-            true,
-        )?;
+        let room = crate::matrix::room_of(&r.info.stores).map(str::to_string);
         let k = self.app.pqchat_epoch_key(seed)?;
         let w = self
             .wrap_members(&r.chain, &k, &sid, &sid, &members)
@@ -424,7 +490,7 @@ impl PqChat {
             return Err(PqChatError::MembersInvalid);
         }
         let info_json = serde_json::to_string(&r.info).map_err(|_| PqChatError::Internal)?;
-        let signed = self
+        let prepared = self
             .app
             .pqchat_prepare_session(
                 r.me.key.clone(),
@@ -439,16 +505,16 @@ impl PqChat {
                     info_json,
                 },
             )
-            .await?
-            .sign()
             .await?;
-        if field(&signed, "message.creator")? != me || signed.id.as_deref() != Some(sid.as_str()) {
+        if field(&prepared.review, "message.creator")? != me
+            || prepared.id.as_deref() != Some(sid.as_str())
+        {
             return Err(PqChatError::Internal);
         }
-        let sealed = model::unhex(field(&signed, "message.sealedInfo")?)?;
+        let sealed = model::unhex(field(&prepared.review, "message.sealedInfo")?)?;
         let s = json!({"creator": me, "nonce": r.nonce.to_string(), "homeChain": c.chain_uid,
             "homeChatContract": r.home.to_ascii_lowercase(), "groupMode": "0", "admins": admins, "members": members_json(&w.keys),
-            "wrapHashes": signed.wrap_hashes, "sealedInfo": model::hex(&sealed),
+            "wrapHashes": prepared.wrap_hashes, "sealedInfo": model::hex(&sealed),
             // the path-less delta §3.1: mode 1's option and epoch 0's tag, both 0 in mode 0
             "pathRefreshBound": "0", "confirmTag": format!("0x{}", "00".repeat(32))});
         let epoch = Epoch {
@@ -460,27 +526,54 @@ impl PqChat {
             parent: ZERO32.into(),
             admins,
             members: as_members(&w.keys),
-            wrap_hashes: signed.wrap_hashes.clone(),
+            wrap_hashes: prepared.wrap_hashes.clone(),
             sealed_info: sealed,
             sig_hash: String::new(),
         };
-        let sig = sig_json(&signed.sig);
-        let wraps = w.wraps;
-        let (call, sent) = self
-            .fit(&r.chain, &r.home, &r.payer, wraps.len(), "IPqChat.createSession", |n| {
-                json!({"s": s, "wraps": wraps.iter().take(n).map(wrap_json).collect::<Vec<_>>(), "sig": sig})
-            })
-            .await?;
-        Ok(Built {
+        let home = r.home.to_ascii_lowercase();
+        let then = EpochWrite {
             session_id: sid.clone(),
-            epoch_id: sid,
+            epoch_id: sid.clone(),
+            skipped: w.skipped,
             epoch,
             k,
-            wraps,
-            signed,
-            call,
-            sent,
-            skipped: w.skipped,
+            wraps: w.wraps,
+            at: At {
+                chain: r.chain.clone(),
+                instance: home.clone(),
+            },
+            payer: r.payer,
+            item: "IPqChat.createSession",
+            name: "s",
+            record: s,
+            create: Some((
+                SessionRef {
+                    chain: r.chain,
+                    home,
+                    session_id: sid,
+                },
+                room,
+            )),
+        };
+        self.epoch_write(&r.me, prepared, then).await
+    }
+
+    /// `then`'s record prepared for the review: its review and the quote of its first write with every wrap.
+    async fn epoch_write(
+        &self,
+        me: &Me,
+        prepared: PqChatPrepared,
+        then: EpochWrite,
+    ) -> Result<SessionWrite, PqChatError> {
+        let args = json!({ then.name: then.record, "wraps": then.wraps.iter().map(wrap_json).collect::<Vec<_>>() });
+        let quote = self
+            .quote_unsigned(&then.at, then.item, args, &then.payer, &me.key)
+            .await?;
+        Ok(Prepared {
+            review: prepared.review.clone(),
+            unsigned: Unsigned::Record(prepared),
+            quote: Some(quote),
+            then,
         })
     }
 
@@ -495,7 +588,7 @@ impl PqChat {
         s: &SessionRef,
         parent: &OpenEpoch,
         r: Rekey,
-    ) -> Result<Built, PqChatError> {
+    ) -> Result<SessionWrite, PqChatError> {
         let seed = seed_of(&r.me.key)?;
         let p = &parent.epoch;
         let ua = r.me.ua.to_ascii_lowercase();
@@ -539,7 +632,7 @@ impl PqChat {
         }
         let number = p.epoch + 1;
         let info_json = serde_json::to_string(&r.info).map_err(|_| PqChatError::Internal)?;
-        let signed = self
+        let prepared = self
             .app
             .pqchat_prepare_epoch(
                 r.me.key.clone(),
@@ -555,15 +648,15 @@ impl PqChat {
                     info_json,
                 },
             )
-            .await?
-            .sign()
             .await?;
-        if field(&signed, "message.author")? != ua || signed.id.as_deref() != Some(eid.as_str()) {
+        if field(&prepared.review, "message.author")? != ua
+            || prepared.id.as_deref() != Some(eid.as_str())
+        {
             return Err(PqChatError::Internal);
         }
-        let sealed = model::unhex(field(&signed, "message.sealedInfo")?)?;
+        let sealed = model::unhex(field(&prepared.review, "message.sealedInfo")?)?;
         let e = json!({"sessionId": s.session_id, "author": ua, "nonce": r.nonce.to_string(), "epoch": number.to_string(),
-            "parentEpochId": p.id, "admins": admins, "members": members_json(&w.keys), "wrapHashes": signed.wrap_hashes,
+            "parentEpochId": p.id, "admins": admins, "members": members_json(&w.keys), "wrapHashes": prepared.wrap_hashes,
             "sealedInfo": model::hex(&sealed)});
         let epoch = Epoch {
             id: eid.clone(),
@@ -574,28 +667,28 @@ impl PqChat {
             parent: p.id.clone(),
             admins,
             members: as_members(&w.keys),
-            wrap_hashes: signed.wrap_hashes.clone(),
+            wrap_hashes: prepared.wrap_hashes.clone(),
             sealed_info: sealed,
             sig_hash: String::new(),
         };
-        let sig = sig_json(&signed.sig);
-        let wraps = w.wraps;
-        let (call, sent) = self
-            .fit(&s.chain, &s.home, &r.payer, wraps.len(), "IPqChat.rekey", |n| {
-                json!({"e": e, "wraps": wraps.iter().take(n).map(wrap_json).collect::<Vec<_>>(), "sig": sig})
-            })
-            .await?;
-        Ok(Built {
+        let then = EpochWrite {
             session_id: s.session_id.clone(),
             epoch_id: eid,
+            skipped: w.skipped,
             epoch,
             k,
-            wraps,
-            signed,
-            call,
-            sent,
-            skipped: w.skipped,
-        })
+            wraps: w.wraps,
+            at: At {
+                chain: s.chain.clone(),
+                instance: s.home.clone(),
+            },
+            payer: r.payer,
+            item: "IPqChat.rekey",
+            name: "e",
+            record: e,
+            create: None,
+        };
+        self.epoch_write(&r.me, prepared, then).await
     }
 
     /// The members and admins of `e` flagged by `item` (`leftIn` or `removedIn`, trusted reads at home).
@@ -684,7 +777,7 @@ impl PqChat {
     /// transaction that does not fit (`GasAboveTxCap`: regular gas above the profile's cap or the whole above the block's
     /// limit; `Revert`: the simulation out of gas, which the SDK's endpoint layer gives as a revert without data) bounds it from
     /// above, an accepted one from below; when not even one wrap fits, that refusal. No limit of ours assumed (UA-7 P11).
-    async fn fit<F: Fn(usize) -> Value>(
+    pub(crate) async fn fit<F: Fn(usize) -> Value>(
         &self,
         chain: &str,
         home: &str,
@@ -768,7 +861,7 @@ impl PqChat {
         nonce: u64,
         members: &[String],
         payer: &KeyRef,
-    ) -> Result<AppCall, PqChatError> {
+    ) -> Result<ExitWrite, PqChatError> {
         seed_of(&me.key)?;
         let ua = me.ua.to_ascii_lowercase();
         let m = sorted(members, None)?;
@@ -806,17 +899,44 @@ impl PqChat {
             admin: ua.clone(),
             nonce,
         };
-        let signed = self
-            .app
-            .prepare_pqchat_remove(me.key.clone(), r)
-            .await?
-            .sign()
-            .await?;
-        let a = json!({"r": {"sessionId": s.session_id, "epochId": e.id, "nextEpoch": (e.epoch + 1).to_string(),
-            "members": m, "admin": ua, "nonce": nonce.to_string()}, "sig": sig_json(&signed.sig)});
-        self.net
-            .prepare(&s.chain, &s.home, "IPqChat.remove", a, payer)
+        let prepared = self.app.prepare_pqchat_remove(me.key.clone(), r).await?;
+        let rec = json!({"sessionId": s.session_id, "epochId": e.id, "nextEpoch": (e.epoch + 1).to_string(),
+            "members": m, "admin": ua, "nonce": nonce.to_string()});
+        self.exit_write(s, me, "IPqChat.remove", "r", rec, prepared, payer)
             .await
+    }
+
+    /// A flat exit's record prepared for the review: its review and the quote of its call before the signature.
+    #[allow(clippy::too_many_arguments)]
+    async fn exit_write(
+        &self,
+        s: &SessionRef,
+        me: &Me,
+        item: &'static str,
+        name: &'static str,
+        record: Value,
+        prepared: PqChatPrepared,
+        payer: &KeyRef,
+    ) -> Result<ExitWrite, PqChatError> {
+        let at = At {
+            chain: s.chain.clone(),
+            instance: s.home.clone(),
+        };
+        let quote = self
+            .quote_unsigned(&at, item, json!({ name: record }), payer, &me.key)
+            .await?;
+        Ok(Prepared {
+            review: prepared.review.clone(),
+            unsigned: Unsigned::Record(prepared),
+            quote: Some(quote),
+            then: RecordWrite {
+                at,
+                item,
+                name,
+                record,
+                path: Path::Payer(payer.clone()),
+            },
+        })
     }
 
     /// The account's `leave` naming `e` (CTR-CHAT-10, S3): signed, prepared, checked and applied at the head (C9, D2-4,
@@ -829,7 +949,7 @@ impl PqChat {
         me: &Me,
         nonce: u64,
         payer: &KeyRef,
-    ) -> Result<AppCall, PqChatError> {
+    ) -> Result<ExitWrite, PqChatError> {
         seed_of(&me.key)?;
         let ua = me.ua.to_ascii_lowercase();
         let h = self.exit_head(s, e).await?;
@@ -846,16 +966,9 @@ impl PqChat {
             member: ua.clone(),
             nonce,
         };
-        let signed = self
-            .app
-            .prepare_pqchat_leave(me.key.clone(), l)
-            .await?
-            .sign()
-            .await?;
-        let a = json!({"l": {"sessionId": s.session_id, "epochId": e.id, "member": ua, "nonce": nonce.to_string()},
-            "sig": sig_json(&signed.sig)});
-        self.net
-            .prepare(&s.chain, &s.home, "IPqChat.leave", a, payer)
+        let prepared = self.app.prepare_pqchat_leave(me.key.clone(), l).await?;
+        let rec = json!({"sessionId": s.session_id, "epochId": e.id, "member": ua, "nonce": nonce.to_string()});
+        self.exit_write(s, me, "IPqChat.leave", "l", rec, prepared, payer)
             .await
     }
 

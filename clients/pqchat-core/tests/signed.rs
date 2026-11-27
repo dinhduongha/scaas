@@ -11,6 +11,7 @@
     clippy::indexing_slicing
 )]
 mod common;
+use common::confirmed;
 
 use common::net::FakeNet;
 use common::sdk::*;
@@ -563,7 +564,8 @@ async fn signed_session() -> (World, pqchat_core::reads::SessionRef, OpenEpoch) 
     for a in [&w.alice, &w.bob, &w.carol] {
         kem(&w, a, 1);
     }
-    let b =
+    let b = confirmed(
+        &w.pq,
         w.pq.create(CreateSession {
             me: me_of(&w.alice),
             chain: CHAIN.into(),
@@ -574,8 +576,10 @@ async fn signed_session() -> (World, pqchat_core::reads::SessionRef, OpenEpoch) 
             info: info_of(),
             payer: payer_of(&w),
         })
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     serve_written(
         &w.net,
         "IPqChat.createSession",
@@ -638,7 +642,9 @@ async fn rekey_on(
         info: info_of(),
         payer: payer_of(w),
     };
-    let b = w.pq.rekey(s, parent, r).await.unwrap();
+    let b = confirmed(&w.pq, w.pq.rekey(s, parent, r).await)
+        .await
+        .unwrap();
     serve_written(
         &w.net,
         "IPqChat.rekey",
@@ -670,7 +676,8 @@ async fn a_forged_parent_and_child_are_not_followed() {
     for a in [&w.alice, &w.bob, &w.carol] {
         kem(&w, a, 1);
     }
-    let b =
+    let b = confirmed(
+        &w.pq,
         w.pq.create(CreateSession {
             me: me_of(&w.alice),
             chain: CHAIN.into(),
@@ -681,8 +688,10 @@ async fn a_forged_parent_and_child_are_not_followed() {
             info: info_of(),
             payer: payer_of(&w),
         })
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     let sid = b.session_id.clone();
     serve_written(
         &w.net,

@@ -342,6 +342,25 @@ async fn post_ua_metatx(State(s): State<AppState>, Json(r): Json<UaReq>) -> Repl
     }
 }
 
+/// NODE-GW-09: the six signed `PqChat` topic records door A takes besides a token's entries (CLI-PQC-18 F3: a topic write is
+/// relayed by default, fee 0 allowed). Every other `PqChat` write stays a job of a namespace with the grant.
+pub const PQCHAT_TOPIC_ENTRIES: [&str; 6] = [
+    "createTopic",
+    "updateTopic",
+    "setTopicWriter",
+    "postEntry",
+    "editEntry",
+    "voteEntry",
+];
+
+fn pqchat_topic(op: &Value) -> bool {
+    op.get("contract").and_then(Value::as_str) == Some("pqchat")
+        && op
+            .get("entry")
+            .and_then(Value::as_str)
+            .is_some_and(|e| PQCHAT_TOPIC_ENTRIES.contains(&e))
+}
+
 async fn post_op(State(s): State<AppState>, Json(r): Json<OpReq>) -> Reply {
     let c = match open_chain(&s, r.chain) {
         Ok(c) => c,
@@ -351,9 +370,14 @@ async fn post_op(State(s): State<AppState>, Json(r): Json<OpReq>) -> Reply {
         Ok(x) => x,
         Err(e) => return bad(format!("{e:#}")),
     };
-    // door A: a registered token (NODE-GW-01, NODE-GW-03), its merged entries (`auth` a `UASig`, R44) and the address ones left.
+    // door A: a registered token (NODE-GW-01, NODE-GW-03), its merged entries (`auth` a `UASig`, R44) and the address ones left;
+    // and a `PqChat` topic record (NODE-GW-09, CLI-PQC-18 F3), its instance judged by the guard (a class-3 factory listing).
     // A deploy, a registry write, a DEX settlement, a wallet, a relay fee or a router op goes as a job of a namespace with the grant
-    if let Err(e) = chain_of(&s, r.chain, w.to) {
+    if !pqchat_topic(&r.op) {
+        if let Err(e) = chain_of(&s, r.chain, w.to) {
+            return e;
+        }
+    } else if let Err(e) = open_chain(&s, r.chain) {
         return e;
     }
     // the bound of `/v1/metatx` on an address entry's `signature`
@@ -1447,6 +1471,74 @@ mod tests {
                 rx.try_recv().is_err() && log.lock().unwrap().is_empty(),
                 "{contract}: no chain read"
             );
+        }
+    }
+
+    /// NODE-GW-09 (CLI-PQC-18 F3): door A takes the six signed `PqChat` topic records on an instance the chain's factory lists
+    /// as class 3, fee 0, through the guard and the simulation, and queues them; every other `PqChat` write stays a namespace's
+    /// job ("token not served", nothing read), and a topic record on an address the factory does not list is the guard's
+    /// `CALL_TARGET_REFUSED`, nothing queued.
+    #[tokio::test]
+    async fn door_a_takes_a_pqchat_topic_write() {
+        let (uid, factory, chat, other) = (
+            B256::repeat_byte(0x31),
+            Address::repeat_byte(0xfa),
+            Address::repeat_byte(0xc3),
+            Address::repeat_byte(0xb0),
+        );
+        let (cfg, _) = crate::guard::tests::factory_rpc(uid, factory, vec![(chat, 3, 1)]).await;
+        let door = || {
+            let (tx, rx) = mpsc::channel(4);
+            let gw = GwChain {
+                chain: Arc::new(
+                    Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random())
+                        .unwrap(),
+                ),
+                tx,
+                tokens: Default::default(),
+                dex: None,
+                breaker: None,
+                fee_recipient: None,
+                guard: Arc::new(crate::guard::Guard::new(&cfg, Default::default()).unwrap()),
+            };
+            (
+                router(AppState {
+                    chains: Arc::new([(cfg.evm_chain_number, gw)].into_iter().collect()),
+                    ..Default::default()
+                }),
+                rx,
+            )
+        };
+        let op = |entry: &str, to: Address| {
+            let mut o = crate::typed::testkit::pqchat_op(entry, to);
+            o["validUntil"] = json!((now() + 300).to_string());
+            o
+        };
+        for entry in PQCHAT_TOPIC_ENTRIES {
+            let (app, mut rx) = door();
+            let (st, body) = post_op_body(app, cfg.evm_chain_number, &op(entry, chat)).await;
+            assert_eq!(st, StatusCode::ACCEPTED, "{entry}: {body}");
+            let w = rx.try_recv().unwrap();
+            assert_eq!(w.to, chat, "{entry}: queued for the instance");
+        }
+        for (what, o, why) in [
+            (
+                "a session write",
+                op("createSession", chat),
+                "token not served",
+            ),
+            ("a message", op("postMessage", chat), "token not served"),
+            (
+                "an unlisted instance",
+                op("postEntry", other),
+                "CALL_TARGET_REFUSED",
+            ),
+        ] {
+            let (app, mut rx) = door();
+            let (st, body) = post_op_body(app, cfg.evm_chain_number, &o).await;
+            assert_eq!(st, StatusCode::BAD_REQUEST, "{what}: {body}");
+            assert!(body.contains(why), "{what}: {body}");
+            assert!(rx.try_recv().is_err(), "{what}: nothing queued");
         }
     }
 

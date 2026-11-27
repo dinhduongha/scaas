@@ -12,6 +12,7 @@
     clippy::indexing_slicing
 )]
 mod common;
+use common::{called, confirmed};
 
 use common::chain::*;
 use pqchat_core::content::Content;
@@ -115,17 +116,18 @@ async fn chain_tree_session() {
     };
     // alice's device keeps its store at hand: the path-less `try` counter (C47) is read below
     let alice_store = Arc::new(pqchat_core::MemoryStore::new());
-    let pq = PqChat::with_net(
-        app.clone(),
-        Arc::new(pqchat_core::net::SdkNet {
+    let counted = Arc::new(common::net::Counting {
+        inner: Arc::new(pqchat_core::net::SdkNet {
             sdk: l.sdk.clone(),
             app: app.clone(),
         }),
-        alice_store.clone(),
-        l.conf(),
-    );
-    // created small: alice and bob, the record and both wraps in one transaction
-    let created = pq
+        signs: Default::default(),
+    });
+    let signs = || counted.signs.load(std::sync::atomic::Ordering::SeqCst);
+    let pq = PqChat::with_net(app.clone(), counted.clone(), alice_store.clone(), l.conf());
+    // created small: alice and bob, the record and both wraps in one transaction; CLI-SDK-36: built and quoted for the
+    // review with no signature, signed on the confirm
+    let p = pq
         .create_tree(CreateTree {
             me: alice.clone(),
             chain: CHAIN.into(),
@@ -139,6 +141,14 @@ async fn chain_tree_session() {
         })
         .await
         .unwrap();
+    assert!(p.quote().is_some() && p.review().iter().any(|f| f.name == "keyRefresh"));
+    assert_eq!(
+        signs(),
+        0,
+        "a creation built for the review: nothing signed"
+    );
+    let created = pq.confirm(p).await.unwrap().out;
+    assert_eq!(signs(), 1, "the creation's confirm");
     // codex-r3-5: before it lands, a fresh store cannot finish the creation; this store prepares the same call again
     let s0 = sref(&l, &created.session_id);
     match device().tree_resume_create(&s0, &l.payer).await {
@@ -257,19 +267,23 @@ async fn chain_tree_session() {
         before.fallback, None,
         "control: path-less before the path commit"
     );
-    let staged = quoting
-        .tree_commit(
-            &s,
-            &a0,
-            TreeCommit {
-                adds: vec![],
-                refresh: true,
-                ..req1.clone()
-            },
-            leaf_a,
-        )
-        .await
-        .unwrap();
+    let staged = confirmed(
+        &quoting,
+        quoting
+            .tree_commit(
+                &s,
+                &a0,
+                TreeCommit {
+                    adds: vec![],
+                    refresh: true,
+                    ..req1.clone()
+                },
+                leaf_a,
+            )
+            .await,
+    )
+    .await
+    .unwrap();
     assert_eq!(staged.signed.record["pathless"], json!(false));
     let after = quoting
         .tree_commit_plan(&s, &a0, &req1, leaf_a)
@@ -280,13 +294,33 @@ async fn chain_tree_session() {
         Some("a key refresh is in progress"),
         "D-7: the staged marker of a one-transaction path commit"
     );
+    let before = signs();
+    // C47 across reviews: a twin built on the same head and `try` before the first's confirm is refused at its own confirm
+    let twin = pq.tree_commit(&s, &a0, req1.clone(), leaf_a).await.unwrap();
+    let p = pq.tree_commit(&s, &a0, req1, leaf_a).await.unwrap();
+    assert_eq!(
+        signs(),
+        before,
+        "a commit built for the review: nothing signed"
+    );
+    assert!(
+        p.quote().is_none() && !p.facts().plan.txs.is_empty(),
+        "its cost is its plan"
+    );
     let TreeBuilt {
         signed: c1,
         plan: plan1,
         head_confirmed,
         adds_left,
         ..
-    } = pq.tree_commit(&s, &a0, req1, leaf_a).await.unwrap();
+    } = pq.confirm(p).await.unwrap().out;
+    assert_eq!(signs(), before + 1, "the commit's confirm");
+    assert_eq!(
+        pq.confirm(twin).await.err().map(|e| e.code()),
+        Some("TreeStale"),
+        "its try was taken: nothing signed"
+    );
+    assert_eq!(signs(), before + 1);
     // R2-C-5 of the TreeKEM T4-T9 re-check: one endpoint, no strict majority: an Add built with its head not confirmed
     assert!(adds_left.is_empty(), "two Adds: one commit");
     // the path-less delta §6.5 (C46): an Adds-only change on the head the device holds goes path-less by default, relayed as
@@ -383,8 +417,9 @@ async fn chain_tree_session() {
         signed: c2,
         plan: plan2,
         ..
-    } = pb
-        .tree_commit(
+    } = confirmed(
+        &pb,
+        pb.tree_commit(
             &s,
             &b1,
             TreeCommit {
@@ -401,8 +436,10 @@ async fn chain_tree_session() {
             },
             leaf_b,
         )
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     land_commit(&l, &pb, &s, &c2, &plan2).await;
     let a2 = pq.tree_state(&s, &alice, 0, None).await.unwrap();
     assert_eq!(a2.head, 2);
@@ -411,9 +448,9 @@ async fn chain_tree_session() {
     let head_id = a2.replay.epochs.last().unwrap().epoch_id.clone();
     let pd = device();
     let d2 = pd.tree_state(&s, &dave, 0, None).await.unwrap();
-    let call = pd
-        .tree_leave(&s, &dave, &head_id, 7, &l.payer)
+    let call = called(&pd, pd.tree_leave(&s, &dave, &head_id, 7, &l.payer).await)
         .await
+        .map(|x| x.1)
         .unwrap();
     land(&l, call).await;
     let (leaf_d, key_d) = leaf_of(&d2, &dave);
@@ -421,8 +458,9 @@ async fn chain_tree_session() {
         signed: c3,
         plan: plan3,
         ..
-    } = pq
-        .tree_commit(
+    } = confirmed(
+        &pq,
+        pq.tree_commit(
             &s,
             &a2,
             TreeCommit {
@@ -441,8 +479,10 @@ async fn chain_tree_session() {
             },
             leaf_of(&a2, &alice).0,
         )
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     land_commit(&l, &pq, &s, &c3, &plan3).await;
     let a3 = pq.tree_state(&s, &alice, 0, None).await.unwrap();
     assert_eq!(a3.head, 3);
@@ -514,8 +554,9 @@ async fn small_session(
     nonce: u64,
     bound: Option<u32>,
 ) -> (SessionRef, TreeState) {
-    let created = pq
-        .create_tree(CreateTree {
+    let created = confirmed(
+        pq,
+        pq.create_tree(CreateTree {
             me: alice.clone(),
             chain: CHAIN.into(),
             home: l.home.clone(),
@@ -526,8 +567,10 @@ async fn small_session(
             payer: l.payer.clone(),
             path_refresh_bound: bound,
         })
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     land(l, created.call.clone()).await;
     let s = sref(l, &created.session_id);
     assert!(
@@ -588,7 +631,9 @@ async fn add_all(
         plan,
         adds_left,
         ..
-    } = pq.tree_commit(s, st, c, leaf).await.unwrap();
+    } = confirmed(pq, pq.tree_commit(s, st, c, leaf).await)
+        .await
+        .unwrap();
     println!(
         "[tree] built {} Adds (refresh {refresh}): pathless {}",
         who.len(),

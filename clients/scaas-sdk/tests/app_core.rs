@@ -1533,3 +1533,120 @@ async fn the_app_root_never_leaves_by_a_kem_wrap() {
         "a drawn key wraps to a caller's KEM key"
     );
 }
+
+/// CLI-PQC-18 F3 (NODE-GW-09): `relay_app_call` posts the signed record's call to the profile's gateways as the job API's
+/// `{chain, op: {entry, contract, token, args, validUntil}}`, an `int8` as a JSON number, nothing simulated; `true` when a
+/// gateway queued it, `false` when every gateway refused; a kind no app factory class names and an entry or arguments that do
+/// not parse are `Argument`, nothing posted; a SCaaS contract of the profile is `AppDomainRefused`.
+#[tokio::test(flavor = "multi_thread")]
+async fn relay_app_call_posts_the_job_to_the_gateways() {
+    let chain = fake();
+    let url = serve(chain.clone()).await;
+    let mut p = profile();
+    p.chain_uid = chain.lock().unwrap().genesis.clone();
+    p.rpc[0].url = url.clone();
+    p.gateways = vec![EndpointConfig {
+        url,
+        class: scaas_rpc::Class::Named,
+        label: None,
+        auth: None,
+    }];
+    let s = Sdk::open(SdkConfig {
+        profiles: vec![p],
+        store: MemoryStore::new(),
+        authenticator: None,
+        rp_id: None,
+        runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: Limits::default(),
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    let a = AppCore::new(s.clone(), desc(Some(APP_ID), &["scaas/call/v1/"])).unwrap();
+    let entry = json!({"type": "function", "name": "voteEntry", "stateMutability": "nonpayable", "outputs": [], "inputs": [
+        {"name": "v", "type": "tuple", "components": [{"name": "entryId", "type": "bytes32"},
+            {"name": "value", "type": "int8"}, {"name": "seq", "type": "uint64"}]},
+        {"name": "sig", "type": "tuple", "components": [{"name": "keyData", "type": "bytes"},
+            {"name": "signature", "type": "bytes"}, {"name": "members", "type": "tuple[]", "components": [
+                {"name": "index", "type": "uint16"}, {"name": "sig", "type": "bytes"}]}]}]})
+    .to_string();
+    let id = format!("0x{}", "11".repeat(32));
+    let args = json!({"v": {"entryId": id, "value": "-1", "seq": "3"},
+        "sig": {"keyData": "0x01", "signature": "0xabcd", "members": []}})
+    .to_string();
+    let relay = |kind: &str, contract: &str, entry: &str, args: &str| {
+        let (a, k, c, e, x) = (
+            a.clone(),
+            kind.to_string(),
+            contract.to_string(),
+            entry.to_string(),
+            args.to_string(),
+        );
+        async move { a.relay_app_call("local".into(), k, c, e, x).await }
+    };
+    assert!(relay("pqchat", APP_CONTRACT, &entry, &args).await.unwrap());
+    let body: serde_json::Value = {
+        let c = chain.lock().unwrap();
+        assert_eq!(c.gw_paths.last().map(String::as_str), Some("/v1/op"));
+        serde_json::from_str(c.bodies.last().unwrap()).unwrap()
+    };
+    assert_eq!(body["chain"], json!(CHAIN_ID));
+    let op = &body["op"];
+    assert_eq!(
+        (&op["entry"], &op["contract"], &op["token"]),
+        (&json!("voteEntry"), &json!("pqchat"), &json!(APP_CONTRACT))
+    );
+    assert_eq!(
+        op["args"]["v"]["value"],
+        json!(-1),
+        "an int8 as a JSON number"
+    );
+    assert_eq!(
+        op["args"]["v"]["seq"],
+        json!("3"),
+        "a uint64 as its decimal string"
+    );
+    assert_eq!(op["args"]["sig"]["signature"], json!("0xabcd"));
+    let until: u64 = op["validUntil"].as_str().unwrap().parse().unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    assert!(until > now);
+    assert!(chain.lock().unwrap().sent.is_empty(), "no transaction");
+    let posted = chain.lock().unwrap().bodies.len();
+    for (kind, contract, e, x, want) in [
+        (
+            "token",
+            APP_CONTRACT,
+            entry.as_str(),
+            args.as_str(),
+            "Argument",
+        ),
+        ("pqchat", APP_CONTRACT, "{}", args.as_str(), "Argument"),
+        (
+            "pqchat",
+            APP_CONTRACT,
+            entry.as_str(),
+            "{\"v\": 1}",
+            "Argument",
+        ),
+        (
+            "pqchat",
+            TOKEN,
+            entry.as_str(),
+            args.as_str(),
+            "AppDomainRefused",
+        ),
+    ] {
+        assert_eq!(
+            code(relay(kind, contract, e, x).await),
+            want,
+            "{kind} {contract}"
+        );
+    }
+    assert_eq!(chain.lock().unwrap().bodies.len(), posted, "nothing posted");
+    chain.lock().unwrap().gw = fake_chain::Gw::Refuse;
+    assert!(!relay("pqchat", APP_CONTRACT, &entry, &args).await.unwrap());
+}

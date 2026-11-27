@@ -9,13 +9,13 @@
     clippy::indexing_slicing
 )]
 use async_trait::async_trait;
-use pqchat_core::net::Net;
+use pqchat_core::net::{Net, Signature, Unsigned};
 use pqchat_core::PqChatError;
-use scaas_sdk::app_core::AppCall;
+use scaas_sdk::app_core::{AppCall, AppQuote};
 use scaas_sdk::op::KeyRef;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 
 #[derive(Default)]
@@ -28,6 +28,12 @@ pub struct FakeNet {
     pub accept: AtomicBool,
     /// a prepare carrying more wraps than this is refused as the SDK refuses a quote that does not fit (`GasAboveTxCap`)
     pub wrap_cap: Mutex<Option<usize>>,
+    /// CLI-SDK-36: every signing call the crate made through the port
+    pub signs: AtomicU64,
+    /// the quotes asked before a signature: (contract, item, arguments)
+    pub quotes: Mutex<Vec<(String, String, Value)>>,
+    /// the writes relayed by the gateways: (contract, item, arguments)
+    pub relayed: Mutex<Vec<(String, String, Value)>>,
 }
 
 /// A prepared write as the fake answers it: nothing in it is sent.
@@ -165,6 +171,41 @@ impl Net for FakeNet {
         }
         Ok(call(chain, contract, payer))
     }
+    async fn quote(
+        &self,
+        _chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+        _payer: &KeyRef,
+        _signer: &KeyRef,
+    ) -> Result<AppQuote, PqChatError> {
+        self.quotes
+            .lock()
+            .unwrap()
+            .push((contract.to_ascii_lowercase(), item.into(), args));
+        Ok(AppQuote {
+            review: vec![],
+            quote: None,
+        })
+    }
+    async fn sign(&self, u: Unsigned) -> Result<Signature, PqChatError> {
+        self.signs.fetch_add(1, Ordering::SeqCst);
+        pqchat_core::net::sign_now(u).await
+    }
+    async fn relay(
+        &self,
+        _chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+    ) -> Result<bool, PqChatError> {
+        self.relayed
+            .lock()
+            .unwrap()
+            .push((contract.to_ascii_lowercase(), item.into(), args));
+        Ok(self.accept.load(Ordering::SeqCst))
+    }
     async fn submit(&self, _call: AppCall) -> Result<String, PqChatError> {
         let mut w = self.writes.lock().unwrap();
         w.push((String::new(), "submit".into(), Value::Null));
@@ -173,5 +214,81 @@ impl Net for FakeNet {
             return Ok(format!("op-{}", w.len()));
         }
         Err(PqChatError::Internal)
+    }
+}
+
+/// A port that counts the crate's signing calls over another port (CLI-SDK-36's test on a real chain).
+pub struct Counting {
+    pub inner: std::sync::Arc<dyn Net>,
+    pub signs: AtomicU64,
+}
+
+#[async_trait]
+impl Net for Counting {
+    async fn read(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+    ) -> Result<Value, PqChatError> {
+        self.inner.read(chain, contract, item, args).await
+    }
+    async fn read_latest(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+    ) -> Result<Value, PqChatError> {
+        self.inner.read_latest(chain, contract, item, args).await
+    }
+    async fn read_majority(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+    ) -> Result<(Value, usize), PqChatError> {
+        self.inner.read_majority(chain, contract, item, args).await
+    }
+    async fn prepare(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+        payer: &KeyRef,
+    ) -> Result<AppCall, PqChatError> {
+        self.inner.prepare(chain, contract, item, args, payer).await
+    }
+    async fn submit(&self, call: AppCall) -> Result<String, PqChatError> {
+        self.inner.submit(call).await
+    }
+    async fn quote(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+        payer: &KeyRef,
+        signer: &KeyRef,
+    ) -> Result<AppQuote, PqChatError> {
+        self.inner
+            .quote(chain, contract, item, args, payer, signer)
+            .await
+    }
+    async fn sign(&self, u: Unsigned) -> Result<Signature, PqChatError> {
+        self.signs.fetch_add(1, Ordering::SeqCst);
+        self.inner.sign(u).await
+    }
+    async fn relay(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+    ) -> Result<bool, PqChatError> {
+        self.inner.relay(chain, contract, item, args).await
     }
 }
