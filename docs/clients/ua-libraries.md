@@ -888,7 +888,9 @@ the affected list, items, edits, merge, batches sized by the chain's limits, rec
 the replica check, the migration plan; `tests/vectors.rs` reproduces `smartcontracts/vectors/pqvault/`, `tests/e2e.rs`
 runs the real client on a local `anvil`, a KEM key rotation and an `msig` admin with a native member in both modes included
 (owner 2026-11-22, [CLI-PQV-15](../decisions.md#CLI-PQV-15)); the generated passphrase is 6 BIP-39 words drawn in `ua-rs`,
-the share box is found among the unlocked vaults. Not built yet: the members' kind flags, the migration's run; reads spread
+the share box is found among the unlocked vaults; every write built for the review and signed only on the confirm
+([CLI-SDK-36](../decisions.md#CLI-SDK-36)), items typed by one secret table ([CLI-PQV-16](../decisions.md#CLI-PQV-16) H1–H3).
+Not built yet: the members' kind flags, the migration's run; reads spread
 over the node list (a `scaas-rpc` / SDK follow-up) and the biometric `P_k` (CLI-PQV-07, scaas-app's) are not this crate's. The SDK's `vault` stays the seed vault; `pqvault-core`'s
 calls are the spec's [§8](../superpowers/specs/2026-11-17-pqvault.md#8-the-app-facing-api-of-pqvault-core).
 
@@ -991,15 +993,17 @@ home's when its signature equals the home's with the `msig` version tags strippe
 the replica registry's current version, every other byte the home's). Controller calls 2026-11-26, BUILT in `pqvault-core`
 `vault.rs`, `tests/exits.rs`, UNAUDITED.
 
-**The PqVault UI** (owner 2026-11-27; SPECIFIED, nothing built; [CLI-PQV-16](../decisions.md#CLI-PQV-16)): the redacting item
-layer lives in `pqvault-core` (fields typed plain or `SecretBytes`; BUILT-gap: items come out as plain `serde_json::Value` today),
-with the `card` and `identity` fields and the secret table per type pinned there and in the spec; a note's body plain by default
-with a per-item "hide body"; a TOTP code reveal-gated, copyable with the 30-s clear except in the TUI; breach checks only on the
+**The PqVault UI** (owner 2026-11-27; [CLI-PQV-16](../decisions.md#CLI-PQV-16)): the redacting item
+layer lives in `pqvault-core` (fields typed `Plain`, `Secret(SecretBytes)`, `Custom` or `Opaque`, the canonical JSON in
+zeroizing buffers; BUILT, UNAUDITED: `item.rs`), with the `card` and `identity` fields and the secret table per type pinned
+there and in [spec §6.8](../superpowers/specs/2026-11-17-pqvault.md#68-the-item-plaintext) (BUILT); a note's body plain by default
+with a per-item "hide body" (`hideBody`, BUILT); custom fields declaring themselves secret (BUILT); a secret's earlier values in
+`history` secret too (BUILT). SPECIFIED, not built: the rest of this paragraph; a TOTP code reveal-gated, copyable with the 30-s clear except in the TUI; breach checks only on the
 user's action over the user's own latest versions, padded k-anonymity; "decide later" writes nothing; autofill after v1 (Android
 in-process first, then the extension on the user's action, iOS later); no passkeys in vaults; offline reads from the profile's
 sealed cache, no offline writes; the web build and the extension after the core runs on wasm32 and after the native front-ends.
-Every record is signed only after the user's confirm ([CLI-SDK-36](../decisions.md#CLI-SDK-36); BUILT-gap: the core signs when it
-builds a record).
+Every record is signed only after the user's confirm ([CLI-SDK-36](../decisions.md#CLI-SDK-36); BUILT in `pqvault-core`,
+UNAUDITED: every write a `Prepared` with the SDK's quote before the signature, `PqVault::confirm` its one signing call).
 
 **Not here.** Per-kind derivation and clientkeys' API ([signers-clientkeys](signers-clientkeys.md)), group vectors, the registry contract, the UA ledger.
 Not built yet: the FRB layer as a Flutter plugin and its Android and iOS builds (no web build: `SecretBytes` needs `dart:ffi`), the wasm-bindgen browser binding of `ua-rs` (the library compiles for wasm32), and Qt packaging for Windows and macOS.

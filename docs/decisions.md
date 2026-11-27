@@ -11951,8 +11951,12 @@ Change (controller calls 2026-11-22, the coordinator; owner may override; status
   and Dioxus front-ends.
 
 Every write signs only after the user's confirm ([CLI-SDK-36](#CLI-SDK-36)).
-**Status.** SPECIFIED, nothing built. BUILT-gap for H1: `pqvault-core` returns an item version's value as a plain
-`serde_json::Value`, every field's text in heap buffers that are not zeroized. UNAUDITED.
+**Status.** H1, H2, H3 BUILT in `pqvault-core` (`item.rs`: `Item`, `Field::{Plain, Secret, Custom, Opaque}`, the table
+`TABLE`, the canonical JSON in zeroizing buffers that never reallocate, a field of the wrong kind refused `Shape`, the merge's
+losing value typed as its field; [spec §6.8](superpowers/specs/2026-11-17-pqvault.md#68-the-item-plaintext) pins the `card` and
+`identity` fields, the secret table, `hideBody` and the custom fields `fields`); the stored item bytes unchanged (the
+vectors read and written back byte for byte). H4 to H10 SPECIFIED, not built (the TOTP code, `ItemSummary` and `reveal` /
+`copy` as calls among them). UNAUDITED.
 **Why.** One secret table and one zeroizing path in the core, rather than five front-ends each re-deriving which fields are
 secret in memory they cannot wipe; a breach check over another member's version would tell a server whether it opened.
 **Cost if wrong.** A card number drawn in the clear by one front-end; a breach request that acts as a decryption oracle.
@@ -13172,8 +13176,11 @@ sizes and the SDK's gas rows) for the review, and calls the SDK's signing entry 
 that review; a review the user leaves produces no signature call. The simulation follows the signature, as today. A PqChat
 message keeps [CLI-PQC-04](clients/pqchat-core.md#CLI-PQC-04)'s form: the user's send is its confirm. A test per core: a review
 left makes zero signing calls, its confirmed twin one.
-**Status.** SPECIFIED. BUILT-gap: today both cores sign when they build a record, before the review (`pqchat-core` for its
-session, epoch and topic records; `pqvault-core` for its vault records), found in `scaas-tui`'s plan work.
+**Status.** BUILT for `pqvault-core`, UNAUDITED: every write returns a `Prepared` (the unsigned record, its wraps, the SDK's
+`AppCore::quote_app_call` quote from the gas rows), `PqVault::confirm` makes its one signing call and then the signed record's
+`prepare_app_call`; `tests/devices.rs` `nothing_is_signed_before_the_confirm` counts zero signing calls for each write's
+dropped review and one for its confirmed twin. BUILT-gap still in `pqchat-core` (its session, epoch and topic records signed
+when built; it changes after the path-less branch lands), found in `scaas-tui`'s plan work.
 **Why.** A signature made before the confirm exists whether or not the user agrees; a relayer or a bug may then submit it.
 **Cost if wrong.** A signed record the user declined, valid on chain.
 **Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, F4: sign after the user's confirm, everywhere, PqVault included; [public topics note](research/2026-11-27-public-topics-ui.md) §8 G6; [PqVault UI note](research/2026-11-27-pqvault-ui.md) §8 row 23, §9 G16.
