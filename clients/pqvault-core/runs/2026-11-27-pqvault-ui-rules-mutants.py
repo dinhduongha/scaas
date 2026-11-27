@@ -110,5 +110,117 @@ MUTANTS = [
     ),
 ]
 
+JS = "cd clients/clientkeys && node --test --test-name-pattern 'integer-like' test/pqchat.test.js"
+
+# the review's fixes (scratchpad review 2026-11-27, STATUS.md): one mutant per new check
+MUTANTS2 = [
+    (
+        "a kept part not checked canonical on read",
+        [(I, "    opaque_ok(b, d)?;\n", "")],
+        LIB + "item::tests::a_kept_part_is_canonical",
+    ),
+    (
+        "a kept part's depth from the document's top",
+        [(I, "content::write_value_at(&v, d, &mut again)", "content::write_value_at(&v, 0, &mut again)")],
+        LIB + "item::tests::a_kept_part_is_canonical",
+    ),
+    (
+        "a kept part refused under a table class",
+        [(I, "                | (Field::Opaque(_), _)", "                | (Field::Opaque(_), Class::Opaque)")],
+        LIB + "item::tests::what_is_kept_is_written_back",
+    ),
+    (
+        "a null refused under a table class",
+        [(I, "                | (Field::Plain(Value::Null), _)\n", "")],
+        LIB + "item::tests::what_is_kept_is_written_back",
+    ),
+    (
+        "an empty history read as a history",
+        [(I, "Ok(hs) if !hs.is_empty() && hs.iter()", "Ok(hs) if hs.iter()")],
+        LIB + "item::tests::what_is_kept_is_written_back",
+    ),
+    (
+        "the history not typed on write",
+        [(I, "if h.field.is_empty() || !h.value.of(self.class(&h.field)) {", "if h.field.is_empty() {")],
+        LIB + "item::tests::history_is_checked",
+    ),
+    (
+        "values compared by kind, not by text",
+        [(I, "(Ok(()), Ok(())) => a.bytes() == b.bytes(),",
+          "(Ok(()), Ok(())) => {\n                a.bytes() == b.bytes() && std::mem::discriminant(self) == std::mem::discriminant(o)\n            }")],
+        LIB + "item::tests::merge_retypes_by_the_merged_table",
+    ),
+    (
+        "merged fields not retyped",
+        [(I, "v.retyped(item.class(k))", "v.clone()")],
+        LIB + "item::tests::merge_retypes_by_the_merged_table",
+    ),
+    (
+        "merged history not retyped",
+        [(I, "value: h.value.retyped(item.class(&h.field)),", "value: h.value.clone(),")],
+        LIB + "item::tests::merge_retypes_by_the_merged_table",
+    ),
+    (
+        "a tombstone against an edit merged field by field",
+        [(I, 'if (ours.ty == "deleted") != (theirs.ty == "deleted") && base.ty != "deleted" {',
+          'if false && (ours.ty == "deleted") != (theirs.ty == "deleted") && base.ty != "deleted" {')],
+        LIB + "item::tests::merge_retypes_by_the_merged_table",
+    ),
+    (
+        "a type in history read as kept",
+        [(I, 'if name == "type" || COMMON.contains(&name)', "if COMMON.contains(&name)")],
+        LIB + "item::tests::merge_retypes_by_the_merged_table",
+    ),
+    (
+        "no bound on the secrets per item",
+        [(I, "    if *n > SECRETS_MAX {", "    if false {")],
+        LIB + "item::tests::secrets_per_item_are_bounded",
+    ),
+    (
+        "Debug prints the fields",
+        [(I, '"Item({} fields, {} history)",\n            self.fields.len(),',
+          '"Item({:?} fields, {} history)",\n            self.fields,')],
+        LIB + "item::tests::canonical_round_trip_and_silent_debug",
+    ),
+    (
+        "the quote made over a signature",
+        [(V, "        let (entry, args) = call_args(&r, &wraps, &UaSig::default())?;",
+          "        let (entry, args) = call_args(&r, &wraps, &UaSig { signature: vec![1], ..UaSig::default() })?;")],
+        DEV + "nothing_is_signed_before_the_confirm",
+    ),
+    (
+        "the confirm signs other typed data than the review's",
+        [(V, ".sign(&p.at.chain, &p.signer, p.path, p.typed)", ".sign(&p.at.chain, &p.signer, p.path, p.typed + \" \")")],
+        DEV + "nothing_is_signed_before_the_confirm",
+    ),
+    (
+        "a failed call after the signature loses the signed record",
+        [(V, "        Ok(Confirmed {", "        if call.is_err() {\n            return Err(Error::Shape);\n        }\n        Ok(Confirmed {")],
+        DEV + "nothing_is_signed_before_the_confirm",
+    ),
+    (
+        "the payer checked only with rows",
+        [(AC, "        crate::op::quote::payer_address(&self.sdk, &payer)?;\n", "")],
+        SDK + "quote_app_call_reads_the_gas_rows_before_the_signature",
+    ),
+    (
+        "two arrays of a row's count taken as one",
+        [(AC, "        (Some(a), None) => Some(a.len() as u64),", "        (Some(a), _) => Some(a.len() as u64),")],
+        "cd clients/scaas-sdk && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features app-core "
+        "--lib app_core::tests::an_app_rows_count_is_an_arguments_array",
+    ),
+    (
+        "clientkeys' canonical JSON rebuilt as an object",
+        [("clients/clientkeys/src/pqchat.js", "      return `{${keys.map((k) => `${JSON.stringify(k)}:${w(x[k])}`).join(\",\")}}`;",
+          "      return JSON.stringify(Object.fromEntries(keys.map((k) => [k, JSON.parse(w(x[k]))])));")],
+        JS,
+        "integer-like",
+    ),
+]
+
 if __name__ == "__main__":
-    L.main("ui-rules", MUTANTS)
+    if len(sys.argv) > 1 and sys.argv[1] == "--r2":
+        del sys.argv[1]
+        L.main("ui-rules-r2", MUTANTS2)
+    else:
+        L.main("ui-rules", MUTANTS)
