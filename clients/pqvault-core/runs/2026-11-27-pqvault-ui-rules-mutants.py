@@ -218,9 +218,72 @@ MUTANTS2 = [
     ),
 ]
 
+# the re-check's fixes (scratchpad re-check 2026-11-27, R-1 to R-8) and the owner's D-6 ruling (CLI-PQV-18)
+SDKLIB = ("cd clients/scaas-sdk && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features app-core "
+          "--lib app_core::tests::an_app_rows_count_is_an_arguments_array")
+MUTANTS3 = [
+    ("the record's signature counted", [(AC, '.filter(|(k, _)| *k != "sig")', '.filter(|_| true)')], SDKLIB),
+    (
+        "the writer not held to the secrets bound",
+        [(I, "if self.secrets() > SECRETS_MAX {", "if false {")],
+        LIB + "item::tests::the_writer_holds_the_secrets_bound",
+    ),
+    (
+        "the merge not trimmed to the secrets bound",
+        [(I, "while item.secrets() > SECRETS_MAX && !item.history.is_empty() {", "while false {")],
+        LIB + "item::tests::the_writer_holds_the_secrets_bound",
+    ),
+    (
+        "a kept null bounded as a value",
+        [(I, "Field::Plain(Value::Null) => {}", "Field::Plain(Value::Null) if false => {}")],
+        LIB + "item::tests::kept_nulls_and_misplaced_kept_parts",
+    ),
+    (
+        "a kept part taken where no reader keeps one",
+        [(I, "kept_as_read(v, self.class(k))?;", "let _ = kept_as_read;")],
+        LIB + "item::tests::kept_nulls_and_misplaced_kept_parts",
+    ),
+    (
+        "a merge un-hides a body",
+        [(I, 'if ty == "note" && (ours.hide() || theirs.hide()) {', "if false {")],
+        LIB + "item::tests::merge_never_unhides_and_stays_writable",
+    ),
+    (
+        "a losing value too deep recorded",
+        [(I, ".filter(|h| check_value(&h.value, 3).is_ok())", ".filter(|_| true)")],
+        LIB + "item::tests::merge_never_unhides_and_stays_writable",
+    ),
+    (
+        "typed history beside a kept one",
+        [(I, "history.clear();", "let _ = &history;")],
+        LIB + "item::tests::merge_never_unhides_and_stays_writable",
+    ),
+    (
+        "a kept custom list's secrets counted",
+        [(I, "secret_of(x.value, &mut m)?", "secret_of(x.value, n)?")],
+        LIB + "item::tests::kept_custom_lists_count_no_secret_and_merge_debug_is_silent",
+    ),
+    (
+        "a merge's Debug names its fields",
+        [(I, 'Merge::Conflict(i, c) => write!(f, "Conflict({i:?}, {} fields)", c.len()),',
+          'Merge::Conflict(i, c) => write!(f, "Conflict({i:?}, {c:?})"),')],
+        LIB + "item::tests::kept_custom_lists_count_no_secret_and_merge_debug_is_silent",
+    ),
+    (
+        "a higher fresh cost sent on the first confirm",
+        [(V, "if f <= r", "if f >= r")],
+        DEV + "a_fresh_quote_within_the_review_needs_no_second_confirm",
+    ),
+    (
+        "another payer sent on the first confirm",
+        [(V, "&& fresh.payer == r.payer", "")],
+        DEV + "a_fresh_quote_within_the_review_needs_no_second_confirm",
+    ),
+]
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "--r2":
-        del sys.argv[1]
-        L.main("ui-rules-r2", MUTANTS2)
+    if len(sys.argv) > 1 and sys.argv[1] in ("--r2", "--r3"):
+        flag = sys.argv.pop(1)
+        L.main(*(("ui-rules-r2", MUTANTS2) if flag == "--r2" else ("ui-rules-r3", MUTANTS3)))
     else:
         L.main("ui-rules", MUTANTS)
