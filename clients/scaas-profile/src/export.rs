@@ -14,7 +14,7 @@
 //!   byte is parsed, and holds the payload in `Zeroizing` memory only: nothing is written. Every refusal is
 //!   `ProfileImportOpen` but parameters above this device's maximum (`ProfileKdfTooLarge`) and argon2's allocation failure
 //!   (`ProfileKdfOutOfMemory`); its local reason is kept for a log line ([`Profiles::last_import_refusal`]). The items are
-//!   checked here by name, order and size only: the SDK checks their bytes with its own parsers.
+//!   checked here by name, order, size and their JSON `rev`: the SDK checks their bytes with its own parsers.
 //! - **Import** seals a new profile (a new UUIDv7) under the new passphrase from its first byte in `p/.tmp-<random>/` under its
 //!   `build.lock`, with the settings the review's filter keeps, and commits as a create (the journal, one rename, the row; none
 //!   for a hidden profile, whose duplicate search runs first).
@@ -100,11 +100,11 @@ impl ImportReview {
     }
 
     /// Replaces the bytes of an item the file holds (the SDK's `sdk.state` with its operations marked `imported`); `Argument`
-    /// for an item it does not hold or above 16 MiB.
+    /// for an item it does not hold, above 16 MiB or without a JSON `rev`.
     pub fn set_item(&mut self, name: &str, bytes: Zeroizing<Vec<u8>>) -> Result<(), Error> {
         let at = self.items.iter_mut().find(|(n, _)| *n == name);
         match at {
-            Some((_, b)) if bytes.len() <= MAX_BYTES => {
+            Some((_, b)) if bytes.len() <= MAX_BYTES && rev_of(&bytes) != u64::MAX => {
                 *b = bytes;
                 Ok(())
             }
@@ -304,7 +304,8 @@ impl<'a> Reader<'a> {
 }
 
 /// The opened payload as a review: the label canonical (`label`), the items by name and order (`item`), no byte after the
-/// last (`payload`); the settings parse and their shown strings pass the name helper, each item at most 16 MiB.
+/// last (`payload`); the settings parse and their shown strings pass the name helper (`settings`), each item at most 16 MiB
+/// with a top-level JSON `rev` (`item`).
 fn parse_payload(pl: &[u8]) -> Result<ImportReview, Refusal> {
     let mut r = Reader { b: pl, o: 0 };
     let label = r.field(4)?;
@@ -336,7 +337,11 @@ fn parse_payload(pl: &[u8]) -> Result<ImportReview, Refusal> {
     ProfileSettings::parse(settings)
         .and_then(|s| s.check_shown())
         .map_err(|_| no("settings"))?;
-    if items.iter().any(|(_, b)| b.len() > MAX_BYTES) {
+    // an item the store cannot keep: above 16 MiB, or without a top-level JSON `rev` (review A-17)
+    if items
+        .iter()
+        .any(|(_, b)| b.len() > MAX_BYTES || rev_of(b) == u64::MAX)
+    {
         return Err(no("item"));
     }
     // spec §10.1: operations in flight are imported marked `imported`, followed only on the user's word (review E-3: here,
@@ -506,10 +511,6 @@ impl Profiles {
         name: Option<&[u8]>,
         kdf: Option<KdfParams>,
     ) -> Result<ProfileInfo, Error> {
-        // an item the store cannot keep (no JSON `rev`, review A-17) is refused before any KDF run
-        if review.items.iter().any(|(_, b)| rev_of(b) == u64::MAX) {
-            return Err(Error::ProfileImportOpen);
-        }
         let name = Zeroizing::new(match name {
             Some(n) => check_name(std::str::from_utf8(n).map_err(|_| Error::ProfileNameInvalid)?)?,
             None => review.name.to_string(),

@@ -234,6 +234,28 @@
       ],
       "tombstones": [],
       "json": "{\"format\":\"scaas.profile-manifest\",\"v\":1,\"part\":\"pqvault\",\"rev\":2,\"items\":[[\"Z\",1],[\"b\",1],[\"é\",1],[\"Ａ\",1],[\"😀\",1]],\"tombstones\":[]}"
+    },
+    {
+      "case": "item names needing JSON escapes",
+      "part": "pqvault",
+      "rev": 3,
+      "items": [
+        [
+          "note:\"quoted\"",
+          1
+        ],
+        [
+          "path:a\\b",
+          2
+        ]
+      ],
+      "tombstones": [
+        [
+          "tab:\t",
+          1
+        ]
+      ],
+      "json": "{\"format\":\"scaas.profile-manifest\",\"v\":1,\"part\":\"pqvault\",\"rev\":3,\"items\":[[\"note:\\\"quoted\\\"\",1],[\"path:a\\\\b\",2]],\"tombstones\":[[\"tab:\\t\",1]]}"
     }
   ],
   "manifest_refusals": [

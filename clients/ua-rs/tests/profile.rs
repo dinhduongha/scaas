@@ -475,6 +475,17 @@ fn header(k: &Value, prefix: &[u8]) -> Vec<u8> {
     )
     .into_bytes()
 }
+/// export.json's filler item: the JSON text `{"rev":<rev>,"f":"<hex>"}` of exactly `len` bytes, `<hex>` the first characters
+/// of the lower-case hex of `rnd(<filler>, …)`.
+fn filler_item(f: &Value) -> Vec<u8> {
+    let head = format!("{{\"rev\":{},\"f\":\"", f["rev"].as_u64().unwrap());
+    let k = f["len"].as_u64().unwrap() as usize - head.len() - 2;
+    let hex: String = rnd(s(&f["filler"]), k.div_ceil(2))
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    [head.as_bytes(), &hex.as_bytes()[..k], b"\"}"].concat()
+}
 fn payload(r: &Value) -> Vec<u8> {
     let (l, st) = (b(&r["label"]), unhex(&r["settings"]));
     let mut p = [&be32(l.len())[..], l, &be32(st.len()), &st].concat();
@@ -484,7 +495,7 @@ fn payload(r: &Value) -> Vec<u8> {
         let name = s(&it[0]);
         let bytes = match &it[1] {
             Value::String(_) => unhex(&it[1]),
-            f => rnd(s(&f["filler"]), f["len"].as_u64().unwrap() as usize),
+            f => filler_item(f),
         };
         p.extend_from_slice(&(name.len() as u16).to_be_bytes());
         p.extend_from_slice(name.as_bytes());

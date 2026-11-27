@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import * as p from "../src/profile.js";
 import { passphraseBytes } from "../src/pqvault.js";
-import { hex, fromHex, keccak_256, sha256, utf8ToBytes, concatBytes } from "../src/bytes.js";
+import { hex, fromHex, keccak_256, sha256, utf8ToBytes, concatBytes, bytesToHex } from "../src/bytes.js";
 
 const dir = new URL("../../../smartcontracts/vectors/profile/", import.meta.url);
 const FILES = ["ids.json", "envelope.json", "items.json", "export.json"];
@@ -259,6 +259,47 @@ test("items: manifests (tombstones, a re-created item above its tombstone) and t
   assert.equal(new TextDecoder().decode(b(m.plaintext)), ITEMS.manifests.find((r) => r.case === "sdk").json);
 });
 
+test("the reference's strictness (review D-8): coded refusals, the anchor's parts by bytes, ProfilePartFull", () => {
+  // a value that is not a safe non-negative integer: Argument, never a RangeError or an inexact rev
+  assert.equal(
+    code(() => p.itemAd("sdk", "keystore", 1.5)),
+    "Argument",
+  );
+  assert.equal(
+    code(() => p.itemJson(2 ** 53, new Uint8Array(1))),
+    "Argument",
+  );
+  assert.equal(p.itemJson(2 ** 53 - 1, new Uint8Array(1)), `{"rev":${2 ** 53 - 1},"sealed":"AA=="}`);
+  // the kdf object: exactly its six fields
+  const k = ENV.kdf_bounds.find((r) => r.case === "default set").kdf;
+  assert.equal(
+    code(() => p.checkKdf(k)),
+    null,
+  );
+  assert.equal(
+    code(() => p.checkKdf({ ...k, x: 1 })),
+    "ProfileFormat",
+  );
+  assert.equal(
+    code(() => p.checkKdf(null)),
+    "ProfileFormat",
+  );
+  // the anchor's parts in the order of their names' UTF-8 bytes, integer-like names too
+  const s = { rev: 1, sha256: "00".repeat(16) };
+  const a = p.anchorJson({ gen: 1, envelope: s, parts: { 9: s, 10: s, sdk: s } });
+  assert.ok(a.indexOf('"10"') < a.indexOf('"9"') && a.indexOf('"9"') < a.indexOf('"sdk"'), a);
+  // a manifest of 65,537 entries is ProfilePartFull; 65,536 is accepted
+  const many = (n) => Array.from({ length: n }, (_, i) => [`i${i}`, 1]);
+  assert.equal(
+    code(() => p.manifestJson("pqchat", 1, many(65536), [])),
+    null,
+  );
+  assert.equal(
+    code(() => p.manifestJson("pqchat", 1, many(65536), [["t", 1]])),
+    "ProfilePartFull",
+  );
+});
+
 test("items: anchors and every anchorCompare case", () => {
   for (const r of ITEMS.anchors) {
     assert.equal(p.digest16(utf8ToBytes(r.envelope_file)), r.anchor.envelope.sha256, r.case);
@@ -277,12 +318,18 @@ test("items: anchors and every anchorCompare case", () => {
 // ------------------------------------------------------------------ export.json
 
 const CH = p.CHUNK + 16;
-const rnd = (name, n) => {
-  const blocks = [];
-  for (let i = 0; 32 * i < n; i++) blocks.push(keccak_256(utf8ToBytes(`scaas/profile/vectors/${name}/${i}`)));
-  return concatBytes(...blocks).slice(0, n);
+const rnd = (name, n = 32) => {
+  const out = new Uint8Array(Math.ceil(n / 32) * 32);
+  for (let i = 0; 32 * i < n; i++) out.set(keccak_256(utf8ToBytes(`scaas/profile/vectors/${name}/${i}`)), 32 * i);
+  return out.slice(0, n);
 };
-const itemBytes = (v) => (typeof v === "string" ? b(v) : rnd(v.filler, v.len));
+// a filler item (export.json's comment): {"rev":<rev>,"f":"<hex>"} of exactly `len` bytes
+const fillerItem = ({ filler, len, rev }) => {
+  const head = `{"rev":${rev},"f":"`;
+  const k = len - head.length - 2;
+  return utf8ToBytes(head + bytesToHex(rnd(filler, Math.ceil(k / 2))).slice(0, k) + '"}');
+};
+const itemBytes = (v) => (typeof v === "string" ? b(v) : fillerItem(v));
 const built = new Map();
 function buildFile(r) {
   if (!built.has(r.case)) {
@@ -327,10 +374,14 @@ test("export: headers and K_x", () => {
   }
 });
 
-test("export: files (small whole, 1 MiB, 1 MiB + 1, 2 MiB by the filler) build and import", () => {
+test("export: files (small, no item, sdk.state only, JSON escapes whole; 1 MiB, 1 MiB + 1, 2 MiB by the filler) build and import", () => {
   assert.deepEqual(
-    EXP.files.map((r) => r.payload_len),
-    [EXP.files[0].payload_len, 1048576, 1048577, 2097152],
+    EXP.files.slice(1, 4).map((r) => r.payload_len),
+    [1048576, 1048577, 2097152],
+  );
+  assert.deepEqual(
+    EXP.files.map((r) => r.items.map(([n]) => n).join()),
+    ["keystore,sdk.state", "keystore", "keystore", "keystore", "", "sdk.state", "keystore"],
   );
   for (const r of EXP.files) {
     const { pl, file } = buildFile(r);
@@ -358,7 +409,11 @@ test("export: every import refusal is ProfileImportOpen with its reason", () => 
   for (const r of EXP.refusals) {
     let file;
     if (r.file) file = b(r.file);
-    else if (r.file_len) {
+    else if (r.build) {
+      file = buildFile({ ...r.build, case: r.case }).file;
+      assert.equal(file.length, r.file_len, r.case);
+      assert.equal(hex(sha256(file)), r.file_sha256, r.case);
+    } else if (r.file_len) {
       file = new Uint8Array(r.file_len);
       file.set(b(r.prefix_bytes));
     } else file = applyEdit(buildFile(base[r.base]).file, r.edit);
@@ -380,7 +435,10 @@ test("export: every import refusal is ProfileImportOpen with its reason", () => 
     "size",
     "truncated",
     "tag",
+    "label",
     "item",
+    "payload",
+    "settings",
   ])
     assert.ok(seen.has(x), x);
   // the length bound itself is accepted by the length check (and fails later, at the tag)

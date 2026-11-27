@@ -157,17 +157,25 @@ fn every_refusal_row() {
         if r["test_hooks"].as_bool().unwrap() != cfg!(feature = "test-hooks") {
             continue;
         }
-        let f = refusal_file(r, &base);
+        let case = r["case"].as_str().unwrap();
+        let f = match r.get("build") {
+            // a file built from its row's fields, its length and SHA-256 given
+            Some(b) => {
+                let f = file_of(&p, b);
+                assert_eq!(f.len() as u64, r["file_len"].as_u64().unwrap(), "{case}");
+                f
+            }
+            None => refusal_file(r, &base),
+        };
         let pass = r["passphrase"].as_str().unwrap().as_bytes();
         let got = code(p.import_preview(ImportSource::Bytes(&f), pass).map(drop));
-        let case = r["case"].as_str().unwrap();
         assert_eq!(got, r["code"].as_str().unwrap(), "{case}");
         assert_eq!(p.last_import_refusal(), r["reason"].as_str(), "{case}");
         n += 1;
     }
     assert!(n >= 1, "rows read");
     if cfg!(feature = "test-hooks") {
-        assert_eq!(n, 26, "every test-set row");
+        assert_eq!(n, 31, "every test-set row");
         let c = &v["size_control"];
         let f = refusal_file(c, &base);
         let pass = c["passphrase"].as_str().unwrap().as_bytes();
@@ -199,6 +207,19 @@ fn filler(name: &str, n: usize) -> Vec<u8> {
     out
 }
 
+/// The filler item (export.json's comment): the JSON text `{"rev":<rev>,"f":"<hex>"}` of exactly `len` bytes, `<hex>` the
+/// first characters of the lower-case hex of `rnd(<filler>, …)`.
+#[cfg(feature = "test-hooks")]
+fn filler_item(f: &Value) -> Vec<u8> {
+    let head = format!("{{\"rev\":{},\"f\":\"", f["rev"].as_u64().unwrap());
+    let k = f["len"].as_u64().unwrap() as usize - head.len() - 2;
+    let hex: String = filler(f["filler"].as_str().unwrap(), k.div_ceil(2))
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    [head.as_bytes(), &hex.as_bytes()[..k], b"\"}"].concat()
+}
+
 #[cfg(feature = "test-hooks")]
 fn row_items(f: &Value) -> Vec<(String, Vec<u8>)> {
     f["items"]
@@ -209,10 +230,7 @@ fn row_items(f: &Value) -> Vec<(String, Vec<u8>)> {
             let n = i[0].as_str().unwrap().to_string();
             let b = match i[1].as_str() {
                 Some(h) => hex(h),
-                None => filler(
-                    i[1]["filler"].as_str().unwrap(),
-                    i[1]["len"].as_u64().unwrap() as usize,
-                ),
+                None => filler_item(&i[1]),
             };
             (n, b)
         })

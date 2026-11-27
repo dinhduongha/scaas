@@ -11,15 +11,15 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as p from "../src/profile.js";
 import { passphraseBytes } from "../src/pqvault.js";
-import { hex, fromHex, keccak_256, sha256, utf8ToBytes, concatBytes } from "../src/bytes.js";
+import { hex, fromHex, keccak_256, sha256, utf8ToBytes, concatBytes, bytesToHex } from "../src/bytes.js";
 
 const OUT = process.argv[2] ?? fileURLToPath(new URL("../../../smartcontracts/vectors/profile/", import.meta.url));
 mkdirSync(OUT, { recursive: true });
 
 const rnd = (name, n = 32) => {
-  const blocks = [];
-  for (let i = 0; 32 * i < n; i++) blocks.push(keccak_256(utf8ToBytes(`scaas/profile/vectors/${name}/${i}`)));
-  return concatBytes(...blocks).slice(0, n);
+  const out = new Uint8Array(Math.ceil(n / 32) * 32);
+  for (let i = 0; 32 * i < n; i++) out.set(keccak_256(utf8ToBytes(`scaas/profile/vectors/${name}/${i}`)), 32 * i);
+  return out.slice(0, n);
 };
 const must = (c, what) => {
   if (!c) throw new Error(`profile vectors: ${what}`);
@@ -337,6 +337,17 @@ const ENV_PLAIN = p.envelopeJson({ id: idOf("unprotected"), state: "unprotected"
       ],
       [],
     ],
+    // review D-9: item names whose JSON needs escapes (pinned format 2: the same escapes in every language)
+    [
+      "item names needing JSON escapes",
+      "pqvault",
+      3,
+      [
+        ['note:"quoted"', 1],
+        ["path:a\\b", 2],
+      ],
+      [["tab:\t", 1]],
+    ],
   ].map(([c, part, rev, items, tombstones]) => ({
     case: c,
     part,
@@ -346,6 +357,10 @@ const ENV_PLAIN = p.envelopeJson({ id: idOf("unprotected"), state: "unprotected"
     json: p.manifestJson(part, rev, items, tombstones),
   }));
   must(JSON.parse(manifests[4].json).items[3][0] === "Ａ", "UTF-8 sort");
+  must(
+    manifests[5].json.includes('["note:\\"quoted\\"",1],["path:a\\\\b",2]],"tombstones":[["tab:\\t",1]]'),
+    "escapes",
+  );
   const manifestRefusals = [
     ["a name in both lists", "sdk", 3, [["keystore", 2]], [["keystore", 1]]],
     [
@@ -537,31 +552,46 @@ const ENV_PLAIN = p.envelopeJson({ id: idOf("unprotected"), state: "unprotected"
     },
   ];
   const SETTINGS = utf8ToBytes('{"default_chain":"scaas-testnet","idle_lock_s":300}');
-  const itemBytes = (v) => (typeof v === "string" ? fromHex(v) : rnd(v.filler, v.len));
+  // a filler item: the JSON text {"rev":<rev>,"f":"<hex>"} of exactly `len` bytes, <hex> the first characters of the
+  // lower-case hex of rnd(<filler>, …) (an item the store keeps carries its JSON rev, review A-17)
+  const fillerItem = ({ filler, len, rev }) => {
+    const head = `{"rev":${rev},"f":"`;
+    const k = len - head.length - 2;
+    return utf8ToBytes(head + bytesToHex(rnd(filler, Math.ceil(k / 2))).slice(0, k) + '"}');
+  };
+  const itemBytes = (v) => (typeof v === "string" ? fromHex(v) : fillerItem(v));
   const built = {};
-  const fileRow = (c, label, items, keep) => {
+  // the fields a reader builds a file from (a file row's, or a refusal row's `build`)
+  const build = (c, label, items, settings = SETTINGS) => {
     const kdf = testKdf(c);
     const prefix = prefixOf(c);
     const kx = p.exportKey(p.stretch(PASS, kdf));
     const pl = p.payload(
       label,
-      SETTINGS,
+      settings,
       items.map(([n, v]) => [n, itemBytes(v)]),
     );
     const file = p.exportFile(kx, kdf, prefix, pl);
     const hl = p.exportHeader(kdf, prefix).length;
     built[c] = { file, kx, kdf, prefix, hl };
-    const got = p.importFile(file, PASS, { testHooks: true });
-    must(got.items.length === items.length, `${c} imports`);
-    return {
-      case: c,
+    const row = {
       passphrase: PASS,
       test_hooks: true,
       kdf,
       nonce_prefix: hex(prefix),
       label: JSON.stringify(label),
-      settings: hex(SETTINGS),
+      settings: hex(settings),
       items,
+    };
+    return { row, pl, file, hl };
+  };
+  const fileRow = (c, label, items, keep) => {
+    const { row, pl, file, hl } = build(c, label, items);
+    const got = p.importFile(file, PASS, { testHooks: true });
+    must(got.items.length === items.length && got.label.name === label.name, `${c} imports`);
+    return {
+      case: c,
+      ...row,
       payload_len: pl.length,
       ...(keep ? { payload: hex(pl), file: hex(file) } : {}),
       header_len: hl,
@@ -575,23 +605,36 @@ const ENV_PLAIN = p.envelopeJson({ id: idOf("unprotected"), state: "unprotected"
   // the filler item's length so the payload is exactly `total` bytes
   const filled = (c, label, total) => {
     const fixed = p.payload(label, SETTINGS, [["keystore", new Uint8Array(0)]]).length;
-    return fileRow(c, label, [["keystore", { filler: `export/filler/${c}`, len: total - fixed }]], false);
+    return fileRow(c, label, [["keystore", { filler: `export/filler/${c}`, len: total - fixed, rev: 1 }]], false);
   };
+  const jsonHex = (o) => hex(utf8ToBytes(JSON.stringify(o)));
+  // keys in byte order: scaas-profile's preview writes sdk.state back through a serde_json map (its operations marked)
+  const STATE = jsonHex({ ops: [], rev: 2 });
   const files = [
     fileRow(
       "small",
       { name: "Alice", hidden: false },
       [
-        ["keystore", hex(rnd("export/small/keystore", 200))],
-        ["sdk.state", hex(utf8ToBytes('{"ops":[]}'))],
+        ["keystore", jsonHex({ rev: 3, f: bytesToHex(rnd("export/small/keystore", 100)) })],
+        ["sdk.state", STATE],
       ],
       true,
     ),
     filled("1MiB", { name: "Big", hidden: true }, p.CHUNK),
     filled("1MiB+1", { name: "Big", hidden: true }, p.CHUNK + 1),
     filled("2MiB", { name: "Big", hidden: true }, 2 * p.CHUNK),
+    // review D-9: no item, sdk.state alone, a name whose JSON needs escapes
+    fileRow("no item", { name: "Empty", hidden: false }, [], true),
+    fileRow("sdk.state only", { name: "State", hidden: true }, [["sdk.state", STATE]], true),
+    fileRow(
+      "a name needing JSON escapes",
+      { name: 'Al"ice\\', hidden: false },
+      [["keystore", jsonHex({ rev: 1, f: "" })]],
+      true,
+    ),
   ];
-  must(files.map((r) => r.chunks).join() === "1,1,2,2", "chunk counts");
+  must(files.map((r) => r.chunks).join() === "1,1,2,2,1,1,1", "chunk counts");
+  must(files[6].label === '{"name":"Al\\"ice\\\\","hidden":false}', "the label's escapes");
   const small = built.small;
   const smallHeader = small.file.subarray(0, 12 + small.hl);
   const smallBody = small.file.subarray(12 + small.hl);
@@ -601,21 +644,22 @@ const ENV_PLAIN = p.envelopeJson({ id: idOf("unprotected"), state: "unprotected"
   };
   const hdrObj = JSON.parse(new TextDecoder().decode(small.file.subarray(12, 12 + small.hl)));
   const hdr = (o) => JSON.stringify({ ...hdrObj, ...o });
-  const rawPayload = (labelText, items, extra = new Uint8Array(0)) => {
+  const rawPayload = (labelText, items, extra = new Uint8Array(0), settings = SETTINGS) => {
     const l = utf8ToBytes(labelText);
     return concatBytes(
       be32(l.length),
       l,
-      be32(SETTINGS.length),
-      SETTINGS,
+      be32(settings.length),
+      settings,
       Uint8Array.of(0, items.length),
       ...items.flatMap(([n, v]) => [p.lp(n), be32(v.length), v]),
       extra,
     );
   };
   const sealed = (pl) => p.exportFile(small.kx, small.kdf, small.prefix, pl);
-  const KS = rnd("export/crafted/keystore", 32);
-  const ST = utf8ToBytes('{"ops":[]}');
+  const KS = utf8ToBytes(JSON.stringify({ rev: 1, f: bytesToHex(rnd("export/crafted/keystore", 32)) }));
+  const ST = fromHex(STATE);
+  const BOM = "\u{feff}";
   const lastCleared = (() => {
     const h = p.exportHeader(small.kdf, small.prefix);
     const pl = rawPayload('{"name":"Alice","hidden":false}', [["keystore", KS]]);
@@ -705,11 +749,43 @@ const ENV_PLAIN = p.envelopeJson({ id: idOf("unprotected"), state: "unprotected"
       "payload",
     ),
     R(
-      "payload above 64 MiB, by length only",
-      { file_len: 12 + small.hl + 64 * CH + 17, prefix_bytes: hex(smallHeader) },
+      "payload above 64 MiB, by length only (the bound + 1)",
+      { file_len: 12 + small.hl + 64 * CH + 1, prefix_bytes: hex(smallHeader) },
       "size",
     ),
+    // review D-1: a leading BOM is kept, so neither the label nor the item name is canonical
+    R(
+      "a label led by a BOM",
+      fileHex(sealed(rawPayload(BOM + '{"name":"Alice","hidden":false}', [["keystore", KS]]))),
+      "label",
+    ),
+    R(
+      "an item name led by a BOM",
+      fileHex(sealed(rawPayload('{"name":"Alice","hidden":false}', [[BOM + "keystore", KS]]))),
+      "item",
+    ),
+    // review D-2: settings that are not a JSON object (the reference's check; scaas-profile's settings rules are stricter)
+    R(
+      "settings that are not JSON",
+      fileHex(sealed(rawPayload('{"name":"Alice","hidden":false}', [["keystore", KS]], undefined, new Uint8Array(0)))),
+      "settings",
+    ),
+    // review A-17: an item without a top-level JSON rev
+    R(
+      "an item without a JSON rev",
+      fileHex(sealed(rawPayload('{"name":"Alice","hidden":false}', [["keystore", utf8ToBytes('{"f":"00"}')]]))),
+      "item",
+    ),
   ];
+  // review D-2: an item above 16 MiB (16,777,217 bytes): a file a reader builds from `build`
+  {
+    const c = "an item above 16 MiB";
+    const { row, file } = build(c, { name: "Big", hidden: false }, [
+      ["keystore", { filler: `export/filler/${c}`, len: p.ITEM_MAX + 1, rev: 1 }],
+    ]);
+    refusals.push(R(c, { build: row, file_len: file.length, file_sha256: hex(sha256(file)) }, "item"));
+    built[c] = { file };
+  }
   const applyEdit = (file, e) => {
     if (!e) return file;
     const start = 12 + new DataView(file.buffer, file.byteOffset).getUint32(8);
@@ -729,6 +805,7 @@ const ENV_PLAIN = p.envelopeJson({ id: idOf("unprotected"), state: "unprotected"
   for (const r of refusals) {
     let f;
     if (r.file) f = fromHex(r.file);
+    else if (r.build) f = built[r.case].file;
     else if (r.file_len) {
       f = new Uint8Array(r.file_len);
       f.set(smallHeader);
@@ -759,12 +836,18 @@ const ENV_PLAIN = p.envelopeJson({ id: idOf("unprotected"), state: "unprotected"
       "nonce_prefix ‖ be32(i) ‖ last_i, AD_i = lp(scaas.profile-export) ‖ be32(header_len) ‖ header ‖ be32(i), 1 MiB of " +
       "payload each, the last 1 to 1 MiB); K_x = HKDF-SHA256(Argon2id(OpaqueString(passphrase)), salt empty, info " +
       '"scaas.profile-export.v1"); payload = be32(len) ‖ label JSON ‖ be32(len) ‖ settings ‖ be16(count) ‖ (lp(name) ‖ ' +
-      "be32(len) ‖ bytes)*. headers at both sets; keys; files at the test set (under test-hooks): small (the whole file) and " +
-      "1 MiB, 1 MiB + 1, 2 MiB of payload whose keystore item is the filler rnd(<filler>, <len>), recorded by length, " +
-      "SHA-256, chunk count, first and last 64 bytes. refusals: each is ProfileImportOpen with its local reason; the file is " +
-      "`file`, or `base` with `edit` (truncate n: drop the last n bytes; replace offset hex; drop_chunk i; swap_chunks i j; " +
-      "append_chunk i: a copy of chunk i at the end; chunks are 1,048,592 bytes from 12 + header_len; null: the base as is), " +
-      "or `file_len` bytes of zeros led by `prefix_bytes`; size_control: the length bound itself passes the length check.",
+      "be32(len) ‖ bytes)*. headers at both sets; keys; files at the test set (under test-hooks): small, no item, sdk.state " +
+      "only and a name needing JSON escapes (whole files), and 1 MiB, 1 MiB + 1, 2 MiB of payload whose keystore item is a " +
+      'filler {filler, len, rev}: the JSON text {"rev":<rev>,"f":"<hex>"} of exactly len bytes, <hex> the first characters ' +
+      "of the lower-case hex of rnd(<filler>, …), recorded by length, SHA-256, chunk count, first and last 64 bytes. Every " +
+      "item a file holds carries a top-level JSON rev (a non-negative integer). refusals: each is ProfileImportOpen with its " +
+      "local reason; the file is `file`, or `base` with `edit` (truncate n: drop the last n bytes; replace offset hex; " +
+      "drop_chunk i; swap_chunks i j; append_chunk i: a copy of chunk i at the end; chunks are 1,048,592 bytes from 12 + " +
+      "header_len; null: the base as is), or built from `build` (a file row's fields; its length and SHA-256 given), or " +
+      "`file_len` bytes of zeros led by `prefix_bytes`; size_control: the length bound itself passes the length check. The " +
+      "payload's refusals after the tag: label, item (a name not keystore then sdk.state, a BOM kept), payload, then settings " +
+      "(not a JSON object here; scaas-profile's settings rules are stricter), item (above 16 MiB, no JSON rev); a reason is " +
+      "pinned for a file wrong in one way only.",
     {
       headers,
       keys,

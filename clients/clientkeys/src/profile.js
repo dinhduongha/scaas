@@ -31,12 +31,16 @@ export const KDF_TEST = Object.freeze({ m: 8192, t: 1, p: 4 });
 export const CHUNK = 1048576;
 export const HEADER_MAX = 4096;
 export const PAYLOAD_MAX = 64 * CHUNK;
+/** An item's bound (the store's, spec §7.2): 16 MiB. */
+export const ITEM_MAX = 16 * CHUNK;
 export const MAGIC = utf8ToBytes("SCAASPX1");
 
 const EMPTY = new Uint8Array(0);
 const utf8 = (x) => (typeof x === "string" ? utf8ToBytes(x) : x);
-const decode = (x) => new TextDecoder("utf-8", { fatal: true }).decode(x);
+// a leading BOM kept (then refused by the canonical compare), as Rust's `str::from_utf8` keeps it (review D-1)
+const decode = (x) => new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(x);
 const be = (v, n) => {
+  if (typeof v !== "bigint" && !Number.isSafeInteger(v)) throw new ProfileError("Argument");
   let x = BigInt(v);
   if (x < 0n || x >= 1n << BigInt(8 * n)) throw new ProfileError("Argument");
   const out = new Uint8Array(n);
@@ -88,7 +92,10 @@ export const kdfJson = (k) => ({ alg: k.alg, v: k.v, m: k.m, t: k.t, p: k.p, sal
 export const makeKdf = (set, salt) => ({ alg: "argon2id", v: 1, m: set.m, t: set.t, p: set.p, salt: b64(salt) });
 /** The general bounds (64 MiB to 1 GiB, 3 to 10, p 4, a 16-byte salt), the test set only under `testHooks`; else
  *  `ProfileFormat`. */
+const KDF_FIELDS = ["alg", "m", "p", "salt", "t", "v"].join();
 export function checkKdf(k, testHooks = false) {
+  if (k === null || typeof k !== "object" || Object.keys(k).sort().join() !== KDF_FIELDS)
+    throw new ProfileError("ProfileFormat", "kdf");
   let salt;
   try {
     salt = unb64(k.salt);
@@ -182,8 +189,12 @@ export const itemAd = (part, name, rev) =>
 export const itemFile = (kName, part, name) => bytesToHex(hmac(sha256, kName, concatBytes(lp(part), lp(name))));
 export const sealItem = (kItem, nonce, part, name, rev, pt) => seal(kItem, nonce, itemAd(part, name, rev), pt);
 export const openItem = (kItem, sealed, part, name, rev) => open(kItem, sealed, itemAd(part, name, rev));
-/** The item on disk `{"rev":N,"sealed":"<base64>"}` (pinned format 6). */
-export const itemJson = (rev, sealed) => JSON.stringify({ rev, sealed: b64(sealed) });
+/** The item on disk `{"rev":N,"sealed":"<base64>"}` (pinned format 6); a rev that is not a safe non-negative integer is
+ *  `Argument`. */
+export function itemJson(rev, sealed) {
+  if (!Number.isSafeInteger(rev) || rev < 0) throw new ProfileError("Argument");
+  return JSON.stringify({ rev, sealed: b64(sealed) });
+}
 /** The plaintext of the item `manifest:<part>` of part `profile` (pinned format 7): each list sorted by the name's UTF-8 bytes,
  *  a name at most once in both lists (`ProfileFormat`), at most 65,536 entries (`ProfilePartFull`). */
 export function manifestJson(part, rev, items, tombstones) {
@@ -202,14 +213,14 @@ export function manifestJson(part, rev, items, tombstones) {
 }
 /** The first 16 bytes of SHA-256 of a file, lower-case hex (the anchor's `sha256`). */
 export const digest16 = (file) => bytesToHex(sha256(file).subarray(0, 16));
-/** The anchor (pinned format 8), parts sorted by name. */
+/** The anchor (pinned format 8), parts sorted by their names' UTF-8 bytes (the text joined: an object would put
+ *  integer-like keys first). */
 export function anchorJson(a) {
-  const parts = Object.fromEntries(
-    Object.keys(a.parts)
-      .sort(cmpUtf8)
-      .map((k) => [k, { rev: a.parts[k].rev, sha256: a.parts[k].sha256 }]),
-  );
-  return JSON.stringify({ gen: a.gen, envelope: { rev: a.envelope.rev, sha256: a.envelope.sha256 }, parts });
+  const rs = (x) => JSON.stringify({ rev: x.rev, sha256: x.sha256 });
+  const parts = Object.keys(a.parts)
+    .sort(cmpUtf8)
+    .map((k) => `${JSON.stringify(k)}:${rs(a.parts[k])}`);
+  return `{"gen":${JSON.stringify(a.gen)},"envelope":${rs(a.envelope)},"parts":{${parts.join(",")}}}`;
 }
 /** CLI-UPR-28: what is stored on disk against the anchor: `same`, `follow` (a value ahead: the anchor follows) or `rollback`. */
 export function anchorCompare(stored, anchor) {
@@ -268,8 +279,9 @@ export function exportFile(kx, k, prefix, pl) {
 }
 /** Every refusal is `ProfileImportOpen` with a local `reason`: header refusals (`magic`, `header_len`, `header`, `format`,
  *  `version`, `chunk`, `kdf`) and the length bound (`size`, `truncated`) before the KDF; then `tag` (a wrong passphrase, a
- *  changed, dropped, moved or appended chunk, the last flag), then the payload (`label`, `item`, `payload`). Returns
- *  `{label: {name, hidden}, settings, items: [[name, bytes]]}`. */
+ *  changed, dropped, moved or appended chunk, the last flag), then the payload (`label`, `item`, `payload`), then `settings`
+ *  (not a JSON object: scaas-profile's settings rules are stricter) and `item` (above 16 MiB, or without a top-level JSON
+ *  `rev`, a non-negative integer). Returns `{label: {name, hidden}, settings, items: [[name, bytes]]}`. */
 export function importFile(file, passphrase, { testHooks = false } = {}) {
   const fail = (reason) => {
     throw new ProfileError("ProfileImportOpen", reason);
@@ -349,5 +361,16 @@ function parsePayload(pl, fail) {
     items.push([name, take(unbe(take(4)))]);
   }
   if (o !== pl.length) fail("payload");
+  const object = (b) => {
+    try {
+      const j = JSON.parse(decode(b));
+      return j !== null && typeof j === "object" && !Array.isArray(j) ? j : null;
+    } catch {
+      return null;
+    }
+  };
+  if (!object(settings)) fail("settings");
+  if (items.some(([, v]) => v.length > ITEM_MAX)) fail("item");
+  if (!items.every(([, v]) => Number.isSafeInteger(object(v)?.rev) && object(v).rev >= 0)) fail("item");
   return { label, settings, items };
 }

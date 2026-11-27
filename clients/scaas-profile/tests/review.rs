@@ -453,10 +453,10 @@ fn e4_settings_written_only_when_readable() {
     assert!(!o.info().protected);
 }
 
-/// A-17: an item without a JSON `rev` is refused by `import` before any KDF run, as `ProfileImportOpen` (the preview's
-/// check waits on the vector rows, whose fillers carry none). Control: the same file with a `rev` imports.
+/// A-17: an item without a JSON `rev` is refused by the preview (`ProfileImportOpen`, reason `item`), so no import of it
+/// reaches the store's KDF. Control: the same file with a `rev` previews and imports.
 #[test]
-fn a17_item_without_rev_refused_before_the_kdf() {
+fn a17_item_without_rev_refused_at_the_preview() {
     let _k = kdf_lock();
     let p = Profiles::new(cfg(&tmp(), None)).unwrap();
     let file = |ks: &[u8]| {
@@ -464,15 +464,14 @@ fn a17_item_without_rev_refused_before_the_kdf() {
         let pl = Profiles::test_payload(label, b"{}", &[("keystore", ks)]).unwrap();
         p.test_export(&pl, XPASS, TEST, &[7; 16], &[9; 7]).unwrap()
     };
-    let r = p
-        .import_preview(ImportSource::Bytes(&file(b"no json rev")), XPASS)
-        .unwrap();
-    let before = ProfileKeys::kdf_runs();
     assert_eq!(
-        code(p.import(&r, &[], PASS, None, Some(TEST))),
+        code(
+            p.import_preview(ImportSource::Bytes(&file(b"no json rev")), XPASS)
+                .map(drop)
+        ),
         "ProfileImportOpen"
     );
-    assert_eq!(ProfileKeys::kdf_runs(), before, "before any KDF");
+    assert_eq!(p.last_import_refusal(), Some("item"));
     let r = p
         .import_preview(ImportSource::Bytes(&file(br#"{"rev":1}"#)), XPASS)
         .unwrap();
