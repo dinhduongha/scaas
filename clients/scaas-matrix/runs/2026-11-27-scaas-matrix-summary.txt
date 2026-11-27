@@ -25,3 +25,15 @@ R1-R7 | pqc-wasm | 961fb6eee | 0 | cargo check --target wasm32-unknown-unknown
 R7 | mtx-e2e | 69f29bf94 | 0 | 1 passed (39 s): login, restore, E2EE, defaults + controls, push, recovery/backup never replaced, SAS, conformance, kinds apart, routing by kind, held invite unanswered, R-1 hold refused before the first sync, J-1 release on join, second device MatrixDeviceUnverified then recover then send, bound marking, no Matrix id / homeserver / room id on disk (open and closed), logout
 R7 | mutants-r1 | 69f29bf94 | 0 | 37 mutants, 37 killed, 0 survived, 0 not loaded, 0 other failure (none by timeout; the sealed-length check left out as equivalent)
 R1-R7 | pqc-e2e | bf263712d | 101 | e2e_matrix_conformance passed (the extended conformance over the shared Synapse helper, image by digest); e2e_run failed at its mutant 11 fixture (tests/e2e.rs:955, SessionUnknown for PqChatContent), the same failure as on the base d0b3f7f34 (pre-existing, not a Matrix path)
+merge dev 4fc9c5e2b | pqc-test | c6eb7b806 | 0 | 139 passed, 0 failed, 8 ignored (the chain and e2e runs below)
+merge dev 4fc9c5e2b | pqc-clippy | c6eb7b806 | 0 | --all-targets -D warnings, clean
+merge dev 4fc9c5e2b | pqc-wasm | c6eb7b806 | 0 | cargo check --target wasm32-unknown-unknown
+merge dev 4fc9c5e2b | pqc-chain | c6eb7b806 | 0 | -- --ignored chain_ on anvil: chain_recovery 1, chain_session 2, chain_store 1, chain_topics 1, chain_tree 3 passed
+merge dev 4fc9c5e2b | pqc-e2e | c6eb7b806 | 0 | 2 passed (e2e_matrix_conformance, e2e_run: dev's fixed mutant 11 fixture), Synapse by digest, anvil with --enable-tx-gas-limit
+merge dev 4fc9c5e2b | mtx-test | c6eb7b806 | 0 | 23 passed (lib 14, deps 1, profile 8), --features testing
+merge dev 4fc9c5e2b | mtx-clippy | c6eb7b806 | 0 | --all-targets --features testing -D warnings, clean
+merge dev 4fc9c5e2b | mtx-deny | c6eb7b806 | 0 | advisories ok, bans ok, licenses ok, sources ok
+merge dev 4fc9c5e2b | mtx-audit | c6eb7b806 | 0 | 0 vulnerabilities
+merge dev 4fc9c5e2b | mtx-e2e | c6eb7b806 | 0 | 1 passed (42 s)
+merge dev 4fc9c5e2b | mutants-r1 | c6eb7b806 | - | not rerun: the merge changed none of the mutant target files (clients/scaas-matrix, clients/pqchat-transport, pqchat-core src/consent.rs, src/matrix.rs); record r1 at 69f29bf94 stands (37/37)
+merge dev 4fc9c5e2b | docs + format | c6eb7b806 | 0 | docs_check 0 errors, paths 0, test_docs_check ok; format.sh --check every part ok except tact (tact-fmt not installed in this worktree; the branch changes no file under smartcontracts/); check_test_features ok; ci_changes self-checks ok
