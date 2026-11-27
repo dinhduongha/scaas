@@ -1610,3 +1610,33 @@ test("fable-C-10 of the path-less review: a device with a random key reads its o
   }
   assert.deepEqual(r.warnings, [], "no compromise warning");
 });
+
+test("the path-less re-check's R-1: a resume keeps the compromise warnings, as a cold replay of the head names them", () => {
+  const w = f.createSession({
+    tag: "t/resume-warning",
+    creator: "A",
+    nonce: 74,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: f.INFO.I1,
+    pathRefreshBound: 24,
+  });
+  f.commit(w, "A"); // 1
+  // 2: a path-less Add under A's own leaf that A's seed did not build (a foreign seed): the compromise warning at A
+  f.commit(w, "A", { pathless: true, adds: [["D", 3]], seedOf: "B" });
+  const A = f.deviceOf("A");
+  const early = tk.replay(sc, tk.reader(w.home), A);
+  assert.deepEqual(
+    early.warnings.map((x) => x.epoch),
+    [2],
+    "control: the warning",
+  );
+  f.commit(w, "B"); // 3
+  const cold = tk.replay(sc, tk.reader(w.home), A);
+  const more = tk.replay(sc, tk.reader(w.home), A, null, early);
+  assert.deepEqual(
+    more.warnings.map((x) => x.epoch),
+    cold.warnings.map((x) => x.epoch),
+  );
+  assert.deepEqual(more.review, cold.review, "the leaves under review");
+});
