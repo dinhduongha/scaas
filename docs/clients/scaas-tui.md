@@ -124,7 +124,8 @@ digest on every screen and on the review.
 <a id="CLI-TUI-12"></a>**CLI-TUI-12** — **Fee and gas caps come from the build, may be lowered and never raised, and are shown on the
 quote** (controller call; SPECIFIED). The SDK's `Limits` (`max_fee_per_gas`, `max_gas`, `max_cost`) are compiled defaults per
 profile; the TUI's config may lower each, never raise it, and never takes one from an endpoint. The quote shows the caps that apply
-beside the quoted values; above them the SDK refuses (`FeeAboveCap`).
+beside the quoted values; above them the SDK refuses (`FeeAboveCap`). Forward note (SPECIFIED, with user profiles,
+[CLI-UPR-11](scaas-sdk.md#CLI-UPR-11)): the lowered caps live in the profile's settings, not `tui.toml`.
 
 <a id="CLI-TUI-06"></a>**CLI-TUI-06** — **The user may add named endpoints; the TUI discovers none and shows no full URL** (follows
 [ARCH-POS-15](../decisions.md#ARCH-POS-15); the no-discovery narrowing is a proposal, owner may override; SPECIFIED). A local overlay,
@@ -135,7 +136,9 @@ and cannot remove a pinned endpoint, change a contract or `chain_uid`, or add a 
 profile's value, shown on the quote. The TUI finds no endpoint at run time, which narrows ARCH-POS-15's three classes to `named` and
 `default`. An endpoint is shown by its index, label, class and host (userinfo dropped, an IDN as punycode, or the label only), never
 its full URL ([CLI-RPC-11](scaas-rpc.md#CLI-RPC-11)). A credential is named by a file (preferred; refused when group- or
-world-readable) or an environment variable, never written as a value, never stored in the keystore or the SDK's state.
+world-readable) or an environment variable, never written as a value, never stored in the keystore or the SDK's state. Forward
+note (SPECIFIED, when user profiles are built: [CLI-UPR-11](scaas-sdk.md#CLI-UPR-11)): the overlay becomes the profile's sealed
+settings, one per user profile, under these rules unchanged.
 
 ## 5. Accessibility
 
@@ -176,7 +179,9 @@ in `OpState` as CLI-TUI-03's second class.
 
 <a id="CLI-TUI-14"></a>**CLI-TUI-14** — **The clipboard holds public values only, and only when the user turns it on** (owner
 2026-11-24, spec Q-T6; SPECIFIED). Off by default. When turned on in the config, a key copies one public value (a UA id, an address, an
-operation's digest) by OSC 52; no other value can be copied.
+operation's digest) by OSC 52; no other value can be copied. Forward note (SPECIFIED, with user profiles,
+[CLI-UPR-16](scaas-sdk.md#CLI-UPR-16)): the opt-in lives in the profile's settings, and a value the TUI copied is cleared when the
+profile locks or switches.
 
 <a id="CLI-TUI-15"></a>**CLI-TUI-15** — **A seed's words are revealed only after the user types `reveal`, with a warning where the
 screen may be recorded** (owner 2026-11-24, spec Q-T7; SPECIFIED). The reveal screen always asks for the typed word `reveal`. It adds a warning
