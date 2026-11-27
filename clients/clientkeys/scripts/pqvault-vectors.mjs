@@ -501,6 +501,80 @@ shared(1);
 const p1 = personalVault("personal1", personal, 1, { passKdf: 0, passphrase: "", passSalt: Z32 }, () => [
   [1, { type: "note", title: "Recovery codes", mediaType: "text/plain", body: "1111-2222\n3333-4444" }],
 ]);
+// CLI-PQV-16 H1-H3 (2026-11-27), item rows only (no record: the records above stay as they are): the card and identity
+// fields of the secret table, a hidden note, custom fields and a typed history; every escape the canonical writer makes in a
+// secret, a key in UTF-16 order (review C-8). Each a version 1 of the personal vault's epoch 0, by its per-vault UA.
+[
+  [
+    2,
+    {
+      type: "card",
+      title: "Visa",
+      cardholderName: "A. Bé",
+      brand: "visa",
+      number: "4111 1111 1111 1111",
+      code: '12"3',
+      pin: "98\\76",
+      expMonth: "04",
+      expYear: "2031",
+    },
+  ],
+  [
+    3,
+    {
+      type: "identity",
+      title: "Me",
+      honorific: "Dr",
+      firstName: "Ana",
+      lastName: "Bé",
+      address1: "1 Main St\nFlat 2",
+      city: "Hà Nội",
+      country: "VN",
+      nationalId: "123-45-6789",
+      passportNumber: "P\t123",
+      licenseNumber: "L\u00019\u001f",
+    },
+  ],
+  [
+    4,
+    {
+      type: "note",
+      title: "Hidden",
+      mediaType: "text/plain",
+      hideBody: true,
+      body: "line\r\nsecret \f \b \u{1F600} \u{FF5E}",
+    },
+  ],
+  [
+    5,
+    {
+      type: "login",
+      title: "Bank",
+      username: "u",
+      password: "p2",
+      fields: [
+        { name: "pin2", secret: true, value: "43\u{2028}21" },
+        { name: "branch", secret: false, value: "Main" },
+      ],
+      history: [{ field: "password", value: "p1" }],
+    },
+  ],
+].forEach(([n, content], i) => {
+  const x = {
+    vaultId: p1.vid,
+    epochId: p1.vid,
+    itemId: hex(pv.itemId(p1.vid, personal.ua, n)),
+    version: 1,
+    author: personal.ua,
+    ...p1.home,
+  };
+  itemCt(`personal1/ui-${i}`, x, content, {
+    epochName: "personal1/epoch-0",
+    record: null,
+    creator: personal.ua,
+    mode: 1,
+  });
+});
 // the index vault (per-vault UA 0, mode 0, passphrase on): vaultRef items naming the personal vault and the shared vault
 personalVault(
   "index0",

@@ -469,10 +469,14 @@ test("items: r, okm, bk, n, aad, padded plaintext and ciphertext recomputed; eac
     assert.equal(h(pv.padItem(utf8ToBytes(it.json))), it.pt, it.name);
     assert.equal(h(pv.encryptItem(Kv, it.r, x, it.pt)), it.ciphertext, it.name);
     assert.deepEqual(pv.decryptItem(Kv, x, it.ciphertext), it.content, it.name);
-    const rec = recs[it.record];
-    assert.ok(rec, it.record);
-    const ct = rec.struct === "PqVaultBatch" ? rec.record.items[it.batchIndex].ciphertext : rec.record.ciphertext;
-    assert.equal(ct, it.ciphertext, it.name);
+    // the item layer's rows (CLI-PQV-16 H1-H3) are item rows only; every other row's ciphertext is its record's
+    if (it.record === null) assert.match(it.name, /^personal1\/ui-\d+$/, it.name);
+    else {
+      const rec = recs[it.record];
+      assert.ok(rec, it.record);
+      const ct = rec.struct === "PqVaultBatch" ? rec.record.items[it.batchIndex].ciphertext : rec.record.ciphertext;
+      assert.equal(ct, it.ciphertext, it.name);
+    }
     if (it.content.type === "file") {
       const kFile = pv.fileKey(Kv, x.vaultId, x.epochId, x.itemId, x.version);
       assert.equal(h(kFile.key), it.file.kFile);

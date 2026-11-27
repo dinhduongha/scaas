@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! The redacting item layer (CLI-PQV-16 H1–H3; spec §6.8): an item's fields typed by one table, the per-type secret table, so
 //! no front-end decides which field is secret. A field is `Plain` (a JSON value), `Secret` (a text in a `SecretBytes`),
-//! `Custom` (the custom fields, each declaring itself secret or not) or `Opaque` (a field this client does not know: its
-//! canonical JSON kept byte for byte in a `SecretBytes`, never shown). The canonical JSON is built in a zeroizing buffer of a
-//! fixed capacity (it never reallocates), and parsed from the decrypted plaintext in place: a secret's text goes from the
-//! plaintext straight into its `SecretBytes`, never into a `String`. A secret field's earlier values (the merge's `history`)
-//! are secret too (rule 25). `Debug` names fields and their kinds, never a value. UNAUDITED.
+//! `Custom` (the custom fields, each declaring itself secret or not) or `Opaque` (a field this client does not know, or a
+//! table field in a shape it does not know: its canonical JSON kept byte for byte in a zeroizing buffer, never shown, and
+//! written back on an edit). The canonical JSON is built in a zeroizing buffer of a fixed capacity (it never reallocates),
+//! and parsed from the decrypted plaintext in place: a secret's text goes from the plaintext straight into its
+//! `SecretBytes`, never into a `String`; a reader holds at most [`SECRETS_MAX`] of them per item. A secret field's earlier
+//! values (the merge's `history`) are secret too (rule 25), and the merge retypes every value by the merged item's table
+//! (a hidden body stays hidden). `Debug` prints counts only, no type, name or value (CLI-PQV-03). UNAUDITED.
 use crate::content::{self, Bad, Out};
 use scaas_sdk::app_core::SecretBytes;
 use serde_json::value::RawValue;
@@ -87,6 +89,9 @@ pub const TABLE: [(&str, &[&str], &[&str]); 9] = [
 /// The custom fields of one item at most, and a custom field's name length (spec §6.8).
 pub const CUSTOM_MAX: usize = 32;
 pub const CUSTOM_NAME_MAX: usize = 128;
+/// The secrets a reader opens of one item at most (fields, custom fields and history together; review C-4): each is a
+/// locked block of its own, so a member's item cannot ask for more; past it the item is `Unreadable`.
+pub const SECRETS_MAX: usize = 64;
 
 /// How the table types a field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,7 +115,8 @@ pub fn class(ty: &str, name: &str, hide: bool) -> Class {
     if ty == "deleted" {
         return Class::Opaque;
     }
-    if COMMON.contains(&name) || plain.contains(&name) {
+    // a merge's history records a `type` it replaced (review C-3)
+    if name == "type" || COMMON.contains(&name) || plain.contains(&name) {
         return Class::Plain;
     }
     if secret.contains(&name) || (ty == "note" && name == "body" && hide) {
@@ -133,8 +139,9 @@ pub enum Field {
     Secret(Arc<SecretBytes>),
     /// the custom fields
     Custom(Vec<Custom>),
-    /// a field this client does not know: its canonical JSON, kept byte for byte and never shown
-    Opaque(Arc<SecretBytes>),
+    /// a field this client does not know, or a table field in a shape it does not know: its canonical JSON, kept byte
+    /// for byte and never shown (a zeroizing buffer, not a locked block: review C-4)
+    Opaque(Arc<Zeroizing<Vec<u8>>>),
 }
 
 impl Field {
@@ -152,25 +159,37 @@ impl Field {
             Field::Opaque(_) => "Opaque",
         }
     }
+    /// Whether a writer may write this value where the table gives class `c`: its own kind, a kept part or a `null`
+    /// anywhere (a field read in a shape this client does not know is written back as it was: spec §6.8, review C-2).
     fn of(&self, c: Class) -> bool {
         matches!(
             (self, c),
             (Field::Plain(_), Class::Plain)
                 | (Field::Secret(_), Class::Secret)
                 | (Field::Custom(_), Class::Custom)
-                | (Field::Opaque(_), Class::Opaque)
+                | (Field::Opaque(_), _)
+                | (Field::Plain(Value::Null), _)
         )
+    }
+
+    /// This value retyped for class `c` (the merge's retyping, review C-3): its canonical JSON read again under `c`.
+    fn retyped(&self, c: Class) -> Field {
+        let mut out = Out::new();
+        let again = write_field(self, 1, &mut out)
+            .ok()
+            .and_then(|_| serde_json::from_slice::<&RawValue>(out.bytes()).ok())
+            .and_then(|raw| read_field(c, raw, 1, &mut 0).ok());
+        again.unwrap_or_else(|| self.clone())
     }
 }
 
+/// Two values are equal when their canonical JSON is (a text plain on one side and secret on the other is the same text:
+/// review C-3).
 impl PartialEq for Field {
     fn eq(&self, o: &Field) -> bool {
-        match (self, o) {
-            (Field::Plain(a), Field::Plain(b)) => a == b,
-            (Field::Secret(a), Field::Secret(b)) | (Field::Opaque(a), Field::Opaque(b)) => {
-                a.with2(b, |x, y| x == y)
-            }
-            (Field::Custom(a), Field::Custom(b)) => a == b,
+        let (mut a, mut b) = (Out::new(), Out::new());
+        match (write_field(self, 1, &mut a), write_field(o, 1, &mut b)) {
+            (Ok(()), Ok(())) => a.bytes() == b.bytes(),
             _ => false,
         }
     }
@@ -192,7 +211,7 @@ pub struct Custom {
 
 impl std::fmt::Debug for Custom {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {:?}", self.name, self.value)
+        write!(f, "Custom({:?})", self.value)
     }
 }
 
@@ -206,7 +225,7 @@ pub struct Change {
 
 impl std::fmt::Debug for Change {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {:?}", self.field, self.value)
+        write!(f, "Change({:?})", self.value)
     }
 }
 
@@ -218,13 +237,15 @@ pub struct Item {
     pub history: Vec<Change>,
 }
 
+/// Counts only: no type, field name or value reaches a log (CLI-PQV-03, review D-12).
 impl std::fmt::Debug for Item {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Item")
-            .field("type", &self.ty)
-            .field("fields", &self.fields)
-            .field("history", &self.history)
-            .finish()
+        write!(
+            f,
+            "Item({} fields, {} history)",
+            self.fields.len(),
+            self.history.len()
+        )
     }
 }
 
@@ -278,17 +299,25 @@ impl Item {
         let mut plain = Map::new();
         plain.insert("type".into(), Value::String(self.ty.clone()));
         for (k, v) in &self.fields {
-            if !v.of(self.class(k)) || k == "type" || k == "history" {
+            // `history` is a field only as a kept part this client could not type (review D-8)
+            let kept_history =
+                k == "history" && matches!(v, Field::Opaque(_)) && self.history.is_empty();
+            if k == "type" || (k == "history" && !kept_history) || !v.of(self.class(k)) {
                 return Err(Bad::Shape);
             }
             match v {
                 Field::Plain(p) => {
                     plain.insert(k.clone(), p.clone());
                 }
-                Field::Secret(s) => utf8(s)?,
-                Field::Custom(c) => check_custom(c)?,
-                Field::Opaque(o) => opaque_ok(o)?,
+                other => check_value(other, 1)?,
             }
+        }
+        // every earlier value typed as its field is (rule 25, review C-5)
+        for h in &self.history {
+            if h.field.is_empty() || !h.value.of(self.class(&h.field)) {
+                return Err(Bad::Shape);
+            }
+            check_value(&h.value, 3)?;
         }
         content::check_item(&Value::Object(plain))
     }
@@ -318,8 +347,9 @@ impl Item {
             content::escape(k.as_bytes(), out)?;
             out.put(b":")?;
             match *k {
-                "type" => write_field(&ty, out)?,
-                "history" => {
+                "type" => write_field(&ty, 1, out)?,
+                // a history this client typed; else the kept part of the field `history` below
+                "history" if !self.history.is_empty() => {
                     out.put(b"[")?;
                     for (j, h) in self.history.iter().enumerate() {
                         if j > 0 {
@@ -328,12 +358,12 @@ impl Item {
                         out.put(b"{\"field\":")?;
                         content::escape(h.field.as_bytes(), out)?;
                         out.put(b",\"value\":")?;
-                        write_field(&h.value, out)?;
+                        write_field(&h.value, 3, out)?;
                         out.put(b"}")?;
                     }
                     out.put(b"]")?;
                 }
-                k => write_field(self.fields.get(k).ok_or(Bad::Shape)?, out)?,
+                k => write_field(self.fields.get(k).ok_or(Bad::Shape)?, 1, out)?,
             }
         }
         out.put(b"}")
@@ -364,6 +394,8 @@ impl Item {
         }
         let hide = ty == "note" && top.get("hideBody").map(|r| r.get()) == Some("true");
         let mut it = Item::new(&ty);
+        // the secrets opened so far (at most SECRETS_MAX)
+        let mut n = 0;
         for (k, raw) in &top {
             match k.as_str() {
                 "type" => {}
@@ -375,23 +407,31 @@ impl Item {
                         #[serde(borrow)]
                         value: &'a RawValue,
                     }
-                    let hs: Vec<H> = serde_json::from_str(raw.get()).map_err(bad)?;
-                    for h in hs {
-                        let value = read_field(class(&ty, &h.field, hide), h.value)?;
-                        it.history.push(Change {
-                            field: h.field,
-                            value,
-                        });
+                    // a history this client cannot type (another shape, an empty list) is kept as it was (review D-8)
+                    match serde_json::from_str::<Vec<H>>(raw.get()) {
+                        Ok(hs) if !hs.is_empty() && hs.iter().all(|h| !h.field.is_empty()) => {
+                            for h in hs {
+                                let c = class(&ty, &h.field, hide);
+                                let value = read_field(c, h.value, 3, &mut n)?;
+                                it.history.push(Change {
+                                    field: h.field,
+                                    value,
+                                });
+                            }
+                        }
+                        _ => {
+                            it.fields.insert("history".into(), opaque(raw, 1)?);
+                        }
                     }
                 }
                 k => {
-                    let f = read_field(class(&ty, k, hide), raw)?;
+                    let f = read_field(class(&ty, k, hide), raw, 1, &mut n)?;
                     it.fields.insert(k.into(), f);
                 }
             }
         }
         let mut again = Out::new();
-        it.write(&mut again)?;
+        it.write(&mut again).map_err(|_| Bad::Unreadable)?;
         if again.bytes() != b {
             return Err(Bad::Unreadable);
         }
@@ -402,6 +442,20 @@ impl Item {
 fn utf8(s: &SecretBytes) -> Result<(), Bad> {
     s.with(|b| std::str::from_utf8(b).map(|_| ()))
         .map_err(|_| Bad::Shape)
+}
+
+/// A writer's checks of a value that is not plain, nested `d` levels in the item: a secret valid UTF-8, the custom fields'
+/// bounds, a kept part canonical JSON.
+fn check_value(v: &Field, d: usize) -> Result<(), Bad> {
+    match v {
+        Field::Plain(p) => {
+            let mut out = Out::new();
+            content::write_value_at(p, d, &mut out)
+        }
+        Field::Secret(s) => utf8(s),
+        Field::Custom(c) => check_custom(c),
+        Field::Opaque(o) => opaque_ok(o, d).map_err(|_| Bad::Shape),
+    }
 }
 
 fn check_custom(c: &[Custom]) -> Result<(), Bad> {
@@ -417,18 +471,18 @@ fn check_custom(c: &[Custom]) -> Result<(), Bad> {
     ok.then_some(()).ok_or(Bad::Shape)
 }
 
-/// Whether `o` holds canonical JSON (a kept field written back as it was read).
-fn opaque_ok(o: &SecretBytes) -> Result<(), Bad> {
-    o.with(|b| {
-        let mut v: Value = serde_json::from_slice(b).map_err(|_| Bad::Shape)?;
-        let mut again = Out::new();
-        let same = content::write_value(&v, &mut again).is_ok() && again.bytes() == b;
-        wipe(&mut v);
-        same.then_some(()).ok_or(Bad::Shape)
-    })
+/// Whether `b` is canonical JSON nested at most to the item's depth from level `d` (a kept part, on read and on write:
+/// review C-1), else `Unreadable`.
+fn opaque_ok(b: &[u8], d: usize) -> Result<(), Bad> {
+    let mut v: Value = serde_json::from_slice(b).map_err(|_| Bad::Unreadable)?;
+    let mut again = Out::new();
+    let same = content::write_value_at(&v, d, &mut again).is_ok() && again.bytes() == b;
+    wipe(&mut v);
+    same.then_some(()).ok_or(Bad::Unreadable)
 }
 
-/// Every text of `v` zeroized (a kept field parsed only to be checked).
+/// Every text of `v` zeroized (a kept part parsed only to be checked; ponytail: keys and numbers stay, a kept part is no
+/// table secret).
 fn wipe(v: &mut Value) {
     match v {
         Value::String(s) => s.zeroize(),
@@ -438,11 +492,12 @@ fn wipe(v: &mut Value) {
     }
 }
 
-fn write_field(f: &Field, out: &mut Out) -> Result<(), Bad> {
+/// `f`'s canonical JSON, nested `d` levels in the item.
+fn write_field(f: &Field, d: usize, out: &mut Out) -> Result<(), Bad> {
     match f {
-        Field::Plain(v) => content::write_value(v, out),
+        Field::Plain(v) => content::write_value_at(v, d, out),
         Field::Secret(s) => s.with(|b| content::escape(b, out)),
-        Field::Opaque(o) => o.with(|b| out.put(b)),
+        Field::Opaque(o) => out.put(o),
         Field::Custom(c) => {
             out.put(b"[")?;
             for (i, x) in c.iter().enumerate() {
@@ -457,7 +512,7 @@ fn write_field(f: &Field, out: &mut Out) -> Result<(), Bad> {
                 } else {
                     b",\"secret\":false,\"value\":"
                 })?;
-                write_field(&x.value, out)?;
+                write_field(&x.value, d + 2, out)?;
                 out.put(b"}")?;
             }
             out.put(b"]")
@@ -465,15 +520,16 @@ fn write_field(f: &Field, out: &mut Out) -> Result<(), Bad> {
     }
 }
 
-fn opaque(raw: &RawValue) -> Result<Field, Bad> {
+/// A kept part: `raw`'s bytes, canonical JSON nested from level `d` (else `Unreadable`), in a zeroizing buffer.
+fn opaque(raw: &RawValue, d: usize) -> Result<Field, Bad> {
     let b = raw.get().as_bytes();
-    let s = SecretBytes::new(b.len()).map_err(|_| Bad::Unreadable)?;
-    s.with_mut(|m| m.copy_from_slice(b));
-    Ok(Field::Opaque(Arc::new(s)))
+    opaque_ok(b, d)?;
+    Ok(Field::Opaque(Arc::new(Zeroizing::new(b.to_vec()))))
 }
 
-/// A secret text read from its JSON literal straight into a `SecretBytes`; `None` when `raw` is not a text.
-fn secret_of(raw: &RawValue) -> Result<Option<Field>, Bad> {
+/// A secret text read from its JSON literal straight into a `SecretBytes` (`n` counts them: past [`SECRETS_MAX`]
+/// `Unreadable`); `None` when `raw` is not a text.
+fn secret_of(raw: &RawValue, n: &mut usize) -> Result<Option<Field>, Bad> {
     let Some(inner) = raw
         .get()
         .as_bytes()
@@ -482,23 +538,32 @@ fn secret_of(raw: &RawValue) -> Result<Option<Field>, Bad> {
     else {
         return Ok(None);
     };
+    *n += 1;
+    if *n > SECRETS_MAX {
+        return Err(Bad::Unreadable);
+    }
     let out = content::unescape(inner).ok_or(Bad::Unreadable)?;
     let s = SecretBytes::from_zeroizing(out).map_err(|_| Bad::Unreadable)?;
     Ok(Some(Field::Secret(Arc::new(s))))
 }
 
-fn read_field(c: Class, raw: &RawValue) -> Result<Field, Bad> {
-    let bad = |_| Bad::Unreadable;
+/// The value `raw` of class `c`, nested `d` levels in the item; `n` the secrets opened so far.
+fn read_field(c: Class, raw: &RawValue, d: usize, n: &mut usize) -> Result<Field, Bad> {
     if raw.get() == "null" {
         return Ok(Field::Plain(Value::Null));
     }
     match c {
-        Class::Plain => Ok(Field::Plain(serde_json::from_str(raw.get()).map_err(bad)?)),
-        Class::Secret => match secret_of(raw)? {
+        Class::Plain => {
+            let v: Value = serde_json::from_str(raw.get()).map_err(|_| Bad::Unreadable)?;
+            let mut out = Out::new();
+            content::write_value_at(&v, d, &mut out).map_err(|_| Bad::Unreadable)?;
+            Ok(Field::Plain(v))
+        }
+        Class::Secret => match secret_of(raw, n)? {
             Some(f) => Ok(f),
-            None => opaque(raw),
+            None => opaque(raw, d),
         },
-        Class::Opaque => opaque(raw),
+        Class::Opaque => opaque(raw, d),
         Class::Custom => {
             #[derive(serde::Deserialize)]
             #[serde(deny_unknown_fields)]
@@ -508,13 +573,15 @@ fn read_field(c: Class, raw: &RawValue) -> Result<Field, Bad> {
                 #[serde(borrow)]
                 value: &'a RawValue,
             }
-            let Ok(cs) = serde_json::from_str::<Vec<C>>(raw.get()) else {
-                return opaque(raw);
+            // a list past the writer's bound, or of another shape, is kept as it was
+            let cs = match serde_json::from_str::<Vec<C>>(raw.get()) {
+                Ok(cs) if cs.len() <= CUSTOM_MAX => cs,
+                _ => return opaque(raw, d),
             };
             let mut out = Vec::with_capacity(cs.len());
             for x in cs {
                 let value = if x.secret {
-                    secret_of(x.value)?
+                    secret_of(x.value, n)?
                 } else {
                     serde_json::from_str::<Value>(x.value.get())
                         .ok()
@@ -522,7 +589,7 @@ fn read_field(c: Class, raw: &RawValue) -> Result<Field, Bad> {
                         .map(Field::Plain)
                 };
                 let Some(value) = value else {
-                    return opaque(raw);
+                    return opaque(raw, d);
                 };
                 out.push(Custom {
                     name: x.name,
@@ -546,9 +613,25 @@ pub enum Merge {
 
 /// Per field against `base` (the version an edit started from), `type` one of them: a field only one side changed takes that
 /// side's value, one both changed alike stays, one both changed differently keeps `ours` (the edit being written is the
-/// newer) and records `theirs` in `history` (appended; `Plain(null)` for a field `theirs` removed). Fields neither knows
-/// survive; `history` itself merges by union. A secret's losing value stays a `Secret` (rule 25).
+/// newer) and records `theirs` in `history` (appended; `Plain(null)` for a field `theirs` removed). Values compare by their
+/// canonical JSON (a text is the same text plain or secret). Fields neither knows survive; `history` itself merges by
+/// union. A tombstone on one side against an edit on the other keeps the edit whole (`deleted` recorded in its history, a
+/// conflict on `type`); against no edit the tombstone stands. Every value, history included, is then retyped by the merged item's table, so a secret's losing value stays a
+/// `Secret` (rule 25) and a body hidden on either side stays hidden (review C-3).
 pub fn merge(base: &Item, ours: &Item, theirs: &Item) -> Merge {
+    // a tombstone on one side: an edit on the other is kept whole, the deletion recorded; else the tombstone stands
+    if (ours.ty == "deleted") != (theirs.ty == "deleted") && base.ty != "deleted" {
+        let edit = if ours.ty == "deleted" { theirs } else { ours };
+        if edit.ty == base.ty && edit.fields == base.fields {
+            return Merge::Clean(Item::deleted());
+        }
+        let mut kept = edit.clone();
+        kept.history.push(Change {
+            field: "type".into(),
+            value: Field::Plain(Value::String("deleted".into())),
+        });
+        return Merge::Conflict(kept, vec!["type".into()]);
+    }
     let all = |x: &Item| {
         let mut m: BTreeMap<String, Field> = x.fields.clone();
         m.insert("type".into(), Field::Plain(Value::String(x.ty.clone())));
@@ -588,11 +671,26 @@ pub fn merge(base: &Item, ours: &Item, theirs: &Item) -> Merge {
         Some(Field::Plain(Value::String(s))) => s,
         _ => ours.ty.clone(),
     };
-    let item = Item {
+    let mut item = Item {
         ty,
         fields: out,
         history,
     };
+    let fields: Vec<(String, Field)> = item
+        .fields
+        .iter()
+        .map(|(k, v)| (k.clone(), v.retyped(item.class(k))))
+        .collect();
+    item.fields = fields.into_iter().collect();
+    let history: Vec<Change> = item
+        .history
+        .iter()
+        .map(|h| Change {
+            field: h.field.clone(),
+            value: h.value.retyped(item.class(&h.field)),
+        })
+        .collect();
+    item.history = history;
     if conflicts.is_empty() {
         Merge::Clean(item)
     } else {
@@ -611,9 +709,8 @@ mod tests {
     }
     fn text(f: &Field) -> String {
         match f {
-            Field::Secret(s) | Field::Opaque(s) => {
-                s.with(|b| String::from_utf8(b.to_vec()).unwrap())
-            }
+            Field::Secret(s) => s.with(|b| String::from_utf8(b.to_vec()).unwrap()),
+            Field::Opaque(o) => String::from_utf8(o.to_vec()).unwrap(),
             Field::Plain(v) => v.to_string(),
             Field::Custom(c) => format!("{c:?}"),
         }
@@ -720,12 +817,17 @@ mod tests {
             content::canonical(&v).unwrap().as_bytes()
         );
         assert_eq!(text(&it.fields["password"]), all);
-        let dbg = format!("{it:?}");
+        let dbg = format!("{it:?} {:?} {:?}", it.fields["password"], it.fields);
         assert!(
             !dbg.contains("https://a") && !dbg.contains("\\u0001") && !dbg.contains('é'),
             "{dbg}"
         );
-        assert!(dbg.contains("password") && dbg.contains("Secret"), "{dbg}");
+        assert!(dbg.contains("Secret"), "{dbg}");
+        assert_eq!(
+            format!("{it:?}"),
+            "Item(3 fields, 0 history)",
+            "counts only (CLI-PQV-03)"
+        );
         assert_eq!(
             Item::from_canonical(b"{\"title\":\"t\", \"type\":\"login\"}"),
             Err(Bad::Unreadable)
@@ -790,5 +892,213 @@ mod tests {
         assert!(!format!("{m:?}").contains("p2"));
         let clean = merge(&base, &ours, &base);
         assert_eq!(clean, Merge::Clean(ours.clone()));
+    }
+
+    /// Review C-8 / F-5: the escaper writes every character as serde_json does (the known answer is serde_json's own
+    /// writer, not the escaper again), and `unescape` reads it back.
+    #[test]
+    fn the_escaper_is_serde_jsons() {
+        let mut all: Vec<String> = (0u32..0x80)
+            .map(|c| char::from_u32(c).unwrap().to_string())
+            .collect();
+        all.extend(["é", "\u{2028}", "\u{FFFF}", "\u{1F600}", "a\"b\\c"].map(String::from));
+        for t in all {
+            let mut out = Out::new();
+            content::escape(t.as_bytes(), &mut out).unwrap();
+            assert_eq!(
+                out.bytes(),
+                serde_json::to_string(&t).unwrap().as_bytes(),
+                "{t:?}"
+            );
+            let inner = &out.bytes()[1..out.bytes().len() - 1];
+            assert_eq!(
+                &content::unescape(inner).unwrap()[..],
+                t.as_bytes(),
+                "{t:?}"
+            );
+        }
+    }
+
+    /// Review C-1: a kept part is canonical JSON too, as the whole item was before (inner whitespace, key order, a float,
+    /// duplicate keys, a depth past 8 for the whole item: `Unreadable`); the twin canonical part reads.
+    #[test]
+    fn a_kept_part_is_canonical() {
+        let ok = br#"{"title":"t","type":"login","x":{"a":2,"b":[1]}}"#;
+        assert!(Item::from_canonical(ok).is_ok());
+        for bad in [
+            &br#"{"title":"t","type":"login","x":{"b":1,"a":2}}"#[..],
+            br#"{"title":"t","type":"login","x":{"a": 2}}"#,
+            br#"{"title":"t","type":"login","x":1.5}"#,
+            br#"{"title":"t","type":"login","x":{"a":1,"a":1}}"#,
+            br#"{"title":"t","type":"login","x":[[[[[[[[1]]]]]]]]}"#,
+            br#"{"password":{"b":1,"a":2},"title":"t","type":"login"}"#,
+        ] {
+            assert_eq!(
+                Item::from_canonical(bad),
+                Err(Bad::Unreadable),
+                "{}",
+                String::from_utf8_lossy(bad)
+            );
+        }
+        // seven levels under the item is the most (the item itself is the eighth)
+        assert!(
+            Item::from_canonical(br#"{"title":"t","type":"login","x":[[[[[[[1]]]]]]]}"#).is_ok()
+        );
+    }
+
+    /// Review C-2: what the reader keeps, it writes back as it was (spec §6.8 "kept verbatim on edit"): a `null`, a
+    /// secret-class field that is no text, a custom list of a newer shape, an empty history, a history of another shape,
+    /// unknown fields (their keys in UTF-16 order).
+    #[test]
+    fn what_is_kept_is_written_back() {
+        for b in [
+            &br#"{"password":null,"title":"t","type":"login","x-new":null}"#[..],
+            br#"{"password":{"v":2},"title":"t","type":"login"}"#,
+            br#"{"fields":[{"kind":"pin","name":"a","value":"1"}],"title":"t","type":"login"}"#,
+            br#"{"history":[],"title":"t","type":"login"}"#,
+            br#"{"history":[{"at":1,"field":"title","value":"a"}],"title":"t","type":"login"}"#,
+            "{\"title\":\"t\",\"type\":\"login\",\"x-new\":{\"a\":[1,\"s\"]},\"\u{1F600}\":1,\"\u{FF5E}\":2}"
+                .as_bytes(),
+        ] {
+            let it = Item::from_canonical(b).unwrap();
+            assert_eq!(it.check(), Ok(()), "{}", String::from_utf8_lossy(b));
+            assert_eq!(&it.canonical().unwrap()[..], b, "byte for byte");
+        }
+    }
+
+    /// Review C-5: the history is typed and checked on write: a kept part there must be canonical JSON, a secret UTF-8, a
+    /// secret's earlier value no plain text; the twin passes.
+    #[test]
+    fn history_is_checked() {
+        let mut it = of(json!({"type": "login", "title": "t", "password": "p"}));
+        it.history.push(Change {
+            field: "password".into(),
+            value: Field::secret(b"p0").unwrap(),
+        });
+        assert_eq!(it.check(), Ok(()));
+        let with = |value: Field, field: &str| {
+            let mut bad = it.clone();
+            bad.history.push(Change {
+                field: field.into(),
+                value,
+            });
+            bad.check()
+        };
+        let not_json = Field::Opaque(Arc::new(Zeroizing::new(b"{not json".to_vec())));
+        assert_eq!(with(not_json, "x"), Err(Bad::Shape));
+        assert_eq!(
+            with(Field::secret(&[0xff, 0xfe]).unwrap(), "password"),
+            Err(Bad::Shape)
+        );
+        assert_eq!(
+            with(Field::Plain(json!("p0")), "password"),
+            Err(Bad::Shape),
+            "a secret's earlier value given as plain"
+        );
+        assert_eq!(with(Field::Plain(json!("a")), "title"), Ok(()));
+    }
+
+    /// Review C-3: a `hideBody` change on one side and a body edit on the other merge cleanly, the body hidden; both
+    /// editing the body under a hide keep the losing body secret; a tombstone against an edit keeps the edit.
+    #[test]
+    fn merge_retypes_by_the_merged_table() {
+        let note = |hide: bool, body: &str| {
+            of(
+                json!({"type": "note", "title": "n", "mediaType": "text/plain", "hideBody": hide, "body": body}),
+            )
+        };
+        let base = note(false, "b0");
+        for (ours, theirs) in [
+            (note(false, "b1"), note(true, "b0")),
+            (note(true, "b0"), note(false, "b1")),
+        ] {
+            let Merge::Clean(m) = merge(&base, &ours, &theirs) else {
+                panic!("a hide and an edit do not conflict")
+            };
+            assert!(
+                matches!(m.fields["body"], Field::Secret(_)),
+                "the body hidden"
+            );
+            assert_eq!(text(&m.fields["body"]), "b1");
+            assert_eq!(m.check(), Ok(()));
+        }
+        for (ours, theirs) in [
+            (note(false, "b1"), note(true, "b2")),
+            (note(true, "b1"), note(false, "b2")),
+        ] {
+            let Merge::Conflict(m, f) = merge(&base, &ours, &theirs) else {
+                panic!()
+            };
+            assert_eq!(f, vec!["body".to_string()]);
+            assert!(matches!(m.fields["body"], Field::Secret(_)));
+            assert_eq!(text(&m.fields["body"]), "b1", "ours kept");
+            assert!(
+                matches!(m.history[0].value, Field::Secret(_)),
+                "the losing body secret"
+            );
+            assert_eq!(m.check(), Ok(()));
+        }
+        let login = |pw: &str| of(json!({"type": "login", "title": "t", "password": pw}));
+        let Merge::Conflict(m, f) = merge(&login("p0"), &login("p1"), &Item::deleted()) else {
+            panic!()
+        };
+        assert_eq!(f, vec!["type".to_string()]);
+        assert_eq!(m.ty, "login");
+        assert_eq!(text(&m.fields["password"]), "p1");
+        assert_eq!(m.check(), Ok(()));
+        let back = Item::from_canonical(&m.canonical().unwrap()).unwrap();
+        assert!(
+            matches!(back.history[0].value, Field::Plain(_)),
+            "a type in history reads back plain"
+        );
+        assert_eq!(
+            merge(&login("p0"), &login("p0"), &Item::deleted()),
+            Merge::Clean(Item::deleted())
+        );
+    }
+
+    /// Review C-4: at most SECRETS_MAX secrets are opened per item; the twin at the bound reads.
+    #[test]
+    fn secrets_per_item_are_bounded() {
+        let at = |n: usize| {
+            let h: Vec<Value> = (0..n)
+                .map(|i| json!({"field": "password", "value": format!("p{i}")}))
+                .collect();
+            content::canonical(&json!({"type": "login", "title": "t", "history": h})).unwrap()
+        };
+        assert!(Item::from_canonical(at(SECRETS_MAX).as_bytes()).is_ok());
+        assert_eq!(
+            Item::from_canonical(at(SECRETS_MAX + 1).as_bytes()),
+            Err(Bad::Unreadable)
+        );
+    }
+
+    /// Review C-11: the custom fields' bounds and the writer's 16 KiB cap.
+    #[test]
+    fn custom_bounds_and_the_cap() {
+        let custom = |n: usize, name: &str| {
+            let mut it = Item::new("login");
+            it.set("title", Field::Plain(json!("t"))).set(
+                "fields",
+                Field::Custom(
+                    (0..n)
+                        .map(|_| Custom {
+                            name: name.into(),
+                            value: Field::Plain(json!("v")),
+                        })
+                        .collect(),
+                ),
+            );
+            it.check()
+        };
+        assert_eq!(custom(CUSTOM_MAX, "a"), Ok(()));
+        assert_eq!(custom(CUSTOM_MAX + 1, "a"), Err(Bad::Shape));
+        assert_eq!(custom(1, &"a".repeat(CUSTOM_NAME_MAX + 1)), Err(Bad::Shape));
+        assert_eq!(custom(1, ""), Err(Bad::Shape));
+        let mut big = Item::new("note");
+        big.set("title", Field::Plain(json!("t")))
+            .set("mediaType", Field::Plain(json!("text/plain")))
+            .set("body", Field::Plain(json!("x".repeat(16_384))));
+        assert_eq!(big.canonical().map(|_| ()), Err(Bad::Shape));
     }
 }

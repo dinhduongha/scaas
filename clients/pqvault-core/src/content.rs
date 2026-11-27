@@ -116,7 +116,13 @@ pub(crate) fn unescape(s: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
 
 /// `v`'s canonical JSON into `out`: `Shape` for a number that is not a safe integer or a value nesting deeper than 8.
 pub(crate) fn write_value(v: &Value, out: &mut Out) -> Result<(), Bad> {
-    if !depth_ok(v, 0) {
+    write_value_at(v, 0, out)
+}
+
+/// [`write_value`] of a value nested `d` levels inside the document (an item's field at 1, a history value at 3): the whole
+/// document nests at most 8 (review C-7).
+pub(crate) fn write_value_at(v: &Value, d: usize, out: &mut Out) -> Result<(), Bad> {
+    if !depth_ok(v, d) {
         return Err(Bad::Shape);
     }
     write(v, out)
@@ -330,6 +336,15 @@ mod tests {
         assert_eq!(canonical(&json!({"n": 1.5})), Err(Bad::Shape));
         assert_eq!(canonical(&json!([[[[[[[[[1]]]]]]]]])), Err(Bad::Shape));
         assert_eq!(canonical(&json!([[[[[[[[1]]]]]]]])).map(|_| ()), Ok(()));
+    }
+
+    /// Review C-9: integer-like keys sort by UTF-16 code units too; clientkeys' `canonicalJson` writes the same string.
+    #[test]
+    fn integer_like_keys_in_utf16_order() {
+        assert_eq!(
+            canonical(&json!({"2": 2, "10": 1, " ": 3, "a": 4})).as_deref(),
+            Ok("{\" \":3,\"10\":1,\"2\":2,\"a\":4}")
+        );
     }
 
     #[test]
