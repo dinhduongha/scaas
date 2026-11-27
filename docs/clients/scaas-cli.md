@@ -1,9 +1,9 @@
 # `scaas`: the command line over `scaas-sdk`
 
-`scaas` is the command line of the SDK: one command per SDK call, a thin client with no logic of its own, and the reference
-client of the SDK's end-to-end tests. Status: **BUILT** where a section says so (plan T22 of the SDK plan and its gaps of
-2026-11-21; crate `clients/scaas-cli`, binary `scaas`), the rest SPECIFIED or PLANNED. Design, reasons and the owner's open
-questions: spec [2026-11-27-scaas-cli.md](../superpowers/specs/2026-11-27-scaas-cli.md), whose appendix lists every command;
+`scaas` is the command line of the SDK and, PLANNED, of the app cores above it: one command per call, a thin client with no
+logic of its own, and the reference client of the SDK's end-to-end tests. Status: **BUILT** where a section says so (plan T22 of the SDK plan and its gaps of
+2026-11-21; crate `clients/scaas-cli`, binary `scaas`), the rest SPECIFIED or PLANNED. Design, reasons and the owner's
+rulings of 2026-11-27 on its questions: spec [2026-11-27-scaas-cli.md](../superpowers/specs/2026-11-27-scaas-cli.md), whose appendix lists every command;
 the means are the T22 controller calls under [CLI-SDK-17](../decisions.md#cli-sdk-17--the-cli-scaas-is-a-thin-client-of-the-sdk)
 in decisions.md. UNAUDITED.
 
@@ -20,12 +20,17 @@ in decisions.md. UNAUDITED.
 
 ## 1. Scope
 
-<a id="CLI-SDK-17"></a>**CLI-SDK-17** — **The CLI `scaas` is a thin client of the SDK** (BUILT: `clients/scaas-cli`, tests
-`clients/scaas-cli/tests/cli.rs`, `tests/e2e.rs`; the means are the T22 controller calls in decisions.md, CLI-SDK-17). One subcommand per SDK call, named
+<a id="CLI-SDK-17"></a>**CLI-SDK-17** — **The CLI `scaas` is a thin client of the SDK and of the app cores above it** (BUILT
+for the SDK: `clients/scaas-cli`, tests `clients/scaas-cli/tests/cli.rs`, `tests/e2e.rs`; the means are the T22 controller
+calls in decisions.md, CLI-SDK-17; PLANNED for the app cores, owner 2026-11-27, §8). One subcommand per SDK call or app-core call, named
 flags, JSON or a table; it shows the review and the quote and asks before submitting. Passphrases, words and keys come from the
 terminal without echo or from a file descriptor, never from the command line or the environment; nothing secret is printed except a
 new seed's one reveal. It shares its data directory with the TUI and the app under the keystore's lock, holds no logic of its own and
-serves as the reference client of the SDK's end-to-end tests. Its profiles are pinned (owner 2026-11-17): compiled in or digest-pinned in a release build; a profile file only in a development build that says so on every run; an overlay may add a credential by file and lower caps, never change a `chain_uid`, a contract or an RPC list. It shares its call and action names with `scaas-tui`; neither calls the other.
+serves as the reference client of the SDK's end-to-end tests. Its profiles are pinned (owner 2026-11-17): compiled in or digest-pinned in a release build; a profile file only in a development build that says so on every run; an overlay may add a credential by file and lower caps, never change a `chain_uid`, a contract or an RPC list; a release build compiles in the profiles of the chains
+[chain-support.md](../networks/chain-support.md) marks for release (owner 2026-11-27). It links the app cores `pqvault-core` and
+`pqchat-core`, each behind its own feature, and `scaas-matrix` for PqChat's Matrix transport (owner 2026-11-27); every app-core
+write is signed only after the confirm ([CLI-SDK-36](../decisions.md#CLI-SDK-36)). It shares its call and action names with
+`scaas-tui`; neither calls the other.
 
 The interactive front-end over the same SDK is `scaas-tui` ([CLI-TUI-01](scaas-tui.md#CLI-TUI-01)); the CLI runs one call per
 command, or one per line in a session. Where the CLI sits among the client crates: [stack.md](stack.md).
@@ -56,17 +61,34 @@ their reason. One table in `src/calls.rs` produces the dispatch, that list and t
   …]` names what the line returns (a prepared operation, registry writes, an order, a quote, an app key, a subscription, a seed
   backup), and later lines pass it by that name. An `op` command in a session keeps its object instead of submitting it; the
   confirm reads the terminal (`/dev/tty`), and with no terminal it refuses (`NoTerminal`). Objects never cross processes,
-  except the hand-off blob (`op hand-off`, `op import-signed`).
+  except the hand-off blob (`op hand-off`, `op import-signed`). An air-gapped signer uses that blob, which the payee imports,
+  quotes and submits; the CLI has no other offline format (owner 2026-11-27).
 - **The send.** A submitted operation is followed to its state by the SDK's event, at most 30 s; an operation ends only on a
   chain fact ([CLI-SDK-18](scaas-sdk.md#CLI-SDK-18)); `op state` follows it later and `op resume` sends a row not yet sent.
+- **Shell completion** (PLANNED; owner 2026-11-27). `scaas completions <shell>` for bash, zsh and fish, generated from the same
+  `calls!` table, with a test that every command appears in each; it carries no logic and no secret.
+- **`pqvault`, `pqchat`, `pqchat topic`** (PLANNED; owner 2026-11-27; §8). One command per call of `pqvault-core` and
+  `pqchat-core`, named flags, `--json`, the confirm classes above; every write prepared, shown (review and quote) and signed
+  only after the confirm. Chat commands are non-interactive (send, list sessions, read a page, sync once); a long-running
+  chat UI stays `scaas-tui`'s. Public topics (on chain, no Matrix) are included.
 
 ## 3. Output, errors and exit codes
 
 **BUILT.** With `--json` every output is one JSON object on one line on stdout: an SDK type's `serde` form (named fields, the
 SDK's own types) or a named result (`{"ok": true}`, `{"op": …, "state": …}`, `{"handle": …}`). Without it, named rows
 `a.b: value`, one per leaf, with anything outside printable ASCII drawn as `\u{…}`. One output is at most 1 MiB, else
-`OutputTooLarge` and nothing is printed. The JSON is not versioned apart from the SDK (`sdk api-version`); the spec's Q1
-proposes the rule.
+`OutputTooLarge` and nothing is printed.
+
+<a id="CLI-CMD-02"></a>**CLI-CMD-02** — **The CLI's `--json` is the SDK's API, versioned by `Sdk::api_version()`'s minor**
+(owner 2026-11-27; SPECIFIED). There is no separate CLI schema. Any change to the JSON's shape (a field added, renamed or
+removed, or a type changed) moves the minor of `Sdk::api_version()` and is listed in the commit; the major moves only on an
+explicit owner decision for a large change. A script reads `sdk api-version` first. **The version is a pair**
+(owner 2026-11-27): `Sdk::api_version()` returns `{major, minor}`, starting at `1.0` (`sdk api-version` prints `1.0`); it stays
+`1.0` until the first release (the 2026-11-18 ruling that kept it at 1), and this rule applies from that release on; a binding
+refuses only a different major, the minor is information (a binding is generated in the same build as the SDK). Not built yet:
+today `Sdk::api_version()` is one `u32` (`API_VERSION = 1`, which a binding must equal), and no test sees a shape change. The
+proposed check: a field-set snapshot of each command's `--json` output in the CLI's tests, failing on any added, renamed, removed or
+retyped field unless the minor moved with it.
 
 <a id="CLI-CMD-01"></a>**CLI-CMD-01** — **A refusal is a named code on stderr and a fixed exit code** (BUILT: `src/main.rs`
 `main`; tests `tests/cli.rs` `one_command_per_sdk_call_both_ways` (exit 2), `json_output_has_named_fields` (the named code)).
@@ -95,7 +117,10 @@ printed otherwise: an app key is a handle that is never readable, and `vault sig
   yet. A `dev-profiles` build takes `--profiles <file>` (at most 64 KiB) and prints on every run a banner with the file's
   SHA-256, or that it runs the release profiles. A profile without a finality (the tag or a depth) is `ProfilesRefused`.
   The second pinned form of CLI-SDK-17, a profile file shipped beside the binary with a digest it pins, is SPECIFIED, not
-  built.
+  built, and stays unbuilt until a packager asks for it (owner 2026-11-27).
+- **A release's profiles** (SPECIFIED; owner 2026-11-27). A release build compiles in the profiles of the chains
+  [chain-support.md](../networks/chain-support.md) marks for release. Gap: `profiles/release.json` holds no profile, and
+  chain-support.md marks no chain for release yet.
 - **Overlay.** `--overlay <file>`, else `$XDG_CONFIG_HOME/scaas/overlay.json` when present: JSON, unknown fields refused, at
   most 64 KiB. It may only lower `limits` and add `credentials` per endpoint label, by a file (refused when group- or
   world-readable) or an environment variable's name, never a value; it has no field for a `chain_uid`, a contract or an
@@ -112,7 +137,8 @@ set, `n2304-kmax4096`), `dex`, `admin`, `classical-roots`, `app-core`, `pqchat-r
 without defaults. It never links `raw-native` or `opaque-calls` (no input that signs undecoded bytes, as
 [CLI-TUI-17](scaas-tui.md#CLI-TUI-17)), `vectors` (the SDK's test feature, refused by `scripts/check_test_features.py`) or
 `arweave` (a permanent public upload, [CLI-SDK-21](scaas-sdk.md#CLI-SDK-21)); the SDK calls those features add are listed by
-`scaas commands` as excluded. Its own feature `dev-profiles` enables `--profiles` (§5). The CLI configures no `Authenticator`,
+`scaas commands` as excluded. Its own feature `dev-profiles` enables `--profiles` (§5). PLANNED (owner 2026-11-27): one feature
+each for `pqvault-core` and `pqchat-core`, the latter with `scaas-matrix` and `pqchat-transport`. The CLI configures no `Authenticator`,
 so passkey and platform unlock have nothing to answer them.
 
 ## 7. Tests
@@ -132,6 +158,12 @@ and what is not covered: the spec's §7.
   ([CLI-UPR-01](scaas-sdk.md#CLI-UPR-01)), one per call as any other; the spec's §6.
 - **`SignReview`** (PLANNED, after the pre-freeze tag): the confirm prints the SDK's `SignReview`
   ([CLI-SDK-35](../decisions.md#CLI-SDK-35)) instead of today's review rows.
-- **The digest-pinned profile file** (SPECIFIED, §5) and **release profiles** (none shipped yet).
-- **PqVault and PqChat flows**: the CLI exposes the SDK's `AppCore` calls only; the app cores themselves are not linked (the
-  spec's Q2).
+- **The digest-pinned profile file** (SPECIFIED, unbuilt until a packager asks, §5) and **release profiles** (SPECIFIED, §5:
+  none shipped yet; chain-support.md marks no chain for release).
+- **JSON stability** (SPECIFIED, [CLI-CMD-02](#CLI-CMD-02)): the minor of `Sdk::api_version()` and the field-set snapshot test.
+- **Shell completion** (PLANNED, §2).
+- **PqVault and PqChat commands** (PLANNED, §2; owner 2026-11-27): the CLI links `pqvault-core`, `pqchat-core` and
+  `scaas-matrix` (one Matrix client per open user profile, [CLI-PQC-20](../decisions.md#CLI-PQC-20),
+  [CLI-UPR-29](../decisions.md#CLI-UPR-29)). Order (controller call, the owner may veto): after `pqvault-core`'s
+  sign-after-confirm (branch `pqvault-ui-rules`), the `pqchat-core` round (CLI-SDK-36, G3, F6) and `scaas-matrix` have landed
+  on `dev`; built after the pre-freeze tag, before the freeze. Today the CLI exposes the SDK's `AppCore` calls only.

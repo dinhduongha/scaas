@@ -349,6 +349,17 @@ contract's are under [CLI-SDK-08](#CLI-SDK-08); `PqVault`'s records have two sig
 `verify_pqvault_record`, and no other PqVault logic (owner 2026-11-22, [CLI-PQV-13](../decisions.md#CLI-PQV-13)). scaas-app's one
 library is `app-core-rust` (scaas-app's contract section 12), with the features `native-core` (on by default), `scaas`,
 `pqchat` and `pqvault` (each implying `scaas`); the SDK defines no aggregating crate.
+**`PqChat`'s tree mode** (BUILT, plan 2026-11-23-pqchat-treekem T5, `src/pqchat_tree.rs`, feature `pqchat-records`; spec
+§8, §10, §13, §15; UNAUDITED): thin calls over `ua-rs`'s tree, each a function of the reads it is given (`PqTreeReads`: the
+home's views by `ua-rs`'s names and the registry's records) that names every read it missed (`PqTreeStep::Need`):
+`pqchat_tree_genesis` (creation in order, each member key authenticated by its registry record) with
+`prepare_pqchat_tree_session`; `pqchat_tree_prepare_commit` (built, reviewed, then signed once: the record, its pieces and
+`K_e`'s handle); `prepare_pqchat_tree_leave` / `_remove`; `pqchat_tree_replay` / `_resume` (the epochs' states, `K` handles,
+rosters, warnings and the pin; the node keys held inside `ua-rs`); `pqchat_tree_registry` (the registry's records a call
+missed, `kemKeyAt` with its kept signature, read at the final block as reads that feed a decryption; codex-1); the plan of a
+commit in C37's order and of a creation in one transaction from the chain's gas rows (`plan_commit`, `next_send`,
+`create_cap`, `pqchat_tree_limits`; rows as data, `gas/pqchat-tree.json` the forge reference; [CTR-CHAT-27](../decisions.md#ctr-chat-27--the-tree-modes-checks-and-bounds-controller-calls)'s Change of 2026-11-26).
+No tree logic, no key byte and no "rejoin" call in the SDK.
 
 <a id="CLI-SDK-20"></a>**CLI-SDK-20** — **The `app_core` surface gives an app core account handles, app record signing on
 both paths, record verification, key handles, random bytes, reads and relayed submission, under two conditions: secrets
@@ -384,7 +395,10 @@ named JSON (outputs and tuple components by name, integers as decimal strings, b
 (entry 64 KiB, arguments 128 KiB, answer 1 MiB, output types nesting at most 16 levels: `Argument`), as a read that feeds a
 decryption by default (`read_app`; `read_app_plain` for a read that never feeds one, T26 B-17); `read_app_agreed`, the same
 read as an agreed read (CLI-RPC-05) whatever the chain's list policy, an app core's explicit option, also a read that feeds a
-decryption (CTR-CHAT-23 (d), owner 2026-11-23; `src/app_core/agreed.rs`, BUILT on `pqchat-sigs`). PqChat's key entries
+decryption (CTR-CHAT-23 (d), owner 2026-11-23; `src/app_core/agreed.rs`, BUILT on `pqchat-sigs`). `read_app_agreed_named`
+is that agreed read over the chain's named endpoints only (scaas-rpc `read_at_block_agreed_named`: at least 3 named, else
+`AgreementNeedsThree`), the read the TreeKEM ruling 13 asks for; `read_app_latest` is `read_app` at the latest block instead of
+the final one, for what a sender already landed (C37); both BUILT, UNAUDITED (the TreeKEM T4-T9 review's D-4, D-14). PqChat's key entries
 (`pqchat_*`, feature `pqchat-records`) are thin calls of `ua-rs`
 `pqchat_keys` on the scope's handles, only in a scope that declared `scaas/pqchat/v1/` (`AppLabelRefused`); the signing ones
 take the sender, creator or author from the account and never a digest or a ciphertext of the caller's. PqChat's record

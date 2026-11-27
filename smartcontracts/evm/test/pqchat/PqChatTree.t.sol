@@ -42,7 +42,7 @@ contract TreeHarness is PqChatCore {
     }
 
     function open(bytes32 gid, uint256 used, bytes32[] calldata admins) external {
-        _treeOpen(gid, keccak256(abi.encode(gid)), used, admins);
+        _treeOpen(gid, keccak256(abi.encode(gid)), used, admins, 0);
     }
 
     function setLeaf(IUARegistry reg, bytes32 gid, uint256 i, bytes32 ua, uint64 keyId) external returns (bool) {
@@ -65,6 +65,7 @@ contract TreeHarness is PqChatCore {
     function poke(bytes32 gid, bytes32 ua, bytes32 kemHash) external {
         Tree storage t = _tree(gid);
         (t.genesisTreeHash, t.head, t.owed) = (bytes32(uint256(0x61)), bytes32(uint256(0x62)), 5);
+        (t.sincePath, t.pathBound) = (9, 11); // the path-less delta's C44, slot 3
         t.nodeAt[3] = Node(bytes32(uint256(0x63)), 0x64);
         t.gone[ua] = Gone(2, 7);
         t.goneOwnKey[ua][kemHash] = GoneKey(3, 7, true);
@@ -633,7 +634,7 @@ contract PqChatTreeTest is PqChatBase {
             uint256(hs), // treeId (the clone)
             0x61, // genesisTreeHash
             0x62, // head
-            2 | 2 << 32 | 5 << 64, // used | leaves | owed
+            2 | 2 << 32 | 5 << 64 | 9 << 96 | 11 << 128, // used | leaves | owed | sincePath | pathBound
             uint256(ua), // leafAt[0].ua
             1 << 160, // leafAt[0]: keyId 0, joinEpoch 0, wrapIndex 0, live
             0x63, // nodeAt[3].hash

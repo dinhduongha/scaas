@@ -1,0 +1,5 @@
+# p4 mutants at commit 2df5f28b1 (name | outcome | test)
+a targets hash for ctCount 0 | killed | PATH=$HOME/.foundry/bin:$PATH FOUNDRY_TEST=test/pqchat FOUNDRY_SCRIPT=test/pqchat ../../scripts/capped forge test -j 1 --match-path 'test/pqchat/PqChat{TreePathless,GroupMode,TreeViews,Types}.t.sol'
+equality replaced by _keepsAdmins (a gone head admin dropped) | killed | PATH=$HOME/.foundry/bin:$PATH FOUNDRY_TEST=test/pqchat FOUNDRY_SCRIPT=test/pqchat ../../scripts/capped forge test -j 1 --match-path 'test/pqchat/PqChat{TreePathless,GroupMode,TreeViews,Types}.t.sol'
+the counter moved at acceptance | killed | PATH=$HOME/.foundry/bin:$PATH FOUNDRY_TEST=test/pqchat FOUNDRY_SCRIPT=test/pqchat ../../scripts/capped forge test -j 1 --match-path 'test/pqchat/PqChat{TreePathless,GroupMode,TreeViews,Types}.t.sol'
+3 mutants, 3 killed, 0 survived (0 killed elsewhere), 0 not loaded

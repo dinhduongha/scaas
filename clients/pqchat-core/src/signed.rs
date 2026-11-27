@@ -19,6 +19,8 @@ pub const EXIT_LAG_MAX: u64 = 16;
 pub const REMOVE_MAX: usize = 16;
 
 /// A `UASig` as the SDK's named JSON gives a view's tuple (`keyData`, `signature`, `members` with `index`, `members`, `sig`).
+/// Rust-only (the bindings check: the SDK's `AppUaSig` is no type of the generated surface).
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub fn ua_sig(v: &Value) -> Result<AppUaSig, DropReason> {
     let d = |_| DropReason::Decode;
     let u16_of = |x: &Value| -> Result<u16, DropReason> {
@@ -102,6 +104,7 @@ impl PqChat {
     /// The record `rec` (the struct `name`'s fields by name, as the view gave them) counts only when `ua`'s signature read by
     /// the view `sig.0` with the arguments `sig.1` verifies over its typed digest (V1, the signer's registry record a trusted
     /// read); else `signature`.
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub async fn verify_kept(
         &self,
         chain: &str,

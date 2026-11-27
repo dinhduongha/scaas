@@ -148,7 +148,7 @@ const NESTED: &[(&str, &str)] = &[
     // the op of that name
     ("MemberKey", "bytes32 ua,uint64 keyId,bytes32 via"),
     ("Wrap", "bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey"),
-    ("PqChatSession", "bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode"),
+    ("PqChatSession", "bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode,uint32 pathRefreshBound,bytes32 confirmTag"),
     ("PqChatEpoch", "bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
     ("PqChatLeave", "bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce"),
     ("PqChatRemove", "bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce"),
@@ -164,7 +164,7 @@ const NESTED: &[(&str, &str)] = &[
     // `ctListHash`, never sent whole; the rows' lists at the contract's bounds ([`tree_lists`], [`tree_shape`])
     ("TreeAdd", "uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash"),
     ("TreeRemove", "uint32 leaf,bytes32 ua,uint64 keyId"),
-    ("PqChatCommit", "bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo"),
+    ("PqChatCommit", "bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo,bool pathless,bytes32 confirmTag"),
     ("PathList", "uint32[] ctTargets,bytes32[] ctHashes"),
     ("PathCt", "bytes mlkemCt,bytes32 x25519Eph,bytes sealedSecret"),
     ("PqChatTreeLeave", "bytes32 sessionId,bytes32 treeId,bytes32 epochId,bytes32 member,uint64 nonce"),
@@ -929,6 +929,8 @@ const TREE_LEAVES_MAX: u64 = 512; // R8: 256 -> 512 (owner 2026-11-25), depth 9
 const TREE_ADMINS_MAX: usize = 32;
 const TREE_CHANGES_MAX: usize = 20; // C10: 32 -> 20 (owner 2026-11-25)
 const TREE_INFO_MAX: usize = 4124;
+/// C41 (the path-less delta §3.1): the largest `pathRefreshBound` that can bind, `TREE_LEAVES_MAX − 2`.
+const PATH_REFRESH_BOUND_MAX: u64 = TREE_LEAVES_MAX - 2;
 const TREE_DEPTH_MAX: usize = 9;
 const TREE_CTS_MAX: usize = TREE_LEAVES_MAX as usize - 1;
 /// A node key (`0x01 ‖ ek ‖ pk_X`), a path ciphertext's ML-KEM ciphertext and its sealed secret.
@@ -1046,6 +1048,13 @@ fn tree_shape(entry: &str, fields: &[(String, String)], vals: &[Val]) -> Result<
             if len(at("wraps")) > adds {
                 return bad("wraps: at most one per add");
             }
+            // the path-less delta §5.1 items 2, 3 (C42, R19), the stateless part: Adds only and no path; the head's admins,
+            // `owed` and the bound need the chain's state and are the contract's
+            if matches!(cv("pathless"), Some(Val::Bool(true)))
+                && (adds == 0 || keys != 0 || ct_count != 0 || len(cv("removes")) != 0)
+            {
+                return bad("c.pathless: Adds only, no nodeKeyHashes, ctCount 0 and no removes");
+            }
         }
         "addPathList" => {
             let n = len(at("ctTargets"));
@@ -1078,6 +1087,19 @@ fn tree_shape(entry: &str, fields: &[(String, String)], vals: &[Val]) -> Result<
             };
             let sf = &NESTED_MAP["PqChatSession"];
             let sv = |n: &str| pos(sf, n).map(|i| &t[i]);
+            // the path-less delta §3.1 (C41, C43): both 0 in mode 0, the bound at most 510 in mode 1
+            let bound = num(sv("pathRefreshBound"));
+            let tag_zero = sv("confirmTag")
+                .and_then(Val::as_fixed_bytes)
+                .is_some_and(|b| b.0.iter().all(|x| *x == 0));
+            if num(sv("groupMode")) == 0 && (bound != 0 || !tag_zero) {
+                return bad("s: pathRefreshBound and confirmTag 0 in mode 0");
+            }
+            if num(sv("groupMode")) == 1 && bound > PATH_REFRESH_BOUND_MAX {
+                return bad(&format!(
+                    "s.pathRefreshBound: above {PATH_REFRESH_BOUND_MAX} in a tree session"
+                ));
+            }
             if num(sv("groupMode")) == 1 {
                 if len(sv("members")) as u64 > TREE_LEAVES_MAX {
                     return bad(&format!(
@@ -3003,7 +3025,9 @@ pub mod testkit {
         let a = &mut o["args"];
         let b = |n: usize, x: u8| json!(format!("0x{}", alloy::hex::encode(vec![x; n])));
         if entry == "commit" {
-            (a["c"]["leaves"], a["c"]["ctCount"]) = (json!(2), json!(1));
+            // a path commit (the path-less delta C42: the sample's `true` would be a path-less commit with a path)
+            (a["c"]["leaves"], a["c"]["ctCount"], a["c"]["pathless"]) =
+                (json!(2), json!(1), json!(false));
         }
         for k in a
             .get_mut("nodeKeys")
@@ -5768,7 +5792,8 @@ mod tests {
         assert_eq!(n, 14);
         assert_eq!(
             format!("{:#x}", keccak256(th("PqChatSession"))),
-            "0x7e832d4c55dc2f6d4a77041b7000f7eb325d19c81a456b8e3844262dda62d911"
+            // the path-less delta (C41, C43: `pathRefreshBound`, `confirmTag`): 0x7e832d4c…62d911 -> 0xb7d1fba0…298dfa
+            "0xb7d1fba0c3c10705c0296f7869a15d1fa7868c4319e81d78e69294fc7e298dfa"
         );
         assert_eq!(
             format!("{:#x}", keccak256(th("PqTopic"))),
@@ -5910,7 +5935,8 @@ mod tests {
             struct TreeRemove { uint32 leaf; bytes32 ua; uint64 keyId; }
             struct PqChatCommit { bytes32 sessionId; bytes32 author; uint64 nonce; uint64 epoch; bytes32 parentEpochId; bytes32 treeId;
                 bytes32 parentTreeHash; uint32 leaf; uint64 keyId; uint32 leaves; bytes32[] admins; TreeRemove[] removes; TreeAdd[] adds;
-                bytes32[] wrapHashes; bytes32[] nodeKeyHashes; uint32 ctCount; bytes32 ctListHash; bytes32 treeHash; bytes sealedInfo; }
+                bytes32[] wrapHashes; bytes32[] nodeKeyHashes; uint32 ctCount; bytes32 ctListHash; bytes32 treeHash; bytes sealedInfo;
+                bool pathless; bytes32 confirmTag; }
             struct PathCt { bytes mlkemCt; bytes32 x25519Eph; bytes sealedSecret; }
             struct Wrap { bytes32 member; uint64 keyId; bytes mlkemCt; bytes32 x25519Eph; bytes sealedKey; }
             struct PqChatTreeLeave { bytes32 sessionId; bytes32 treeId; bytes32 epochId; bytes32 member; uint64 nonce; }
@@ -5943,7 +5969,8 @@ mod tests {
                 _ => same::<treeRemoveCall>(&p.data),
             };
             let forge = match entry {
-                "commit" => "9575f9cb",
+                // the path-less delta (C42, C43): 9575f9cb -> 1af1cd19 (`bool pathless`, `bytes32 confirmTag`)
+                "commit" => "1af1cd19",
                 "addPathList" => "0b9b356b",
                 "addPathKeys" => "de142cf8",
                 "addPath" => "44889230",
@@ -5963,6 +5990,20 @@ mod tests {
             );
         }
         let c = commitCall::abi_decode(&Op::parse(&tree_jobs()[0].1, FEE).unwrap().data).unwrap();
+        // fable-B-3 of the path-less review: the node's own copy (abi.rs, what `commitOf` decodes) is this struct
+        for (entry, job) in tree_jobs().iter().filter(|x| x.0 == "commit") {
+            use alloy::sol_types::SolValue;
+            let c = commitCall::abi_decode(&Op::parse(job, FEE).unwrap().data)
+                .unwrap()
+                .c;
+            let mine = <crate::abi::PqChatCommit as SolValue>::abi_decode(&c.abi_encode())
+                .unwrap_or_else(|e| panic!("{entry}: abi.rs's PqChatCommit: {e}"));
+            assert_eq!(
+                mine.abi_encode(),
+                c.abi_encode(),
+                "abi.rs's PqChatCommit is IPqChat's"
+            );
+        }
         let rec = &d["records"][0]["record"];
         assert_eq!(
             (
@@ -6293,7 +6334,12 @@ mod tests {
         };
         let leaves = TREE_LEAVES_MAX as usize;
         let tree = |a: &mut Value| a["s"]["groupMode"] = json!(1);
-        let flat = |a: &mut Value| a["s"]["groupMode"] = json!(0);
+        // mode 0 with the path-less fields at 0 (C41, C43), the sample's counter values refused there
+        let flat = |a: &mut Value| {
+            a["s"]["groupMode"] = json!(0);
+            a["s"]["pathRefreshBound"] = json!("0");
+            a["s"]["confirmTag"] = json!(format!("0x{}", "00".repeat(32)))
+        };
         pair(
             "createSession",
             &|a| {
@@ -6346,6 +6392,113 @@ mod tests {
             })
             .expect("mode 0: no tree bound");
         }
+        // the path-less delta §3.1 (C41, C43): in mode 0 the bound and the tag 0; in mode 1 the bound at most 510
+        let zero = json!(format!("0x{}", "00".repeat(32)));
+        let flat0 = |a: &mut Value| {
+            flat(a);
+            a["s"]["pathRefreshBound"] = json!("0");
+            a["s"]["confirmTag"] = zero.clone()
+        };
+        pair(
+            "createSession",
+            &flat0,
+            &|a| {
+                flat0(a);
+                a["s"]["pathRefreshBound"] = json!("1")
+            },
+            "s: pathRefreshBound and confirmTag 0 in mode 0",
+        );
+        pair(
+            "createSession",
+            &flat0,
+            &|a| {
+                flat0(a);
+                a["s"]["confirmTag"] = h(4)
+            },
+            "s: pathRefreshBound and confirmTag 0 in mode 0",
+        );
+        pair(
+            "createSession",
+            &|a| {
+                tree(a);
+                a["s"]["pathRefreshBound"] = json!("510")
+            },
+            &|a| {
+                tree(a);
+                a["s"]["pathRefreshBound"] = json!("511")
+            },
+            "s.pathRefreshBound: above 510 in a tree session",
+        );
+        // the stateless part of the delta §5.1 items 2, 3 (C42, R19): a path-less commit of Adds only, no path, no Remove
+        let pathless = |a: &mut Value| {
+            a["c"]["pathless"] = json!(true);
+            a["c"]["removes"] = json!([]);
+            a["c"]["adds"] = add(1);
+            a["c"]["wrapHashes"] = hs(1);
+            a["c"]["nodeKeyHashes"] = json!([]);
+            a["c"]["ctCount"] = json!("0");
+            for k in ["ctTargets", "ctHashes", "nodeKeys", "cts", "wraps"] {
+                a[k] = json!([]);
+            }
+        };
+        pair(
+            "commit",
+            &pathless,
+            &|a| {
+                pathless(a);
+                a["c"]["removes"] = rm(1)
+            },
+            "c.pathless: Adds only",
+        );
+        pair(
+            "commit",
+            &pathless,
+            &|a| {
+                pathless(a);
+                a["c"]["adds"] = json!([]);
+                a["c"]["wrapHashes"] = json!([])
+            },
+            "c.pathless: Adds only",
+        );
+        // a job on the old shape (no `pathRefreshBound`, no `pathless`): refused by the field's name (an operators' note)
+        for (entry, rec, field) in [
+            ("createSession", "s", "pathRefreshBound"),
+            ("commit", "c", "pathless"),
+        ] {
+            let e = run(entry, &|a| {
+                a[rec].as_object_mut().map(|o| o.remove(field));
+            })
+            .unwrap_err();
+            assert!(e.contains(field), "{entry}: {e}");
+        }
+        // a node key or ciphertexts on a path-less record: refused by the path's shape (none exactly when no ciphertext)
+        let shapes: [&dyn Fn(&mut Value); 2] = [
+            &|a: &mut Value| a["c"]["nodeKeyHashes"] = hs(1),
+            &|a: &mut Value| a["c"]["ctCount"] = json!("1"),
+        ];
+        for f in shapes {
+            let e = run("commit", &|a| {
+                pathless(a);
+                f(a)
+            })
+            .unwrap_err();
+            assert!(e.starts_with("BAD_PAYLOAD: args.c"), "{e}");
+        }
+        // a whole path on a path-less record (node keys and ciphertexts together, so the shape rule above passes it): refused
+        // by the path-less rule alone; the control, the same record as a path commit, parses
+        let with_path = |a: &mut Value| {
+            pathless(a);
+            big(a, 512, 1, 1)
+        };
+        pair(
+            "commit",
+            &|a| {
+                with_path(a);
+                a["c"]["pathless"] = json!(false)
+            },
+            &with_path,
+            "c.pathless: Adds only",
+        );
         // treeRemove (C21: at most 20 leafy UAs and 32 admins)
         pair(
             "treeRemove",

@@ -55,7 +55,7 @@ MUTANTS = [
      [("clients/pqchat-core/src/lib.rs", "        let net: Arc<dyn net::Net> = if conf.agreed_reads {", "        let net: Arc<dyn net::Net> = if false {")],
      T + "pqchat_new_wires_the_agreed_option"),
     ("the agreed option over every read",
-     [(NT, "    item.starts_with(\"IPqChat.\") && matches!(trust(item), Ok(Trusted))", "    item.starts_with(\"I\")")],
+     [(NT, "    (item.starts_with(\"IPqChat.\") || item.starts_with(\"IPqChatTreeViews.\"))\n        && matches!(trust(item), Ok(Trusted))", "    item.starts_with(\"I\")")],
      T + "agreed_reads_cover_the_control_plane_only"),
     # owner (M) 2026-11-23 (CTR-CHAT-24): several KEM keys per member
     ("(M) keys of a member in any order",
@@ -71,11 +71,11 @@ MUTANTS = [
      [(RD, "                Err(d) => last = d,", "                Err(d) => return Err(d),")],
      TD + "the_first_own_wrap_that_opens_is_used"),
     ("SDK: read_app_agreed not agreed",
-     [(AG, "        let out = if agreed {", "        let out = if false && agreed {")],
+     [(AG, "            By::Agreed => pool.read_at_block_agreed(choice, purpose, call).await?,", "            By::Agreed => pool.read_at_block(choice, purpose, call).await?,")],
      TSDK + "read_app_agreed_is_the_agreed_read"),
     ("scaas-rpc: read_at_block_agreed by the list's failover",
-     [(EV, "        self.pool.agree(self, choice, purpose, f).await\n    }\n\n    /// `eth_call` at the read's block (by hash).",
-       "        self.read_at_block(choice, purpose, f).await\n    }\n\n    /// `eth_call` at the read's block (by hash).")],
+     [(EV, "        self.pool.agree(self, choice, purpose, f).await\n    }\n\n    /// [`EvmPool::read_at_block_agreed`] over",
+       "        self.read_at_block(choice, purpose, f).await\n    }\n\n    /// [`EvmPool::read_at_block_agreed`] over")],
      TRPC + "an_agreed_read_on_a_failover_list_outvotes_one_liar"),
 ]
 

@@ -36,7 +36,7 @@ contract PqChatTree is PqChatCore {
         Epoch storage ep = _s().epochs[sid];
         if (!ep.home) revert IPqChat.PqChatTreeHome();
         if (s.sealedInfo.length > TREE_INFO_MAX) revert IPqChat.PqChatShape();
-        _treeOpen(sid, PqChatTypes.hashSession(s), s.members.length, s.admins);
+        _treeOpen(sid, PqChatTypes.hashSession(s), s.members.length, s.admins, s.pathRefreshBound);
         _s().sessions[s.creator].push(sid);
         _treeListed(sid, s.creator);
         _landTree(reg, sid, ep, 0, wraps, s.members, s.wrapHashes, limit);
@@ -156,7 +156,8 @@ contract PqChatTree is PqChatCore {
         (ep.sessionId, ep.parent, ep.epoch) = (c.sessionId, c.parentEpochId, c.epoch);
         ep.record = _put(b, limit);
         ep.wraps = uint32((c.ctCount == 0 ? 0 : 2 + uint256(c.ctCount)) + c.adds.length + 1);
-        _staged(eid).targetsHash = keccak256(_pack4(w.targets));
+        // no targets hash when there is no list to land (the path-less delta §5.1 item 5: `_landList` refuses `ctCount` 0)
+        if (c.ctCount != 0) _staged(eid).targetsHash = keccak256(_pack4(w.targets));
         emit IPqChat.PqChatEpochAdded(c.sessionId, eid, c.parentEpochId, c.epoch, c.author);
     }
 
@@ -167,7 +168,7 @@ contract PqChatTree is PqChatCore {
     function _delta(IPqChat.PqChatCommit memory c) internal pure returns (Delta memory d) {
         (d.author, d.leaf, d.keyId, d.leaves, d.epoch) = (c.author, c.leaf, c.keyId, c.leaves, c.epoch);
         (d.admins, d.removes, d.adds) = (c.admins, c.removes, c.adds);
-        (d.nodeKeyHashes, d.ctCount, d.treeHash) = (c.nodeKeyHashes, c.ctCount, c.treeHash);
+        (d.nodeKeyHashes, d.ctCount, d.treeHash, d.pathless) = (c.nodeKeyHashes, c.ctCount, c.treeHash, c.pathless);
     }
 
     /// @dev The record of a staged tree epoch whose slot is still free (`PqChatEpochTaken`).

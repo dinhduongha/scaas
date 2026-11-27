@@ -109,7 +109,7 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
         (M memory m, Step memory st, M memory n) = _grown();
         IPqChatTreeViews v = _v();
         {
-            (bytes32 tid, uint32 leaves, uint32 used, bytes32 root, bytes32 gen, bytes32 head, uint32 owed) =
+            (bytes32 tid, uint32 leaves, uint32 used, bytes32 root, bytes32 gen, bytes32 head, uint32 owed,) =
                 v.treeOf(m.sid);
             assertEq(tid, n.treeId, "treeId");
             assertEq((uint256(leaves) << 32) | used, (n.leaves << 32) | n.used, "leaves, used");
@@ -168,7 +168,7 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
         (uint256 rk, uint256 re) = _gone(vchat, m.sid, E);
         assertEq((uint256(kind) << 64) | ep, (rk << 64) | re, "goneOf: the slot");
         assertEq((uint256(kind) << 64) | ep, (2 << 64) | n.epoch, "removed at the head");
-        (,,,,,, uint32 owed) = v.treeOf(m.sid);
+        (,,,,,, uint32 owed,) = v.treeOf(m.sid);
         assertEq(owed, 1, "E's leaf owed");
         (kind, ep) = v.goneOf(m.sid, B);
         assertEq(uint256(kind) + ep, 0, "B a member");
@@ -348,7 +348,9 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
     /// The interface ids (pins): `IPqChat`'s unchanged by the views, which have their own; both reported.
     function test_interfaceIdsArePinned() public view {
         assertEq(type(IPqChatTreeViews).interfaceId, bytes4(0xec42e734), "IPqChatTreeViews (new)");
-        assertEq(type(IPqChat).interfaceId, bytes4(0x7b7acc12), "IPqChat (unchanged by the views)");
+        // the path-less delta (C41-C43, `createSession` and `commit` take the new records): 0x7b7acc12 -> 0x8412b2f1
+        // CTR-CHAT-30 (owner 2026-11-27, G2: `entryRows` and `ENTRY_ROWS_MAX`): 0x8412b2f1 -> 0xe9e2068a
+        assertEq(type(IPqChat).interfaceId, bytes4(0xe9e2068a), "IPqChat (unchanged by the views)");
         assertTrue(chat.supportsInterface(type(IPqChatTreeViews).interfaceId));
         assertTrue(chat.supportsInterface(type(IPqChat).interfaceId));
     }

@@ -198,6 +198,11 @@ transaction, kept until the outer tx is terminal, one row per unresolved tx (nev
 local-directory journal: failover is "restore the store on another host", and a local journal does not move with the
 owner lock ([NET-SUI-10](../networks/sui.md#NET-SUI-10)).
 
+A relayed tree commit's parts (the record alone, the list, the node keys, the ciphertext and wrap runs; [the whole-set
+guard](job-api.md#tree-set-guard)) are the lane's own sends like the cache parts but outside the `call` share: they are bounded
+by the pieces the job's signed record names and by its `validUntil`, whatever `relay_unsigned_pqchat` says (A-9 of the TreeKEM
+T4-T9 review; the controller call of plan T4).
+
 Transitional (BUILT): the journal is the client's job row, written by a `signed` report over the pull protocol before
 `send_raw`; a failed report puts the work in the `retry` queue without sending. The lane's own jobs, which have no client row
 (the [NODE-JOB-29](job-api.md#NODE-JOB-29) cache parts), are journaled in the store already (T21, owner 2026-11-16, O8; BUILT on

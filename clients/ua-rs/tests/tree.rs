@@ -10,9 +10,10 @@ use scaas_ua::ua_portable::{kem_record_digest, kem_record_message, KemKey, UAAtt
 use scaas_ua::wallet::derive::{ua_key_data, ua_secret};
 use scaas_ua::wallet::kem::x25519;
 use scaas_ua::wallet::tree::{
-    key_of, path_context, tree_prepare, tree_prepare_leave, tree_prepare_remove, CommitInput, CtAt,
-    EpochFields, Info, InfoTook, PathCt, Pin, PreparedCommit, State, TargetKey, TreeDevice,
-    TreeLeave, TreeReader, TreeRemove, View, PQCHAT_TREE,
+    key_of, path_context, tree_prepare, tree_prepare_leave, tree_prepare_remove, warn_at,
+    CommitInput, CtAt, EpochFields, Info, InfoTook, PathCt, PathlessInput, Pin, PreparedCommit,
+    State, TargetKey, TreeDevice, TreeLeave, TreeReader, TreeRemove, View, ADD_NONCE_TRIES,
+    PATHLESS_WARN_LEAVES, PQCHAT_TREE,
 };
 use scaas_ua::wallet::tree_public::{
     array_hash, ct_targets_hash, genesis_ctx, kem_admission, kem_record_key, leaf_hash,
@@ -114,6 +115,7 @@ fn tree_leaf_bound_512() {
         key_id: 1,
         removes,
         adds,
+        pathless: false,
     };
     let add = |at: u32| {
         let n = leaf(600);
@@ -138,6 +140,97 @@ fn tree_leaf_bound_512() {
     let freed = t.apply_commit(&by(rm, vec![]), &nk).unwrap().tree;
     let back = freed.apply_commit(&by(vec![], add(511)), &nk).unwrap();
     assert_eq!(back.tree.leaves, 512);
+}
+
+/// fable-C-9 of the path-less review: a tree JSON without `sincePath` or `pathBound` is refused, never read as 0 (the
+/// control: the cold tree's own JSON reads back).
+#[test]
+fn tree_json_needs_its_counter() {
+    let mut ua = [0u8; 32];
+    ua[31] = 1;
+    let t = Tree::cold_with(
+        &[Leaf {
+            ua,
+            key_id: 1,
+            kem_hash: keccak256(&ua),
+        }],
+        5,
+    )
+    .unwrap();
+    let j = t.to_json();
+    assert_eq!(Tree::vectors_from_json(&j).unwrap().to_json(), j, "control");
+    for f in ["sincePath", "pathBound"] {
+        let mut k = j.clone();
+        k.as_object_mut().unwrap().remove(f);
+        assert!(Tree::vectors_from_json(&k).is_err(), "{f} missing");
+    }
+}
+
+/// fable-E-4 of the path-less review: the two path-less refusals by name in the public walk. On a cold tree of 3 leaves with
+/// bound 2: two path-less Adds accepted (the control), three `PqChatTreePathBound`; a path-less record with a Remove, or
+/// with an admin list other than the head's, `PqChatTreePathRequired` (the head's list accepted).
+#[test]
+fn tree_pathless_refusals_by_name() {
+    let leaf = |i: u32| {
+        let mut ua = [0u8; 32];
+        ua[28..].copy_from_slice(&(i + 1).to_be_bytes());
+        Leaf {
+            ua,
+            key_id: 1,
+            kem_hash: keccak256(&ua),
+        }
+    };
+    let three: Vec<Leaf> = (0..3).map(leaf).collect();
+    let t = Tree::cold_with(&three, 2).unwrap();
+    let adds = |n: u32| -> Vec<Add> {
+        (0..n)
+            .map(|i| {
+                let l = leaf(100 + i);
+                Add {
+                    leaf: 3 + i,
+                    ua: l.ua,
+                    key_id: 1,
+                    via: ZERO,
+                    kem_hash: l.kem_hash,
+                }
+            })
+            .collect()
+    };
+    let by = |removes: Vec<Remove>, adds: Vec<Add>| Changes {
+        author: three[0].ua,
+        leaf: 0,
+        key_id: 1,
+        removes,
+        adds,
+        pathless: true,
+    };
+    assert_eq!(code(t.apply_commit(&by(vec![], adds(2)), &[])), "accepted");
+    assert_eq!(
+        code(t.apply_commit(&by(vec![], adds(3)), &[])),
+        "PqChatTreePathBound"
+    );
+    let head = vec![three[0].ua];
+    let c = by(vec![], adds(1));
+    let after = t.apply_commit(&c, &[]).unwrap().tree;
+    assert_eq!(code(t.judge_commit(&after, &c, &head, &head)), "accepted");
+    let other = vec![three[0].ua, three[1].ua];
+    assert_eq!(
+        code(t.judge_commit(&after, &c, &other, &head)),
+        "PqChatTreePathRequired"
+    );
+    let rm = by(
+        vec![Remove {
+            leaf: 2,
+            ua: three[2].ua,
+            key_id: 1,
+        }],
+        adds(1),
+    );
+    let after = t.apply_commit(&rm, &[]).unwrap().tree;
+    assert_eq!(
+        code(t.judge_commit(&after, &rm, &head, &head)),
+        "PqChatTreePathRequired"
+    );
 }
 
 // ------------------------------------------------------------------ tree.json
@@ -468,6 +561,8 @@ struct Home {
     /// an updated `msig`'s structures by version, `msigAt` (CTR-UA-74)
     msig: MsigVersions,
     log: Vec<String>,
+    /// the contract's `treeOf.owed`: the live leaves of the UAs gone at the head, owed by the next commit
+    owed: u64,
 }
 
 impl Home {
@@ -519,6 +614,7 @@ impl Home {
             self.node_key.insert(*x, (unhex(&st["nodeKeys"][k]), epoch));
         }
         self.tree = a.tree;
+        self.owed = 0;
         self.epochs.push(Epoch {
             id: a32(&st["epochId"]),
             record: c.clone(),
@@ -546,8 +642,15 @@ impl Home {
                 .map(a32)
                 .collect()
         };
-        self.tree.mark_gone(&uas);
         let head = self.epochs.len() as u64 - 1;
+        for ua in &uas {
+            if !self.gone.contains_key(ua) {
+                self.owed += (0..self.tree.leaves)
+                    .filter(|i| self.tree.leaf(*i).is_some_and(|l| l.ua == *ua))
+                    .count() as u64;
+            }
+        }
+        self.tree.mark_gone(&uas);
         for ua in uas {
             self.gone.entry(ua).or_insert((kind, head));
         }
@@ -577,7 +680,9 @@ impl TreeReader for Home {
         Ok(match v {
             View::SessionOf => json!({"record": self.epochs[0].record, "sig": self.epochs[0].sig}),
             View::TreeOf => json!({"treeId": hx(&self.tree_id), "leaves": self.tree.leaves, "used": self.tree.used,
-                "treeHash": hx(&self.tree.tree_hash()), "genesisTreeHash": hx(&self.genesis_tree_hash)}),
+                "treeHash": hx(&self.tree.tree_hash()), "genesisTreeHash": hx(&self.genesis_tree_hash),
+                "sincePath": self.tree.since_path,
+                "owed": self.owed}),
             View::TreeLeaves => json!((0..self.tree.leaves)
                 .map(|i| match self.tree.leaf(i) {
                     Some(l) => {
@@ -655,7 +760,7 @@ fn new_home(
             kem_hash: keccak256(kems[&(a32(&m["ua"]), u(&m["keyId"]))].kem_pk()),
         })
         .collect();
-    let tree = Tree::cold(&cold).unwrap();
+    let tree = Tree::cold_with(&cold, u(&rec["pathRefreshBound"]) as u32).unwrap();
     Home {
         tree_id,
         genesis_tree_hash: tree.tree_hash(),
@@ -681,6 +786,7 @@ fn new_home(
         ua_keys,
         msig: BTreeMap::new(),
         log: vec![],
+        owed: 0,
     }
 }
 
@@ -809,15 +915,15 @@ fn info_of(
     session: &[u8; 32],
     epoch: &[u8; 32],
     sealed: &Value,
-) -> Option<String> {
+) -> Option<Option<String>> {
     let h = keys.vectors_import(k, KeyUsage::Derive).unwrap();
-    match keys
-        .vectors_tree_open_info(SC, &h, session, epoch, &unhex(sealed))
-        .unwrap()
-    {
-        Info::Marker => None,
-        Info::Json(j) => Some(j),
-    }
+    // `None`: the sealedInfo does not open under K (a fault row: the delta's F-8)
+    Some(
+        match keys.vectors_tree_open_info(SC, &h, session, epoch, &unhex(sealed))? {
+            Info::Marker => None,
+            Info::Json(j) => Some(j),
+        },
+    )
 }
 
 #[test]
@@ -825,7 +931,13 @@ fn tree_secrets_every_row() {
     let v = pq("tree-secrets");
     let (_w, keys) = keys();
     for (name, label) in v["labels"].as_object().unwrap() {
-        assert_eq!(*label, format!("{}/{name}", SC.prefix));
+        // clientkeys' scope names (addJoiner, addNonce) for the labels add-joiner, add-nonce (the path-less delta §4.1)
+        let l = match name.as_str() {
+            "addJoiner" => "add-joiner",
+            "addNonce" => "add-nonce",
+            x => x,
+        };
+        assert_eq!(*label, format!("{}/{l}", SC.prefix));
     }
     assert_eq!(hx(&SC.tag_path()), v["tags"]["tagPath"]);
     assert_eq!(hx(&SC.tag_context()), v["tags"]["tagContext"]);
@@ -908,12 +1020,58 @@ fn tree_secrets_every_row() {
             admins: f["admins"].as_array().unwrap().iter().map(a32).collect(),
         };
         assert_eq!(hx(&f.context(SC)), r["ctx"], "{}", r["name"]);
-        let (s, k) = keys
+        let (s, k, next, tag) = keys
             .vectors_tree_schedule(SC, &unhex(&r["joiner"]), &f)
             .unwrap();
         assert_eq!(hx(&s), r["S"]);
         assert_eq!(hx(&k), r["K"]);
+        // the four branches of one S (the path-less delta §4.1): next and the tag apart from K
+        assert_eq!(hx(&next), r["next"], "{} next", r["name"]);
+        assert_eq!(hx(&tag), r["confirmTag"], "{} tag", r["name"]);
+        assert!(k != next && k != tag && next != tag);
     }
+    // the path-less rows (C47, R20, C46)
+    let pl = &v["pathless"];
+    for r in pl["addNonce"].as_array().unwrap() {
+        let i = &r["input"];
+        let parent = [
+            a32(&i["treeId"]),
+            a32(&i["parentEpochId"]),
+            a32(&i["parentTreeHash"]),
+            a32(&i["addsHash"]),
+        ];
+        let seed: [u8; 96] = unhex(&r["kemSeed"]).try_into().unwrap();
+        let kem = KemKeyPair::vectors_ephemeral(&seed).unwrap();
+        for (t, want) in r["nonces"].as_array().unwrap().iter().enumerate() {
+            let n = keys
+                .vectors_tree_add_nonce(SC, &kem, &parent, t as u32)
+                .unwrap();
+            assert_eq!(json!(n), *want, "{} try {t}", r["name"]);
+        }
+        assert_eq!(json!(r["nonces"][0]), r["nonce"]);
+        assert_eq!(
+            code(keys.vectors_tree_add_nonce(SC, &kem, &parent, ADD_NONCE_TRIES)),
+            "TreeAddNonce"
+        );
+    }
+    for r in pl["addJoiner"].as_array().unwrap() {
+        let j = keys
+            .vectors_tree_add_joiner(
+                SC,
+                &unhex(&r["next"]),
+                &a32(&r["treeId"]),
+                &a32(&r["epochId"]),
+                &a32(&r["addsHash"]),
+            )
+            .unwrap();
+        assert_eq!(hx(&j), r["joiner"], "{}", r["name"]);
+    }
+    let e = &pl["exitNext"];
+    assert_ne!(e["tried"], e["joiner"]);
+    for r in pl["warn"].as_array().unwrap() {
+        assert_eq!(json!(warn_at(u(&r["N"]) as u32)), r["W"], "W({})", r["N"]);
+    }
+    assert_eq!(warn_at(0), PATHLESS_WARN_LEAVES);
     let mut rebuilt_differs = Vec::new();
     for sc in v["scenarios"].as_array().unwrap() {
         scenario(&keys, &v, &world, sc, &mut rebuilt_differs, None);
@@ -937,6 +1095,15 @@ const KNOWN_FAULTS: &[&str] = &[
     "small-order/epoch-1",
     "small-order/epoch-2",
     "flag-clear/epoch-1",
+    // the path-less delta's faults: a bad Welcome, wrong tags, a bad sealedInfo; an insider's record under B's UA
+    "pathless-faults/epoch-2",
+    "pathless-faults/epoch-3",
+    "pathless-faults/epoch-5",
+    "pathless-faults/epoch-6",
+    "pathless-faults/epoch-8",
+    "pathless-own/epoch-3",
+    "pathless-own-behind/epoch-1",
+    "pathless-own-behind/epoch-2",
 ];
 
 /// Steps whose author chose the info (the fixture's `info:`); every other step seals what its author's replay of the head
@@ -946,6 +1113,12 @@ const EXPLICIT_INFO: &[&str] = &[
     "gap-control/epoch-1",
     "foreign/epoch-1",
     "admin-gap/epoch-4",
+    "pathless-faults/epoch-4",
+    "pathless-faults/epoch-7",
+    "pathless-faults-control/epoch-4",
+    "pathless-faults-control/epoch-7",
+    "pathless-own/epoch-3",
+    "pathless-own-behind/epoch-2",
 ];
 
 /// The updated `msig`s of `tree-secrets.json`'s signers (F-1, CTR-UA-74): `msigAt` of each version they hold, its structure and
@@ -1006,6 +1179,7 @@ fn scenario(
         .collect();
     let sid = a32(&g["sessionId"]);
     let info = info_of(keys, &a32(&g["K"]), &sid, &sid, &rec["sealedInfo"])
+        .flatten()
         .expect("a genesis carries a full info");
     let mut rand = |name: &str, n: usize| Ok(rnd(&format!("tree-secrets/{tag}/genesis/{name}"), n));
     let gen = keys
@@ -1070,13 +1244,16 @@ fn rebuild(keys: &AppKeys, world: &World, home: &mut Home, st: &Value) -> bool {
     let c = &st["record"];
     let author = st["author"].as_str().unwrap();
     let prep = tree_prepare(SC, home, None).unwrap();
-    let info = info_of(
+    // a sealedInfo the epoch's K does not open is a fault row (the delta's F-8): not the author's honest build
+    let Some(info) = info_of(
         keys,
         &a32(&st["K"]),
         &a32(&c["sessionId"]),
         &a32(&st["epochId"]),
         &c["sealedInfo"],
-    );
+    ) else {
+        return false;
+    };
     let adds = c["adds"]
         .as_array()
         .unwrap()
@@ -1088,20 +1265,72 @@ fn rebuild(keys: &AppKeys, world: &World, home: &mut Home, st: &Value) -> bool {
         })
         .collect();
     let name = st["name"].as_str().unwrap().to_string();
+    let (d, kem) = &world.devices[author];
+    let dev = TreeDevice {
+        ua: a32(&d["ua"]),
+        key_id: u(&d["keyId"]),
+        kem,
+    };
+    let own = keys.tree_replay(SC, home, &dev, None, 0).unwrap().unwrap();
     if !EXPLICIT_INFO.contains(&name.as_str()) {
         // the info the author's own replay of the head says to seal: the full info in force, or the marker (C33)
-        let (d, kem) = &world.devices[author];
-        let dev = TreeDevice {
-            ua: a32(&d["ua"]),
-            key_id: u(&d["keyId"]),
-            kem,
-        };
-        let r = keys.tree_replay(SC, home, &dev, None, 0).unwrap().unwrap();
         assert_eq!(
-            r.info_to_seal(),
+            own.info_to_seal(),
             info.as_deref(),
             "{name}: the info to seal"
         );
+    }
+    let mut rand = |x: &str, n: usize| Ok(rnd(&format!("tree-secrets/{name}/{x}"), n));
+    if c["pathless"] == json!(true) {
+        // the path-less operation on the author's own head handle (the delta §6.5): none when it does not hold the head
+        let Some(hd) = own.head.as_ref() else {
+            return false;
+        };
+        let input = PathlessInput {
+            parent: &prep,
+            session_id: a32(&c["sessionId"]),
+            tree_id: a32(&c["treeId"]),
+            author: a32(&c["author"]),
+            leaf: u(&c["leaf"]) as u32,
+            key_id: u(&c["keyId"]),
+            kem: world.kem(author),
+            adds,
+            info: info.as_deref().map(str::as_bytes),
+        };
+        let parent = [
+            a32(&c["treeId"]),
+            a32(&c["parentEpochId"]),
+            a32(&c["parentTreeHash"]),
+            array_hash(pqchat::typed, "TreeAdd", c["adds"].as_array().unwrap()).unwrap(),
+        ];
+        let try_ = (0..ADD_NONCE_TRIES).find(|t| {
+            json!(keys
+                .vectors_tree_add_nonce(SC, world.kem(author), &parent, *t)
+                .unwrap())
+                == c["nonce"]
+        });
+        let Some(try_) = try_ else { return false };
+        let p = keys
+            .vectors_tree_prepare_pathless(SC, input, hd, try_, None, &mut rand)
+            .unwrap();
+        assert!(p
+            .review()
+            .iter()
+            .any(|(k, v)| k == "pathless"
+                && v.starts_with("adds without refreshing the group's keys")));
+        let person = world.person(&a32(&c["author"]));
+        let (b, sig) = p.sign(&person.key()).unwrap();
+        if b.record == *c {
+            assert_eq!(
+                json!(hx(&sig.signature)),
+                st["sig"],
+                "{name}: the author's signature"
+            );
+        }
+        return b.record == *c
+            && hx(&b.epoch_id) == st["epochId"]
+            && json!(b.wraps) == st["wraps"]
+            && hx(&keys.vectors_reveal(&b.k).unwrap()) == st["K"];
     }
     let tree = prep.tree().clone();
     let rec = |ua: &[u8; 32], k: u64| world.record(ua, k);
@@ -1125,7 +1354,6 @@ fn rebuild(keys: &AppKeys, world: &World, home: &mut Home, st: &Value) -> bool {
         info: info.as_deref().map(str::as_bytes),
         key_of: &mut key_fn,
     };
-    let mut rand = |x: &str, n: usize| Ok(rnd(&format!("tree-secrets/{name}/{x}"), n));
     let p = keys
         .vectors_tree_prepare_commit(SC, input, u(&c["nonce"]), &mut rand)
         .unwrap();
@@ -1176,6 +1404,7 @@ fn replay_row(keys: &AppKeys, world: &World, home: &mut Home, tag: &str, dev: &s
             State::Followed => json!([e.epoch, "followed", null]),
             State::NotFollowed(why) => json!([e.epoch, "not followed", why]),
             State::Compromise => json!([e.epoch, "compromise", null]),
+            State::AuthorDidNotHold => json!([e.epoch, "author did not hold", null]),
         })
         .collect();
     assert_eq!(json!(states), want["states"], "{at} states");
@@ -1197,6 +1426,7 @@ fn replay_row(keys: &AppKeys, world: &World, home: &mut Home, tag: &str, dev: &s
                 InfoTook::Changed => "changed",
                 InfoTook::Ignored => "ignored",
                 InfoTook::Marker => "marker",
+                InfoTook::NotTaken => "not taken",
             });
             json!([i, e.in_force, e.flagged])
         })
@@ -1213,6 +1443,29 @@ fn replay_row(keys: &AppKeys, world: &World, home: &mut Home, tag: &str, dev: &s
         })
         .collect();
     assert_eq!(json!(warnings), want["warnings"], "{at} warnings");
+    // the path-less delta: the C45 epochs, the leaves under review, the counter, the admins' warning, the head's handle
+    let suspects: Vec<Value> = r
+        .suspects
+        .iter()
+        .map(|s| {
+            json!({"epoch": s.epoch, "author": hx(&s.author),
+                "adds": s.adds.iter().map(|(l, ua, k)| json!({"leaf": l, "ua": hx(ua), "keyId": k})).collect::<Vec<_>>(),
+                "leavesLeft": s.leaves_left})
+        })
+        .collect();
+    assert_eq!(json!(suspects), want["suspects"], "{at} suspects");
+    assert_eq!(json!(r.review), want["review"], "{at} review");
+    assert_eq!(json!(r.since_path), want["sincePath"], "{at} sincePath");
+    assert_eq!(
+        json!(r.path_warning),
+        want["pathWarning"],
+        "{at} pathWarning"
+    );
+    let head = r.head.as_ref().map(|h| {
+        json!({"epochId": hx(&h.epoch_id()), "treeHash": hx(&h.tree_hash()),
+            "next": hx(&keys.vectors_reveal(h.next()).unwrap())})
+    });
+    assert_eq!(json!(head), want["head"], "{at} head");
     assert_eq!(json!(home.log), want["reads"], "{at} reads");
     // a key still in the tree holds exactly the head's nodes it derived: each a parent of the head tree under that key's
     // hash (a node a Remove blanked is dropped, never kept)
@@ -1252,10 +1505,8 @@ fn replay_row(keys: &AppKeys, world: &World, home: &mut Home, tag: &str, dev: &s
         .tree_replay(SC, home, &device, None, pin.epoch)
         .unwrap()
         .unwrap();
-    assert!(w
-        .epochs
-        .iter()
-        .all(|e| e.k.is_some() == (e.epoch == pin.epoch && e.state == State::Followed)));
+    assert!(w.epochs.iter().all(|e| e.k.is_some()
+        == (e.epoch == pin.epoch && matches!(e.state, State::Followed | State::AuthorDidNotHold))));
 }
 
 // ------------------------------------------------------------------ refusals beside their positive twins
@@ -1682,7 +1933,7 @@ impl Own {
         let session = json!({"creator": hx(&self.ua(0)), "nonce": 1, "homeChain": hx(&[7; 32]),
             "homeChatContract": hx(&[0xc4; 20]), "admins": [hx(&self.ua(0))],
             "members": (0..3).map(|i| json!({"ua": hx(&self.ua(i)), "keyId": 1, "via": hx(&ZERO)})).collect::<Vec<_>>(),
-            "groupMode": 1});
+            "groupMode": 1, "pathRefreshBound": 0});
         let kems: Vec<KemRecord> = (0..3).map(|i| self.record(i)).collect();
         let g = self
             .keys
@@ -1856,6 +2107,13 @@ fn tree_states_of_signed_faults() {
     let r = o.replay(&mut h, 2);
     assert_eq!(last(&r), (State::Followed, Some(InfoTook::Changed)));
     assert_eq!(r.epochs.last().unwrap().in_force.as_deref(), Some(INFO_B));
+    // the admin judged on the parent's admins (T6b of the TreeKEM plan): an admin that hands the role to another member in the
+    // same commit still changes the info; a member made admin by that commit does not count as one for it
+    let mut h = o.home();
+    o.commit(&mut h, 0, &[1], INFO_B, &[], honest);
+    let r = o.replay(&mut h, 2);
+    assert_eq!(last(&r), (State::Followed, Some(InfoTook::Changed)));
+    assert_eq!(r.epochs.last().unwrap().in_force.as_deref(), Some(INFO_B));
     // the derived-key comparison: ciphertexts that open to secrets whose keys are not the signed ones
     let mut h = o.home();
     o.commit(&mut h, 0, &[0], INFO_A, &[], other_node_keys);
@@ -1994,7 +2252,8 @@ fn tree_signing_ops() {
     }
     // the keyless admins' exits: M's, W's two, N's (the msig updated on its registry, F-1), N's two of msig-history (F-1b: one at
     // version 0, one at version 1), X's of msig-nested (C-4: through its msig member N at N's version 1); 6 -> 7 with msig-nested
-    assert_eq!((n, keyless), (6, 7));
+    // 6 -> 7 with the path-less delta's world pathless-exit (C's leave at a path-less head)
+    assert_eq!((n, keyless), (7, 7));
     // a treeLeave (no row carries its signature): signed by its member, the signature verifies over the row's signedDigest
     let a = &world.people["A"];
     let l = TreeLeave {
@@ -2082,7 +2341,9 @@ fn tree_commit_review() {
     assert!(r
         .iter()
         .any(|(n, x)| n == "adds" && x.contains(&hx(&o.ua(3)))));
-    assert_eq!(r.len(), 1 + 19 + 2 + 2);
+    // 21 fields since the path-less delta (pathless, confirmTag: C42, C43)
+    assert_eq!(r.len(), 1 + 21 + 2 + 2);
+    assert!(r.contains(&("pathless".into(), "false".into())));
     assert!(r.contains(&("purpose".into(), hx(&own_purpose()))));
     let (p, _) = o.prepare(&mut h, 0, &[0], INFO_A, &[]).unwrap();
     assert!(p
@@ -2437,6 +2698,7 @@ fn tree_builder_bounds() {
         key_id: me.key_id,
         removes: vec![],
         adds: (0..n).map(|i| add(i, ua(i))).collect(),
+        pathless: false,
     };
     // the author's own UA: 1 leaf + 7 Adds = KEYS_PER_UA_MAX, one more is refused
     assert!(prep.tree().filtered_path_after(&ch(7, &|_| me.ua)).is_ok());
@@ -2512,6 +2774,7 @@ fn tree_judge_commit() {
                 key_id: 1,
                 removes,
                 adds,
+                pathless: false,
             };
             let n = tree.filtered_path_after(&c).unwrap().len();
             let after = tree.apply_commit(&c, &vec![id("k"); n]).unwrap();
@@ -2671,6 +2934,42 @@ fn tree_key_never_sealed() {
     assert_eq!(o.keys.seal_key(&under, &drawn, b"").unwrap().len(), 60);
 }
 
+/// The path-less delta §4.1 (fable-C-1 = F-3 of the path-less review): the head's `next` never leaves `ua-rs`: sealed,
+/// KEM-wrapped, derived from or MACed it is refused; a drawn `Derive` key derives (the control).
+#[test]
+fn tree_next_never_leaves() {
+    let o = Own::new();
+    let mut h = o.home();
+    let r = o.replay(&mut h, 1);
+    let hd = r.head.as_ref().expect("the head's handle");
+    let under = o.keys.random_key(KeyUsage::KeyWrap).unwrap();
+    assert_eq!(code(o.keys.seal_key(&under, hd.next(), b"")), "Argument");
+    assert_eq!(
+        code(
+            o.keys
+                .kem_wrap(hd.next(), b"l", b"", &[0u8; 1600])
+                .map(|_| ())
+        ),
+        "Argument"
+    );
+    assert_eq!(
+        code(
+            o.keys
+                .derive(&[hd.next()], b"", b"x", KeyUsage::Data, false)
+        ),
+        "AppKeyUsage"
+    );
+    assert_eq!(
+        code(o.keys.mac_derive(hd.next(), b"x", KeyUsage::Data)),
+        "AppKeyUsage"
+    );
+    let d = o.keys.random_key(KeyUsage::Derive).unwrap();
+    assert!(o
+        .keys
+        .derive(&[&d], b"", b"x", KeyUsage::Data, false)
+        .is_ok());
+}
+
 /// E-3, B2-2: a replay resumed from the device's previous one walks from its pin and opens only the epochs after it, with the
 /// same K and info as a full replay; the walk keeps the trees at its start and at the head only (never one per epoch).
 #[test]
@@ -2786,4 +3085,307 @@ fn tree_path_of_a_leaf_outside() {
     assert!(scaas_ua::wallet::tree::path_from_list(0, &[2], 4).is_some());
     let t = Tree::cold(&[]).unwrap_or_default();
     assert!(t.filtered_path(u32::MAX).is_empty());
+}
+
+/// C-4 = D-6 (+ B-16) of the TreeKEM T4-T9 review: a resume that finds no new epoch keeps the info in force and the node keys
+/// (its replay seals the full info as the previous one did), and a device that resumes from it after more commits follows
+/// them as a full replay does: each resume chains, none drops what the device held.
+#[test]
+fn tree_resume_twice_keeps_the_keys_and_the_info() {
+    let o = Own::new();
+    let mut h = o.home();
+    for n in 1..=4usize {
+        o.commit(&mut h, n % 2, &[0], INFO_A, &[], honest);
+    }
+    let mut r4 = o.replay(&mut h, 2);
+    let seal = r4.info_to_seal().map(str::to_string);
+    assert!(
+        seal.is_some(),
+        "control: the device holds the info in force at 4"
+    );
+    let held = r4.held.keys().copied().collect::<Vec<_>>();
+    let mut idle = o
+        .keys
+        .tree_resume(OWN, &mut h, &o.dev(2), &mut r4, 0)
+        .unwrap()
+        .unwrap();
+    assert!(idle.epochs.is_empty(), "no new epoch");
+    assert_eq!(
+        idle.info_to_seal().map(str::to_string),
+        seal,
+        "the info in force kept"
+    );
+    assert_eq!(
+        idle.held.keys().copied().collect::<Vec<_>>(),
+        held,
+        "the node keys kept"
+    );
+    for n in 5..=7usize {
+        o.commit(&mut h, n % 2, &[0], INFO_A, &[], honest);
+    }
+    let full = o.replay(&mut h, 2);
+    let more = o
+        .keys
+        .tree_resume(OWN, &mut h, &o.dev(2), &mut idle, 0)
+        .unwrap()
+        .unwrap();
+    let reveal = |k: &Option<scaas_ua::wallet::KeyHandle>| {
+        k.as_ref().map(|k| o.keys.vectors_reveal(k).unwrap())
+    };
+    assert_eq!(
+        more.epochs.iter().map(|e| e.epoch).collect::<Vec<_>>(),
+        vec![5, 6, 7]
+    );
+    for e in &more.epochs {
+        let g = full.epochs.iter().find(|x| x.epoch == e.epoch).unwrap();
+        assert_eq!(
+            (e.state, reveal(&e.k)),
+            (g.state, reveal(&g.k)),
+            "epoch {}",
+            e.epoch
+        );
+    }
+    assert_eq!(more.info_to_seal(), full.info_to_seal());
+}
+
+// ------------------------------------------------------------------ the path-less operation's handle (the path-less delta §6.5)
+
+/// claude-19: the path-less operation on a handle of another parent is `TreeHandle`, nothing built; the device's handle of
+/// the head it replayed builds. The handle's `next` is the replay's head only (every row's `head` compared in `replay_row`:
+/// none for a device that did not follow the head or whose period ended).
+#[test]
+fn tree_pathless_handle_of_another_parent() {
+    let v = pq("tree-secrets");
+    let (_w, keys) = keys();
+    let world = World::new(&v);
+    let s = v["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["name"] == "pathless")
+        .unwrap();
+    let mut differs = Vec::new();
+    let mut home = scenario(&keys, &v, &world, s, &mut differs, Some(3));
+    let (d, kem) = &world.devices["A"];
+    let dev = TreeDevice {
+        ua: a32(&d["ua"]),
+        key_id: u(&d["keyId"]),
+        kem,
+    };
+    let old = keys
+        .tree_replay(SC, &mut home, &dev, None, 0)
+        .unwrap()
+        .unwrap();
+    let step6 = &s["steps"][5]["record"];
+    let add = Add::from_json(&step6["adds"][0]).unwrap();
+    let input = |prep| PathlessInput {
+        parent: prep,
+        session_id: a32(&step6["sessionId"]),
+        tree_id: a32(&step6["treeId"]),
+        author: dev.ua,
+        leaf: 0,
+        key_id: dev.key_id,
+        kem,
+        adds: vec![(add.clone(), world.record(&add.ua, add.key_id))],
+        info: None,
+    };
+    home.land_commit(&s["steps"][3]);
+    let prep = tree_prepare(SC, &mut home, None).unwrap();
+    let mut rand = |x: &str, n: usize| Ok(rnd(&format!("t/handle/{x}"), n));
+    let hd = old.head.as_ref().expect("the head's handle");
+    assert_eq!(
+        code(keys.vectors_tree_prepare_pathless(SC, input(&prep), hd, 0, None, &mut rand)),
+        "TreeHandle"
+    );
+    let now = keys
+        .tree_replay(SC, &mut home, &dev, None, 0)
+        .unwrap()
+        .unwrap();
+    let hd = now.head.as_ref().expect("the head's handle");
+    assert_eq!(hd.epoch_id(), prep.parent_epoch_id());
+    assert!(keys
+        .vectors_tree_prepare_pathless(SC, input(&prep), hd, 0, None, &mut rand)
+        .is_ok());
+}
+
+/// C43, F-7 (the path-less delta §4.2): epoch 0's tag in the session record decides the genesis key state: a record signed
+/// with another tag is not followed ("tag") by every member; the honest record is followed.
+#[test]
+fn tree_genesis_tag_decides() {
+    let o = Own::new();
+    let session = json!({"creator": hx(&o.ua(0)), "nonce": 1, "homeChain": hx(&[7; 32]),
+        "homeChatContract": hx(&[0xc4; 20]), "admins": [hx(&o.ua(0))],
+        "members": (0..3).map(|i| json!({"ua": hx(&o.ua(i)), "keyId": 1, "via": hx(&ZERO)})).collect::<Vec<_>>(),
+        "groupMode": 1, "pathRefreshBound": 0});
+    let kems: Vec<KemRecord> = (0..3).map(|i| o.record(i)).collect();
+    let g = o
+        .keys
+        .tree_create_genesis(OWN, &session, &kems, INFO_A.as_bytes())
+        .unwrap();
+    for bad in [false, true] {
+        let mut rec = g.record.clone();
+        if bad {
+            rec["confirmTag"] = json!(hx(&[0x7a; 32]));
+        }
+        let sig = o.sign(0, "PqChatSession", &rec);
+        let kems = (0..4).map(|i| ((o.ua(i), 1), o.record(i))).collect();
+        let ua_keys = (0..4)
+            .map(|i| (o.ua(i), (MLDSA65, o.uas[i].key_data())))
+            .collect();
+        let tid = tp::tree_id(OWN.typed, &rec).unwrap();
+        let mut h = new_home(&rec, sig, g.wraps.clone(), g.session_id, tid, kems, ua_keys);
+        for i in 0..3 {
+            let r = o.replay(&mut h, i);
+            let want = if bad {
+                State::NotFollowed("tag")
+            } else {
+                State::Followed
+            };
+            assert_eq!(r.epochs[0].state, want, "member {i}, bad tag {bad}");
+        }
+    }
+}
+
+/// C41 (the path-less delta §3.1): a session record whose `pathRefreshBound` is above 510 is one the contract refuses, so the
+/// walk takes it as a lying read; 510 is walked.
+#[test]
+fn tree_session_bound_above_the_cap_is_a_lie() {
+    let o = Own::new();
+    for (bound, ok) in [(510u32, true), (511, false)] {
+        let session = |b: u32| {
+            json!({"creator": hx(&o.ua(0)), "nonce": 1, "homeChain": hx(&[7; 32]),
+            "homeChatContract": hx(&[0xc4; 20]), "admins": [hx(&o.ua(0))],
+            "members": (0..3).map(|i| json!({"ua": hx(&o.ua(i)), "keyId": 1, "via": hx(&ZERO)})).collect::<Vec<_>>(),
+            "groupMode": 1, "pathRefreshBound": b})
+        };
+        let kems: Vec<KemRecord> = (0..3).map(|i| o.record(i)).collect();
+        // fable-E-3 = C-5: a creation above the cap is refused before anything is built; the lying record is the 510 one
+        // with its bound changed after the build
+        if !ok {
+            assert_eq!(
+                code(
+                    o.keys
+                        .tree_create_genesis(OWN, &session(bound), &kems, INFO_A.as_bytes())
+                        .map(|_| ())
+                ),
+                "PqChatShape"
+            );
+        }
+        let mut g = o
+            .keys
+            .tree_create_genesis(OWN, &session(510), &kems, INFO_A.as_bytes())
+            .unwrap();
+        g.record["pathRefreshBound"] = json!(bound);
+        let sig = o.sign(0, "PqChatSession", &g.record);
+        let kems = (0..4).map(|i| ((o.ua(i), 1), o.record(i))).collect();
+        let ua_keys = (0..4)
+            .map(|i| (o.ua(i), (MLDSA65, o.uas[i].key_data())))
+            .collect();
+        let mut h = new_home(
+            &g.record,
+            sig,
+            g.wraps.clone(),
+            g.session_id,
+            g.tree_id,
+            kems,
+            ua_keys,
+        );
+        let r = o.keys.tree_replay(OWN, &mut h, &o.dev(1), None, 0);
+        if ok {
+            assert_eq!(r.unwrap().unwrap().epochs[0].state, State::Followed);
+        } else {
+            assert_eq!(code(r), "TreeReadCorrupted", "bound {bound}");
+        }
+    }
+}
+
+/// F-3 of the path-less delta (fable-C-2 = G-1 of the path-less review): a resume past a C45 epoch keeps the leaves under
+/// review. A's replay of `pathless-faults` up to epoch 4 holds epoch 3's C45 state; resumed to the head it names the same
+/// leaves under review and the same C45 epochs as a cold replay of the head (each leaf left recomputed there).
+#[test]
+fn tree_resume_keeps_the_leaves_under_review() {
+    let v = pq("tree-secrets");
+    let (_w, keys) = keys();
+    let world = World::new(&v);
+    let sc = v["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "pathless-faults")
+        .unwrap();
+    let mut differs = vec![];
+    let mut part = scenario(&keys, &v, &world, sc, &mut differs, Some(4));
+    // the fault steps differ from a seed's own rebuild by design (KNOWN_FAULTS)
+    let mut full = scenario(&keys, &v, &world, sc, &mut differs, None);
+    let (d, kem) = &world.devices["A"];
+    let dev = TreeDevice {
+        ua: a32(&d["ua"]),
+        key_id: u(&d["keyId"]),
+        kem,
+    };
+    let mut early = keys
+        .tree_replay(SC, &mut part, &dev, None, 0)
+        .unwrap()
+        .unwrap();
+    assert!(
+        !early.review.is_empty(),
+        "control: epoch 3's C45 state names leaves"
+    );
+    let cold = keys
+        .tree_replay(SC, &mut full, &dev, None, 0)
+        .unwrap()
+        .unwrap();
+    assert!(early.head.is_some(), "control: epoch 4's head handle");
+    let resumed = keys
+        .tree_resume(SC, &mut full, &dev, &mut early, 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(resumed.review, cold.review, "the leaves under review");
+    assert_eq!(
+        resumed.suspects.iter().map(|s| s.epoch).collect::<Vec<_>>(),
+        cold.suspects.iter().map(|s| s.epoch).collect::<Vec<_>>(),
+        "the C45 epochs"
+    );
+    // fable-F-2 = C-4: `tree_resume` adopts, and the consumed replay keeps no head's `next`
+    assert!(early.head.is_none(), "the old head's next dropped by adopt");
+    // the compromise warnings as well (the first P9 mutant run: dropping them survived, `pathless-faults` has none for A
+    // before epoch 8): B's own path-less record of `pathless-own` it cannot reproduce warns at epoch 3 and puts leaf 4
+    // under review; a resume that finds no new epoch keeps both
+    let sc = v["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "pathless-own")
+        .unwrap();
+    let mut own = scenario(&keys, &v, &world, sc, &mut differs, None);
+    let (d, kem) = &world.devices["B"];
+    let dev = TreeDevice {
+        ua: a32(&d["ua"]),
+        key_id: u(&d["keyId"]),
+        kem,
+    };
+    let mut first = keys
+        .tree_replay(SC, &mut own, &dev, None, 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (
+            first.warnings.iter().map(|w| w.epoch).collect::<Vec<_>>(),
+            first.review.clone()
+        ),
+        (vec![3], vec![4]),
+        "control: the warning and its leaf"
+    );
+    let again = keys
+        .tree_resume(SC, &mut own, &dev, &mut first, 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (
+            again.warnings.iter().map(|w| w.epoch).collect::<Vec<_>>(),
+            again.review
+        ),
+        (vec![3], vec![4]),
+        "a resume keeps the warning and its leaf"
+    );
 }

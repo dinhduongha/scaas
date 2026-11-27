@@ -432,6 +432,12 @@ pub async fn revert_verdict(chain: &Chain, w: &Work, reason: String) -> Verdict 
     {
         return Verdict::Dead(format!("{code}: {reason}"));
     }
+    // D2-5 (CTR-CHAT-27 C9, CTR-CHAT-10, CTR-PQV-06): an exit applies at the head whenever it lands within `EXIT_LAG_MAX` of the
+    // epoch it names, and anyone may land its public calldata; a refusal that a later head clears (the leaves owed, the named
+    // epoch still incomplete) keeps the job queued. Past the lag the contract answers `PqChatExitLag` / `PqVaultExitLag`: dead.
+    if let Some(r) = exit_wait(&w.data, &reason) {
+        return Verdict::Requeue(r);
+    }
     // regulated-kinds spec §7: a freeze, a pause, an eligibility or the registry may lift and the payload may still land
     if crate::abi::regulated_refusal(&reason).is_some() {
         return Verdict::Requeue(format!("REGULATED_REFUSED: {reason}"));
@@ -608,6 +614,39 @@ async fn fee_moved(chain: &Chain, w: &Work, reason: &str) -> Option<Verdict> {
 /// limit bounds regular + state under EIP-8037; 2^24 regular gas per transaction, EIP-7825; the calldata floor, EIP-7976), is
 /// refused by this name instead of sent. The operator's own `max_gas_per_tx` is not a chain limit and keeps its plain refusal.
 pub const TX_EXCEEDS_CHAIN_LIMIT: &str = "TX_EXCEEDS_CHAIN_LIMIT";
+
+/// D2-5: an exit job (a tree session's `treeLeave` / `treeRemove`, mode 0's `leave` / `remove`, PqVault's `leaveVault` /
+/// `removeVaultMembers`) refused by a state a later head clears: queued under this name, never `dead` within the lag.
+pub const EXIT_WAITING: &str = "EXIT_WAITING";
+/// The refusals of an exit that a later head may clear (D2-5): the leaves owed at the head, the named epoch not complete yet.
+const EXIT_WAITS: [&str; 3] = ["PqChatTreeBacklog", "PqChatIncomplete", "PqVaultIncomplete"];
+
+/// D2-5: the requeue reason of an exit job refused by a state a later head clears; `None` for any other job or refusal.
+pub fn exit_wait(data: &[u8], reason: &str) -> Option<String> {
+    (exit_op(data) && EXIT_WAITS.iter().any(|p| reason.starts_with(p)))
+        .then(|| format!("{EXIT_WAITING}: {reason}"))
+}
+
+/// `data` calls an exit entry of `PqChat` or `PqVault` (D2-5).
+fn exit_op(data: &[u8]) -> bool {
+    const EXITS: [&str; 6] = [
+        "treeLeave",
+        "treeRemove",
+        "leave",
+        "remove",
+        "leaveVault",
+        "removeVaultMembers",
+    ];
+    data.get(..4).is_some_and(|sel| {
+        crate::typed::rows().iter().any(|r| {
+            r.selector[..] == *sel
+                && EXITS.contains(&r.entry)
+                && r.contracts
+                    .iter()
+                    .any(|c| *c == "pqchat" || *c == "pqvault")
+        })
+    })
+}
 
 /// The refusal of a relayed PQ registration (`register` with its `R_REG` proof) whose gas estimate is over the
 /// per-transaction cap ([`total_cap`]: `max_gas_per_tx`, the block gas limit) or that the chain's estimate refuses for
@@ -2426,6 +2465,60 @@ pub async fn settle_gas(
 
 #[cfg(test)]
 mod tests {
+    /// D2-5 (plan T4): an exit refused `PqChatTreeBacklog` / `PqChatIncomplete` / `PqVaultIncomplete` waits queued; past the lag
+    /// (`PqChatExitLag`) or on another refusal it does not; another entry refused the same way does not wait either. The
+    /// reasons are the decoded errors (`abi::decode_revert`).
+    #[test]
+    fn an_exit_waits_within_the_lag() {
+        use crate::abi::IPqChatErrors as E;
+        let call = |entry: &str| {
+            let r = crate::typed::rows()
+                .iter()
+                .find(|r| r.entry == entry)
+                .unwrap();
+            [&r.selector[..], &[0u8; 64][..]].concat()
+        };
+        let backlog = crate::abi::decode_revert(
+            &E::PqChatTreeBacklog {
+                owed: alloy::primitives::U256::from(21),
+            }
+            .abi_encode(),
+        );
+        let incomplete = crate::abi::decode_revert(
+            &E::PqChatIncomplete {
+                epochId: B256::ZERO,
+            }
+            .abi_encode(),
+        );
+        let vault = crate::abi::decode_revert(
+            &E::PqVaultIncomplete {
+                epochId: B256::ZERO,
+            }
+            .abi_encode(),
+        );
+        let lag = crate::abi::decode_revert(&E::PqChatExitLag { named: 1, head: 18 }.abi_encode());
+        let member = crate::abi::decode_revert(&E::PqChatNotMember { ua: B256::ZERO }.abi_encode());
+        for e in ["treeLeave", "treeRemove", "leave", "remove"] {
+            for r in [&backlog, &incomplete] {
+                assert!(
+                    exit_wait(&call(e), r).is_some_and(|w| w.starts_with(EXIT_WAITING)),
+                    "{e}: {r}"
+                );
+            }
+            assert_eq!(exit_wait(&call(e), &lag), None, "{e}: past the lag is dead");
+            assert_eq!(exit_wait(&call(e), &member), None, "{e}");
+        }
+        for e in ["leaveVault", "removeVaultMembers"] {
+            assert!(exit_wait(&call(e), &vault).is_some(), "{e}");
+        }
+        assert_eq!(
+            exit_wait(&call("postMessage"), &backlog),
+            None,
+            "not an exit"
+        );
+        assert_eq!(exit_wait(&call("commit"), &incomplete), None, "not an exit");
+    }
+
     use super::*;
     use alloy::sol_types::{SolCall, SolError};
 
@@ -5626,7 +5719,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     }
 
     /// CTR-CHAT-27: `PqChatTree.treeCreate`, the module's creation step that `PqChat.createSession` calls; no row of any kind.
-    const TREE_CREATE: &str = "treeCreate((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes,uint8),\
+    const TREE_CREATE: &str = "treeCreate((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes,uint8,uint32,bytes32),\
         (bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
     /// `PqChat`'s unsigned writes (UA-7 P17; CTR-CHAT-27: the tree commit's three pieces), under `params.relay_unsigned_pqchat`.
     const UNSIGNED_PQCHAT: [&str; 5] = [
@@ -6019,10 +6112,11 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             .collect();
         assert_eq!(ours, theirs, "the PqChat allow-list, both directions");
         let forge: HashSet<[u8; 4]> = [
-            "821d41ae", "1222a945", "2b9ab93a", "3c289881", "6035115c", "a52f4d6d", "95660a78",
+            // the path-less delta (C41-C43): createSession 821d41ae -> f2f10b9f, commit 9575f9cb -> 1af1cd19
+            "f2f10b9f", "1222a945", "2b9ab93a", "3c289881", "6035115c", "a52f4d6d", "95660a78",
             "47bee6d5", "c8de3d2d", "04857ea8", "1fd5aeac", "f3ee47ee", "5aee92d5",
             // CTR-CHAT-27: commit, addPathList, addPathKeys, addPath, treeLeave, treeRemove
-            "9575f9cb", "0b9b356b", "de142cf8", "44889230", "12a4e9ac", "eb3f5236",
+            "1af1cd19", "0b9b356b", "de142cf8", "44889230", "12a4e9ac", "eb3f5236",
         ]
         .iter()
         .map(|h| alloy::hex::decode(h).unwrap().try_into().unwrap())
@@ -6061,6 +6155,13 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             }
         }
         // CTR-CHAT-27: `treeCreate` is the module's step under `createSession`, the tree views `PqChatTreeViews`' (read-only)
+        // the positive control (the path-less delta §13): the string is `PqChatTree.treeCreate`'s selector, forge's
+        // methodIdentifiers of out/PqChatTree.sol (0x86320c45 since the session's two fields), so "no row" checks a live one
+        assert_eq!(
+            sel(TREE_CREATE),
+            [0x86, 0x32, 0x0c, 0x45],
+            "PqChatTree.treeCreate"
+        );
         for s in [
             "initialize(bytes32,uint8)",
             "owner()",

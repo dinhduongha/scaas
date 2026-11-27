@@ -27,7 +27,7 @@ const SPEC = {
   MemberKey: "MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
   Wrap: "Wrap(bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey)",
   PqChatSession:
-    "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
+    "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode,uint32 pathRefreshBound,bytes32 confirmTag)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
   PqChatEpoch:
     "PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
   PqChatLeave: "PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)",
@@ -50,6 +50,12 @@ const STRUCT_OF = {
   session: "PqChatSession",
   sessionTreeKem: "PqChatSession",
   sessionMode2: "PqChatSession",
+  sessionBound0: "PqChatSession",
+  sessionBound24: "PqChatSession",
+  sessionBound510: "PqChatSession",
+  sessionBound511: "PqChatSession",
+  sessionMode0Bound1: "PqChatSession",
+  sessionMode0Tag: "PqChatSession",
   epoch: "PqChatEpoch",
   epochDevices: "PqChatEpoch",
   leave: "PqChatLeave",
@@ -207,9 +213,27 @@ test("session records: digests, ids, scopes, the message signature and blob", ()
   assert.equal(R.sessionMode2.record.groupMode, 2);
   assert.equal(R.sessionMode2.error, "PqChatModeUnsupported");
   checkRow("sessionMode2", R.sessionMode2);
+  // the path-less delta §3.1: both new fields 0 in mode 0; the bound rows accepted or refused by PqChatShape
+  assert.equal(S.record.pathRefreshBound, 0);
+  assert.equal(S.record.confirmTag, Z32);
+  assert.equal(R.sessionTreeKem.record.pathRefreshBound, 20);
+  for (const [name, mode, bound, error] of [
+    ["sessionBound0", 1, 0, undefined],
+    ["sessionBound24", 1, 24, undefined],
+    ["sessionBound510", 1, 510, undefined],
+    ["sessionBound511", 1, 511, "PqChatShape"],
+    ["sessionMode0Bound1", 0, 1, "PqChatShape"],
+    ["sessionMode0Tag", 0, 0, "PqChatShape"],
+  ]) {
+    assert.equal(R[name].record.groupMode, mode, name);
+    assert.equal(R[name].record.pathRefreshBound, bound, name);
+    assert.equal(R[name].error, error, name);
+    assert.equal(R[name].record.confirmTag === Z32, name === "sessionMode0Bound1", name);
+    checkRow(name, R[name]);
+  }
   for (const rec of [S.record, E.record, L.record, Mg.record]) {
     for (const [f, v] of Object.entries(rec))
-      if (f !== "groupMode")
+      if (!["groupMode", "pathRefreshBound", "confirmTag"].includes(f))
         assert.ok(
           v !== 0 && v !== Z32 && v !== "0x" && v !== hex(new Uint8Array(20)) && !(Array.isArray(v) && !v.length),
           f,

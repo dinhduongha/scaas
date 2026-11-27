@@ -245,6 +245,21 @@ impl Chain {
         C::abi_decode_returns(&out).map_err(|e| SimError::Revert(format!("decode: {e}")))
     }
 
+    /// A view call at the lane's final block (`finality.mode`), pinned to that block's hash (CTR-CHAT-27, C37: a tree commit's
+    /// next piece leaves only once the one before it is final). A revert, like a transport error, is no answer.
+    pub async fn call_final<C: SolCall>(&self, to: Address, call: C) -> Result<C::Return> {
+        let pool = &self.pool;
+        let data: Bytes = call.abi_encode().into();
+        let out = pool
+            .read_at_block(self.final_choice, scaas_rpc::Purpose::Plain, |at| {
+                let data = data.clone();
+                async move { pool.call_at(&at, to, data).await }
+            })
+            .await
+            .map_err(|e| anyhow!("{e}"))?;
+        C::abi_decode_returns(&out.value).map_err(|e| anyhow!("decode: {e}"))
+    }
+
     /// `eth_call` of calldata built by ABI type (group 3f: a PQZ token's statement views, `crate::pqz`).
     pub async fn call_raw(&self, to: Address, data: Bytes) -> std::result::Result<Bytes, SimError> {
         self.call_tx(TransactionRequest::default().with_to(to).with_input(data))

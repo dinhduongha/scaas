@@ -27,6 +27,7 @@ pub fn members_sorted(e: &Epoch) -> bool {
 }
 
 /// The distinct UAs of `e`'s members, in order: every rule but the wraps reads members per UA (CTR-CHAT-24).
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub fn distinct(e: &Epoch) -> Vec<&String> {
     let mut v: Vec<&String> = e.members.iter().map(|m| &m.ua).collect();
     v.dedup();
@@ -70,6 +71,7 @@ pub fn keeps<'a>(
 
 /// A rekey of `parent` with the distinct UAs `uas` and the admins `admins` is plain (E-1, CTR-CHAT-09, CTR-CHAT-20): both lists
 /// the parent's less some UAs that left it or were removed from it, as the contract's `_keeps` judges them.
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub fn plain(
     uas: &[&String],
     admins: &[String],
@@ -114,6 +116,7 @@ pub fn child(
 }
 
 /// A wrap read from state against the signed record's hash, before it enters a decapsulation (CLI-PQC-07).
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub fn wrap_hash(read: &str, signed: &str) -> Result<(), DropReason> {
     if read.eq_ignore_ascii_case(signed) {
         Ok(())

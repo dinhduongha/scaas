@@ -45,7 +45,7 @@ contract TreeHarness is PqGroupTree {
     }
 
     function open(IUARegistry reg, uint256 used, bytes32 ua, bytes32[] calldata admins) external {
-        _treeOpen(GID, keccak256("tree"), used, admins);
+        _treeOpen(GID, keccak256("tree"), used, admins, 0);
         _treeSetLeaf(reg, GID, 0, ua, 0, 0, 0);
     }
 

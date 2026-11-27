@@ -369,6 +369,9 @@ async fn agreed_reads_cover_the_control_plane_only() {
         agreed_item("IPqChat.sessionOf")
             && agreed_item("IPqChat.sessionSig")
             && agreed_item("IPqChat.sigStore")
+            // D-11, R2-D-8 of the TreeKEM T4-T9 re-check: the tree views are the instance's trusted reads too
+            && agreed_item("IPqChatTreeViews.treeOf")
+            && agreed_item("IPqChatTreeViews.commitOf")
     );
     assert!(
         !agreed_item("IPqChat.topics")

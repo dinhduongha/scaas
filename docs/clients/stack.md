@@ -9,9 +9,11 @@ Which client crate depends on which, across this repository and scaas-app (a sep
 
 Status: SPECIFIED. `ua-rs`, `scaas-rpc`, `scaas-sdk`, `pqchat-core`, `pqvault-core`, `scaas-tui` and the CLI are BUILT;
 `scaas-profile` is being built (branch `user-profiles`); `scaas-matrix` and `pqchat-transport` are PLANNED (branch
-`scaas-matrix`); scaas-app's crates are planned in that repository.
+`scaas-matrix`); the CLI's links to `pqchat-core`, `pqvault-core` and `scaas-matrix` are PLANNED (owner 2026-11-27,
+[CLI-SDK-17](scaas-cli.md#CLI-SDK-17)); scaas-app's crates are planned in that repository.
 
-An arrow reads "depends on". A dotted arrow is a data dependency only (a pinned commit, no Rust dependency).
+An arrow reads "depends on". A dotted arrow is a data dependency only (a pinned commit, no Rust dependency), except the
+CLI's three arrows labelled "planned", which are Rust dependencies not built yet.
 
 ```mermaid
 flowchart TB
@@ -47,6 +49,9 @@ flowchart TB
   TUI --> MX
   TUI -.->|"pinned commit, fixtures"| VM
   CLI --> SDK
+  CLI -.->|"planned"| PQC
+  CLI -.->|"planned"| PQV
+  CLI -.->|"planned"| MX
   PQC --> SDK
   PQC --> TR
   PQV --> SDK
@@ -80,7 +85,10 @@ Status: SPECIFIED.
 6. **One Matrix client per open user profile.** A profile's Matrix login, session, store, keys and device id are its own;
    the store key is a sealed item of the profile; a profile switch closes the current client first (CLI-PQC-20,
    CLI-UPR-29).
-7. **Dependencies point one way:** scaas-app depends on crates of this repository, never the reverse. `scaas-tui` takes
+7. **The CLI is a thin client of the SDK and of the app cores above it** (owner 2026-11-27, CLI-SDK-17; PLANNED for the
+   app cores): it links `pqchat-core` and `pqvault-core`, each behind its own feature as `scaas-tui` does, and
+   `scaas-matrix` for PqChat's Matrix transport, one Matrix client per open user profile (rule 6).
+8. **Dependencies point one way:** scaas-app depends on crates of this repository, never the reverse. `scaas-tui` takes
    scaas-app's view-model fixtures by a pinned commit only (CLI-TUI-19).
-8. **Byte formats change everywhere at once:** `ua-rs` and clientkeys read the same vector rows (AGENTS.md "Clients and
+9. **Byte formats change everywhere at once:** `ua-rs` and clientkeys read the same vector rows (AGENTS.md "Clients and
    vectors").

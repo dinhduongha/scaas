@@ -448,7 +448,7 @@ test("R16: a key taken out of a UA that stays is a pair; the keys of a UA that g
 // The type strings as spec §6 writes them, typed here a second time: a field dropped or moved in src/pqchat-tree.js fails here.
 const SPEC = {
   PqChatCommit:
-    "PqChatCommit(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo)TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)",
+    "PqChatCommit(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo,bool pathless,bytes32 confirmTag)TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)",
   TreeAdd: "TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)",
   TreeRemove: "TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)",
   PathList: "PathList(uint32[] ctTargets,bytes32[] ctHashes)",
@@ -457,7 +457,7 @@ const SPEC = {
   PqChatTreeRemove:
     "PqChatTreeRemove(bytes32 sessionId,bytes32 treeId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce)",
   TreeGenesis:
-    "TreeGenesis(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
+    "TreeGenesis(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,uint8 groupMode,uint32 pathRefreshBound)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
   TreeLeaf: "TreeLeaf(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 kemHash)",
   TreeParent: "TreeParent(bytes32 keyHash,bytes32 left,bytes32 right)",
 };
@@ -484,17 +484,22 @@ const session = {
   wrapHashes: [id("w0"), id("w1")],
   sealedInfo: "0x" + "ab".repeat(284),
   groupMode: 1,
+  pathRefreshBound: 24,
+  confirmTag: id("tag"),
 };
 const tree = { ...session, groupMode: 1 };
 
-test("TreeGenesis is PqChatSession's type without wrapHashes and sealedInfo", () => {
-  const s = pc.TYPES.PqChatSession.filter((f) => f.name !== "wrapHashes" && f.name !== "sealedInfo");
+test("TreeGenesis is PqChatSession's type without wrapHashes, sealedInfo and confirmTag (C29, the delta's C43)", () => {
+  const s = pc.TYPES.PqChatSession.filter((f) => !["wrapHashes", "sealedInfo", "confirmTag"].includes(f.name));
   assert.deepEqual(tr.TREE_TYPES.TreeGenesis, s);
 });
 
 test("genesisCtx: every genesis field moves it, wrapHashes and sealedInfo do not; treeId is PqChatSession's struct hash", () => {
   const g = hex(tr.genesisCtx(tree));
-  assert.equal(hex(tr.genesisCtx({ ...tree, wrapHashes: [id("x"), id("y")], sealedInfo: "0x01" })), g);
+  assert.equal(
+    hex(tr.genesisCtx({ ...tree, wrapHashes: [id("x"), id("y")], sealedInfo: "0x01", confirmTag: id("t2") })),
+    g,
+  );
   for (const [f, v] of Object.entries({
     creator: id("ua/B"),
     nonce: 4,
@@ -503,11 +508,14 @@ test("genesisCtx: every genesis field moves it, wrapHashes and sealedInfo do not
     admins: [id("ua/B")],
     members: session.members.slice(1),
     groupMode: 2,
+    pathRefreshBound: 25,
   }))
     assert.notEqual(hex(tr.genesisCtx({ ...tree, [f]: v })), g, f);
   refused("PqChatShape", () => tr.genesisCtx({ ...tree, groupMode: undefined }));
   assert.equal(hex(tr.treeId(session)), hex(pc.structHash("PqChatSession", session)));
   assert.notEqual(hex(tr.treeId({ ...session, wrapHashes: [id("x"), id("y")] })), hex(tr.treeId(session)));
+  assert.notEqual(hex(tr.treeId({ ...session, confirmTag: id("t2") })), hex(tr.treeId(session)));
+  refused("PqChatShape", () => tr.genesisCtx({ ...tree, pathRefreshBound: undefined }));
 });
 
 test("PathList of the empty list (codex-r2-14), by hand; arrays hash as EIP-712 arrays of struct hashes", () => {
@@ -840,4 +848,15 @@ test("C-7: a node outside the tree has no direct path (PqChatShape), never a loo
   refused("PqChatShape", () => tr.directPath(7, 4));
   refused("PqChatShape", () => tr.directPath(-1, 4));
   refused("PqChatShape", () => tr.directPath(99, 4));
+});
+
+test("fable-C-9 of the path-less review: a tree read without its counter or bound is a lying read (TreeReadCorrupted), never 0", () => {
+  const t = tr.coldTree([key("A"), key("B")], 5);
+  const j = { ...t, goneUa: [...t.goneUa], goneOwnKey: {}, goneKey: [...t.goneKey] };
+  assert.equal(tr.treeFromJson(j).pathBound, 5, "control");
+  for (const f of ["sincePath", "pathBound"]) {
+    const k = { ...j };
+    delete k[f];
+    refused("TreeReadCorrupted", () => tr.treeFromJson(k));
+  }
 });

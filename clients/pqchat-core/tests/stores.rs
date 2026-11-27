@@ -848,6 +848,7 @@ async fn test_chain_store_warned() {
         chain_uid: hex(&[0x5e; 32]),
         registry: REGISTRY.into(),
         factory: FACTORY.into(),
+        tree_gas: None,
     });
     let pq = PqChat::with_net(
         w.app.clone(),

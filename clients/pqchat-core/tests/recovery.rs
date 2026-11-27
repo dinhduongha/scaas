@@ -106,7 +106,7 @@ fn session_at(w: &World, contract: &str, e: &Epoch, home: &str, sig_hash: &str) 
         .map(|m| json!({"ua": m.ua, "keyId": m.key_id.to_string(), "via": m.via}))
         .collect();
     let s = json!({"creator": e.author, "nonce": e.nonce.to_string(), "homeChain": hex(&[7; 32]),
-        "homeChatContract": home, "groupMode": "0", "admins": e.admins, "members": members, "wrapHashes": e.wrap_hashes,
+        "homeChatContract": home, "groupMode": "0", "pathRefreshBound": "0", "confirmTag": format!("0x{}", "00".repeat(32)), "admins": e.admins, "members": members, "wrapHashes": e.wrap_hashes,
         "sealedInfo": hex(&e.sealed_info)});
     w.net.answer(
         contract,

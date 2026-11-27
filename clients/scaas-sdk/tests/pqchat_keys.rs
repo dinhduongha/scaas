@@ -1002,10 +1002,18 @@ async fn read_app_agreed_is_the_agreed_read() {
     assert_eq!(plain, json!({"0": "2"}).to_string());
     assert_eq!(
         code(
-            a.read_app_agreed("local".into(), VIEW.into(), entry, "{}".into())
+            a.read_app_agreed("local".into(), VIEW.into(), entry.clone(), "{}".into())
                 .await
         ),
         "Argument"
+    );
+    // R13 (D-4 of the TreeKEM T4-T9 review): the named-only agreement needs 3 named endpoints, the list's one does not do
+    assert_eq!(
+        code(
+            a.read_app_agreed_named("local".into(), VIEW.into(), entry, "{}".into())
+                .await
+        ),
+        "AgreementNeedsThree"
     );
 }
 

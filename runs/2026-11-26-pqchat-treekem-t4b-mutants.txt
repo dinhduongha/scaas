@@ -1,0 +1,15 @@
+# t4b mutants at commit 04e0b1ea8 (name | outcome | test)
+the guard checks the hashes but not the admission check | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib tree_set
+a path ciphertext not checked against ctHashes | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib tree_set
+a Welcome wrap not checked against wrapHashes | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib tree_set
+a set with a piece missing taken (the ciphertexts' count) | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib tree_set
+no piece held back: the last transaction holds several pieces | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib tree_set
+the node keys not final before the ciphertexts | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib tree_set
+the held ciphertext sent before every other piece is final | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib tree_set
+a piece on its own relayed while ciphertexts are missing | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib tree_set
+a backlog refusal of an exit reported dead | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib an_exit_waits_within_the_lag
+an exit past the lag kept waiting | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib an_exit_waits_within_the_lag
+A-4 a ciphertext before its list refused as a bad hash | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib tree_set
+A-5 node keys short of the signed count waiting for ever | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib tree_set
+D-12 a Welcome wrap of another member than its Add | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib tree_set
+13 mutants, 13 killed, 0 survived (0 killed elsewhere), 0 not loaded

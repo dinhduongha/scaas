@@ -1,0 +1,3 @@
+# p9 mutants at commit efd338878 (name | outcome | test)
+resume drops the warnings | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_resume_keeps_the_leaves_under_review
+1 mutants, 1 killed, 0 survived (0 killed elsewhere), 0 not loaded

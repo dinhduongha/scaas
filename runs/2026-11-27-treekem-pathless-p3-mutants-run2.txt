@@ -1,0 +1,5 @@
+# p3 mutants at commit 2ecad9241 (name | outcome | test)
+epoch 0's tag skipped | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
+the session's bound unchecked | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
+the snapshot's sincePath unchecked | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
+3 mutants, 3 killed, 0 survived (0 killed elsewhere), 0 not loaded

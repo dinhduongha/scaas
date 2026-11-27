@@ -107,13 +107,99 @@ pub async fn session_at(
         .value
         .clone();
     let s = json!({"creator": me, "nonce": nonce.to_string(), "homeChain": w.l.uid,
-        "homeChatContract": home.to_ascii_lowercase(), "groupMode": "0", "admins": [me],
+        "homeChatContract": home.to_ascii_lowercase(), "groupMode": "0", "pathRefreshBound": "0", "confirmTag": format!("0x{}", "00".repeat(32)), "admins": [me],
         "members": keys.iter().map(|k| json!({"ua": k.ua, "keyId": k.key_id.to_string(), "via": k.via})).collect::<Vec<_>>(),
         "wrapHashes": signed.wrap_hashes, "sealedInfo": sealed});
     let a = json!({"s": s, "wraps": wraps.iter().map(wrap_json).collect::<Vec<_>>(), "sig": sig_json(&signed.sig)});
     w.net
         .inner
         .prepare(CHAIN, at, "IPqChat.createSession", a, &w.l.payer)
+        .await
+        .unwrap()
+}
+
+/// A session record of `by` with `nonce` at `home`, members `members` (with `by`), whose `sealedInfo` is its info with one
+/// space after the first brace ([`info_spaced`], under the session's own `K`): signed by `by` through the SDK's generic
+/// record entry and prepared at `home`. What K5 refuses. Mutant 11's fixture since CLI-PQC-15 (3b1eeae0d): a read that
+/// changes an honest record's `sealedInfo` fails that record's kept signature first, so only a record its author signed
+/// with that info reaches the info check.
+pub async fn session_info_spaced(
+    w: &World,
+    pq: &PqChat,
+    by: &Me,
+    nonce: u64,
+    home: &str,
+    members: &[&Me],
+) -> AppCall {
+    let seed = match &by.key {
+        scaas_sdk::op::KeyRef::Ua { seed, .. } => seed.clone(),
+        _ => unreachable!(),
+    };
+    let me = by.ua.to_ascii_lowercase();
+    let sid = w.app.pqchat_session_id(me.clone(), nonce).unwrap();
+    let k = w.app.pqchat_epoch_key(&seed).unwrap();
+    let mut uas: Vec<String> = members.iter().map(|m| m.ua.clone()).collect();
+    uas.push(me.clone());
+    uas.sort();
+    uas.dedup();
+    let (mut keys, mut wraps) = (vec![], vec![]);
+    for ua in &uas {
+        let ver = pq.kem_version(CHAIN, ua).await.unwrap().0;
+        wraps.push(
+            w.app
+                .pqchat_wrap(
+                    CHAIN.into(),
+                    k.clone(),
+                    sid.clone(),
+                    sid.clone(),
+                    ua.clone(),
+                    ver,
+                )
+                .await
+                .unwrap(),
+        );
+        keys.push(PqMemberKey {
+            ua: ua.clone(),
+            key_id: ver,
+            via: pqchat_core::model::ZERO32.into(),
+        });
+    }
+    let info = serde_json::to_string(&Info {
+        stores: vec![w.chain_store(home)],
+        name: "hostile".into(),
+        topic: "hostile".into(),
+        matrix: Default::default(),
+    })
+    .unwrap();
+    let sealed = info_spaced(w, &k, (&sid, &sid), info.as_bytes());
+    let signed = w
+        .app
+        .prepare_pqchat_session(
+            by.key.clone(),
+            scaas_sdk::pqchat_records::PqChatSession {
+                creator: me.clone(),
+                nonce,
+                home_chain: w.l.uid.clone(),
+                home_chat_contract: home.to_ascii_lowercase(),
+                admins: vec![me.clone()],
+                members: keys.clone(),
+                wraps: wraps.clone(),
+                sealed_info: sealed.clone(),
+            },
+        )
+        .await
+        .unwrap()
+        .sign()
+        .await
+        .unwrap();
+    let s = json!({"creator": me, "nonce": nonce.to_string(), "homeChain": w.l.uid,
+        "homeChatContract": home.to_ascii_lowercase(), "groupMode": "0", "pathRefreshBound": "0", "confirmTag": format!("0x{}", "00".repeat(32)), "admins": [me],
+        "members": keys.iter().map(|k| json!({"ua": k.ua, "keyId": k.key_id.to_string(), "via": k.via})).collect::<Vec<_>>(),
+        "wrapHashes": signed.wrap_hashes, "sealedInfo": hex(&sealed)});
+    let a = json!({"s": s, "wraps": wraps.iter().map(wrap_json).collect::<Vec<_>>(), "sig": sig_json(&signed.sig)});
+    w.net
+        .inner
+        .prepare(CHAIN, home, "IPqChat.createSession", a, &w.l.payer)
         .await
         .unwrap()
 }
