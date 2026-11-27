@@ -130,3 +130,14 @@ R3 | docs | 51ae9e04d | 0 | -
 R3m | docs | b6b4a1306 | 0 | -
 R3m | mutants-check | b6b4a1306 | 0 | -
 R3m | pqc-reads | b6b4a1306 | 0 | reads 37 (23 trusted), writes 13, R2 23; 0 refused
+confirm | pqc-chain | f670c8a87 | 0 | 8 passed, 0 failed, 0 ignored (23 binaries)
+confirm | pqc-e2e | f670c8a87 | 0 | 2 passed, 0 failed, 0 ignored (1 binaries)
+confirm | pqc-reads | f670c8a87 | 0 | reads 60 (49 trusted), writes 19, R2 49; 0 refused
+confirm | pqc-tree | f670c8a87 | 0 | 2 passed, 0 failed, 0 ignored (1 binaries)
+confirm | pqc-wasm | f670c8a87 | 0 | -
+confirm | pqc-vectors | f670c8a87 | 0 | 8 passed, 0 failed, 0 ignored (1 binaries)
+confirm | pqc-clippy | f670c8a87 | 0 | -
+confirm | docs | f670c8a87 | 0 | -
+confirm | mutants-check | f670c8a87 | 1 | -
+confirm | pqc-test | f670c8a87 | 0 | 151 passed, 0 failed, 8 ignored (23 binaries)
+confirm | bind | f670c8a87 | 1 | -
