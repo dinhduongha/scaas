@@ -678,7 +678,9 @@ and an app extension is refused while the app has the profile open.
 can still be deleted** (controller call; SPECIFIED). Create is journaled with its index row; delete needs the name typed, shows how
 many seeds lack a backup and asks a second confirmation for them, and starts by renaming the directory to a tombstone, which start-up
 finishes; a directory without an envelope is reported, never removed; a locked visible profile is deleted with the name typed and a
-confirmation that its data is lost. A whole profile exports and imports by [CLI-UPR-17](#CLI-UPR-17).
+confirmation that its data is lost. A whole profile exports and imports by [CLI-UPR-17](#CLI-UPR-17). Owner 2026-11-27: a hidden
+profile whose passphrase is lost is neither named nor deleted by the app; the user removes its directory by hand; no call deletes
+unlisted directories.
 
 <a id="CLI-UPR-16"></a>**CLI-UPR-16** — **Clients open a profile by name, a hidden one only through a prompt; the CLI never follows
 the last profile an app opened** (controller call; SPECIFIED). `--profile <name>` (else "default") and `--profile-hidden`, the
@@ -697,7 +699,7 @@ file never overwrites an existing profile. Vectors in clientkeys and `ua-rs` bef
 bounded, verified before it is parsed, and brings no setting that could weaken the profile** (controller call; SPECIFIED). The file
 holds the label (name, hidden flag), the keystore and the operation state (operations in flight followed only on the user's word),
 and the settings without credential references; never `keystore.prev`, the PqChat store, caches, locks, the envelope or keychain
-items. Export needs the name typed and the profile passphrase, writes a new `0600` file never through a symlink; the seal is
+items (owner 2026-11-27 for `keystore.prev`, the PqChat store and credential references). Export needs the name typed and the profile passphrase, writes a new `0600` file never through a symlink; the seal is
 AES-256-GCM-SIV in 1 MiB chunks with a last-chunk flag, the payload at most 64 MiB (`ProfileExportTooLarge`); import keeps a stronger
 policy, lowered caps and the default chain profile, and every endpoint, `first` mark, idle-lock and clipboard choice only on the
 user's confirm of each; one error `ProfileImportOpen`, header reasons in the local log, a new profile passphrase and a new PqChat

@@ -434,12 +434,12 @@ Every step that touches the root runs under the root lock; every step inside a p
 
 A lost profile passphrase loses the profile (stated): no recovery path exists; seeds return from their words or their sealed backups
 (SDK spec §6.11). A **hidden** profile whose passphrase is lost cannot be named, so no call deletes it; it stays as an unlisted
-directory, costs one run in every hidden search and counts toward 32 (§16.1 Q-UP10). The last profile may be deleted; the next start
+directory, costs one run in every hidden search and counts toward 32; the user removes its directory by hand, and no call deletes unlisted directories (owner 2026-11-27, Q-UP10). The last profile may be deleted; the next start
 creates "default" again (O5).
 
 ### 10.1 Export and import of a whole profile (CLI-UPR-17, CLI-UPR-18; SPECIFIED; owner Q-UP5)
 
-**Inside the file** (all of it under the seal; the controller's narrowing of 2026-11-27, owner may veto, is marked *):
+**Inside the file** (all of it under the seal; the narrowing marked * is the owner's ruling of 2026-11-27, Q-UP11):
 
 | Part | Content |
 |---|---|
@@ -724,12 +724,14 @@ Every point the frame left open was ruled on 2026-11-27: Q-UP5 in scope now (§1
 | Q-UP8 | Rename the stable code `ProfileMismatch` | yes, to `ChainProfileMismatch`, in the rename task | §15; CLI-UPR-01 |
 | Q-UP9 | Anything stronger than "hidden from the list" | nothing: a non-goal | §2, §8; CLI-UPR-13 |
 
-### 16.1 Open for the owner (after the review)
+### 16.1 Owner rulings after the review (owner 2026-11-27)
 
-| # | Question | Options | Recommendation |
+| # | Question | Ruling | Where |
 |---|---|---|---|
-| Q-UP10 | A hidden profile whose passphrase is lost can be neither named nor deleted (§10) | (a) it stays; the user deletes its directory by hand; (b) a call that deletes every unlisted directory after a typed confirm, which anyone at the OS account could also run against another person's hidden profile | (a): (b) turns "hidden" into "deletable by anyone at the account without a passphrase" |
-| Q-UP11 | The controller's narrowing of Q-UP5's content (§10.1, marked *): `keystore.prev`, the `pqchat` part and credential references left out of the file | (a) keep the narrowing; (b) put one back | (a): each is either device-bound (CLI-PQC-09), names another machine's paths, or holds a seed the user removed |
+| Q-UP10 | A hidden profile whose passphrase is lost can be neither named nor deleted (§10) | as recommended: the app neither names nor deletes it; the user removes its directory by hand; no call deletes unlisted directories (such a call would let anyone at the OS account delete another person's hidden profile without a passphrase) | §10; CLI-UPR-15 |
+| Q-UP11 | The narrowing of Q-UP5's content (§10.1, marked *) | as recommended: a profile export leaves out `keystore.prev`, the PqChat store and credential references | §10.1; CLI-UPR-18 |
+
+No open question remains.
 
 ## 17. Tests (SPECIFIED; for the plan)
 
@@ -774,10 +776,10 @@ Each negative test has its positive control and its named mutant, which must tur
 | CLI-UPR-12 | protection: `DEK_p`, the envelope, refusals by state, unprotected until the first secret, the platform wrap | no; Q-UP1, Q-UP2 yes |
 | CLI-UPR-13 | the hidden search and `create_hidden`; not deniable on disk | no; Q-UP7, Q-UP9 yes |
 | CLI-UPR-14 | the instance lock: non-blocking OS advisory lock, no stale state, the search locks only the match | no; Q-UP3, Q-UP4 yes |
-| CLI-UPR-15 | lifecycle: create, rename, hide, delete by tombstone, delete of a locked profile; export and import by CLI-UPR-17 | no |
+| CLI-UPR-15 | lifecycle: create, rename, hide, delete by tombstone, delete of a locked profile; export and import by CLI-UPR-17 | no; Q-UP10 yes |
 | CLI-UPR-16 | client surfaces: `--profile`, `--profile-hidden`, one descriptor per secret, the CLI never follows `last`, pickers | no; Q-UP6 yes |
 | CLI-UPR-17 | a whole profile exports and imports as one sealed file | yes (O10, Q-UP5) |
-| CLI-UPR-18 | the export file's means: no id, chunked seal, size bound, verify then parse, settings that cannot weaken, the profile passphrase | no |
+| CLI-UPR-18 | the export file's means: no id, chunked seal, size bound, verify then parse, settings that cannot weaken, the profile passphrase | no; Q-UP11 yes |
 | CLI-UPR-19 | the sealed store: AES-256-GCM-SIV with random nonces, framed associated data, HMAC file names, the anchored manifest, key labels, zeroisation | no |
 | CLI-UPR-20 | crash safety: the re-seal journal and generations, the root lock, the create journal, tombstones, start-up clean-up | no |
 | CLI-UPR-21 | KDF bounds per field and per device, `p` fixed, named refusals, the test parameter set | no |
