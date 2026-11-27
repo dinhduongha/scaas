@@ -1,7 +1,8 @@
 # `scaas-matrix`: the Matrix client crate, one client per open user profile — design
 
 **Status:** SPECIFIED (2026-11-27); BUILT the same day on branch `scaas-matrix` (plan T0 to T9), except §11 (wasm32, PLANNED)
-and §10's answer-size bound (O3, open). UNAUDITED. Rules:
+and §10's answer-size bound (O3, open). Revision 2 the same day applies Fable's review of `c414f6eaa` (areas A, B, D, E, F: P1 4
+after merging duplicates, P2 about 25, P3 about 30; §15). UNAUDITED. Rules:
 [`docs/clients/scaas-matrix.md`](../../clients/scaas-matrix.md) (CLI-MTX-01 to CLI-MTX-12), register entries of the same ids in
 [decisions.md](../../decisions.md) (controller calls, `owner: no`, the owner may override any) under the owner rulings
 [CLI-PQC-19](../../decisions.md#CLI-PQC-19), [CLI-PQC-20](../../decisions.md#CLI-PQC-20) and
@@ -30,6 +31,7 @@ and §10's answer-size bound (O3, open). UNAUDITED. Rules:
 12. [Threat model](#12-threat-model)
 13. [Test strategy](#13-test-strategy)
 14. [Open points](#14-open-points)
+15. [Revision 2: Fable's review of `c414f6eaa` applied (2026-11-27)](#15-revision-2-fables-review-of-c414f6eaa-applied-2026-11-27)
 
 ## 1. Rulings it follows
 
@@ -71,8 +73,8 @@ flowchart LR
 both layouts that keep the trait in `pqchat-core`: a dependency of `scaas-matrix` on `pqchat-core` (even behind a feature) would
 put `pqchat-core` and the SDK into the default app build's lockfile and feature graph, and moving the implementation into
 `pqchat-core` would pull a Matrix crate into it. The new crate holds exactly what both sides share and nothing else: the trait
-`MatrixTransport`, its error `TransportError`, `RoomEvent`, `HistoryPage`, `EVENT_TYPE`, and the conformance test's `Seen`,
-`Witness` and `conformance`. Its dependencies are `serde` (the two value types are kept in `pqchat-core`'s store), `serde_json`
+`MatrixTransport`, its error `TransportError`, `RoomEvent`, `HistoryPage`, `EVENT_TYPE`, `EVENT_MAX`, and the conformance test's
+`Seen`, `Witness` and `conformance`. Its dependencies are `serde` (`RoomEvent` is kept in `pqchat-core`'s store), `serde_json`
 (`Value` is in the trait's signature) and `async-trait` (the trait is used as `dyn MatrixTransport`; a proc macro with no runtime
 code). `pqchat-core` re-exports every item at its old path `pqchat_core::matrix::*`, so its callers do not change; the event's
 codec (`event`, `parse`, base64) stays in `pqchat-core`. The trait's methods return `TransportError` (no room id or Matrix id in
@@ -108,16 +110,22 @@ it returns the directory may be opened again. A profile switch is the profile la
 profile's client, then opens the next; two profiles' clients in one process (the e2e's two users) are allowed by the crate.
 
 **The store key** (CLI-MTX-03, CLI-UPR-29). The caller passes `StoreKey`, 32 bytes from the profile's sealed item. The crate gives
-it to matrix-sdk's SQLite stores as their raw key (`SqliteStoreConfig::key`, no KDF: the key is random) for every store matrix-sdk
-opens (state, crypto, event cache, media) and drops its own copy (`Zeroizing`) once they are open; the stores hold their cipher
-until `close`. It never writes the key anywhere: no file, no OS
+it to matrix-sdk's SQLite stores as their key (`SqliteStoreConfig::key`) for every store matrix-sdk opens (state, crypto, event
+cache, media): matrix-sdk-store-encryption expands it with HKDF-SHA256 into the key that wraps each database's own random store
+cipher (XChaCha20-Poly1305 for values, a keyed BLAKE3 hash for keys). Values are encrypted and keys hashed; the table layout, row
+counts, value sizes and some timestamps are not hidden, and a change of the profile's key re-wraps the ciphers without
+re-encrypting data (F-7). The crate drops its own copy (`Zeroizing`) once the stores and its record cipher are open; the stores
+hold their ciphers until `close`. It never writes the key anywhere: no file, no OS
 secret storage, no log, no error, no `Debug` output (`StoreKey`'s `Debug` prints `StoreKey(..)`). The crate makes no key. A wrong key
 opens nothing (`MatrixStore`). `StoreKey` absent (`None`): the client runs on matrix-sdk's memory stores and persists nothing; the
 session cannot be restored and the user logs in again at each start (contract §11.4).
 
-**The session** (CLI-MTX-04). After a password login the crate writes one record into the encrypted state store (a custom value
-`scaas-matrix/session/v1`: homeserver URL, user id, device id, access token), so nothing of it is in the clear on disk, the
-homeserver's name included (a hidden profile, CLI-UPR-08, shows nothing). `restore(dir, key)` opens the state store with the key,
+**The session** (CLI-MTX-04). After a password login the crate writes one record into the state store (a custom value
+`scaas-matrix/session/v1`: homeserver URL, user id, device id, access token). matrix-sdk-sqlite stores a custom value as given,
+so the crate seals each of its records (session, settings, marks) first with a record cipher of its own, a `StoreCipher` of
+matrix-sdk-store-encryption exported under the store key into the value `scaas-matrix/cipher/v1`; each sealed record carries its
+name, so a record moved under another name does not open (§15, F-1). Nothing of it is in the clear on disk, the homeserver's name
+included (a hidden profile, CLI-UPR-08, shows nothing). `restore(dir, key)` opens the state store with the key,
 reads the record, drops that store, then builds the client on the same directory and restores the session; no record:
 `MatrixSession`. No refresh token is asked for in this version (Synapse's access tokens do not expire unless configured to); a
 server answer `M_UNKNOWN_TOKEN` ends the sync loop with the event `SessionInvalid` (`MatrixSession`). `logout()` invalidates the
@@ -128,6 +136,8 @@ token on the server, closes the client and deletes the directory's stores. The M
 as `localhost` is not accepted, it may resolve elsewhere).
 
 ## 5. API surface
+
+(Revision 1's table below; revision 2's changes to it are in §15.)
 
 Toolkit-free Rust types; names in the view-model contract's terms (§11.1 to §11.4). Async methods run on the caller's tokio runtime.
 
@@ -282,3 +292,74 @@ exists.
 - **O5**: matrix-sdk 0.20.0 (2026-11-25) fixes RUSTSEC-2026-0459 (bundled SQLite) through rusqlite 0.41; it reaches 14 days on
   2026-12-09: move the pin then and drop the advisory exception (§3).
 - **O4**: single sign-on, QR verification, refresh tokens, sliding sync and the research note's §10 list, each its own task.
+
+## 15. Revision 2: Fable's review of `c414f6eaa` applied (2026-11-27)
+
+Reports and the ruling per finding: `scratchpad/scaas-matrix-review-20261127-1552/` (git-ignored; `STATUS.md`). Every P1 and P2 is
+fixed; P3s fixed or recorded with a reason. The changes, by area of this spec:
+
+- **Records sealed (F-1, P1).** §4's session text as now written: the session, settings and marks records are sealed by the crate's
+  record cipher (XChaCha20-Poly1305 through matrix-sdk-store-encryption's `StoreCipher`, base64 form, the record's name inside),
+  bounded before decoding (the sealed form at 4/3 of the plaintext bound plus 1 KiB). New direct dependency
+  `matrix-sdk-store-encryption =0.19.1`, already in the tree. The test scans for the token, the Matrix id, the homeserver and a
+  room id while the client is open and after it is closed.
+- **Room marks (M1, M2; P1).** A mark is a room id (at most 255 bytes, parsed); `hold_invite(room, true)` refuses a room the
+  account is joined to as a Matrix room (`MatrixRoomKind`: a session someone else describes cannot take a room the user uses);
+  the trait's `hold_invite` returns `Result` and `pqchat-core`'s `preview` fails closed on a refusal; a new trait method
+  `bound(room)` (default: nothing) is called by `pqchat-core`'s `join_room` on every `Bound` answer, and `scaas-matrix` marks the
+  room on it and on `send_event`, `history`, `invite`, `remove`, `set_admin`, so a fresh device, a new login or a profile without
+  a store key learns the bindings. The marks record is written only when it changed, only below its bound, one write at a time,
+  memory replaced after the write (A-8). The `held` set is gone (never read).
+- **Client lifetime (M3).** The client, the lock and the update sender live in the shared state as options; `close(&self)` takes
+  them, so a transport handle kept past it fails and holds neither the client nor the lock; `next_update` returns `None` after it.
+- **Login and logout (A-5, D-8, E-4, M4, M12).** `login_password(dir, key, opts, Login { homeserver, user, password, device_name })`
+  refuses a directory that holds a store (`MatrixSession`); `MatrixClient::wipe(dir)` deletes the stores under the lock; a failure
+  after the server accepted the login logs that device out and deletes what was written. `respect_login_well_known(false)`; a
+  homeserver found by discovery must be `https`; the rule is checked again after login. `Options` has no default. `logout()`
+  bounds the server call (30 s), always deletes the stores, and answers whether the server invalidated the token.
+- **HTTP (M4, E-6).** `RequestConfig::disable_retry()` (no 15-minute retries, no unbounded `retry_after_ms`); matrix-sdk runs on a
+  reqwest client of the crate built `no_gzip()` with a 20 s connect and 60 s read timeout, beside the 90 s request timeout.
+- **O3, its reason restated.** Without decompression an answer is at most what the link carries within the timeouts (rate × time,
+  not a byte count): still not a size bound. matrix-sdk 0.19.1 reads each answer whole (`http_client/mod.rs`,
+  `response.bytes().await`) and has no body limit; reqwest 0.13 has no body-size option, and `ClientBuilder::connector_layer`
+  must return reqwest's sealed `Conn` (`reqwest::connect::sealed`), so no byte-counting stream fits under TLS. Open.
+- **Timeline (M5, A-18).** `TimelineItem.encrypted` (the event came encrypted) and `Trust::Unencrypted` for a cleartext message in
+  an encrypted room; a timestamp that is not a `u64` reads as 0 instead of dropping the event; `ItemKind`'s `Debug` shows no body.
+- **Updates (M6, A-13).** `SessionInvalid` and PqChat gaps are kept beside the queue and come first; `Update::PqChatGap { rooms }`
+  for PqChat rooms whose events were dropped or skipped by a limited sync (`pqchat-core` reads them again), `Update::Gap { room }`
+  for a limited Matrix timeline, `Update::SyncFailing` after five failed rounds, `Update::Verification { flow, step }` when a
+  tracked flow moves; the loop keeps 1 s between rounds; `sync_once` is refused while the loop runs.
+- **Encryption (F-2, F-4, M7, M8).** `MatrixDeviceUnverified` names a send refused by the share strategy (this device not
+  verified, or a verified user changed identity); `device_verified()`; `reset_identity(password)` on the caller's call. Backup
+  download `AfterDecryptionFailure` (room keys come from the backup once its key is known, after `recover`). `setup_recovery`
+  is refused when the account has secret storage or this device lacks the cross-signing keys; `set_key_backup(true)` goes
+  through `recovery().enable_backup()` and is refused over an existing backup. `Step::Confirmed`; the last step of each flow
+  is kept (64 flows), so a finished flow answers its outcome; `m.mismatched_commitment` is a `Mismatch`; a SAS is accepted with
+  emoji only. In-room verification requests remain PLANNED (F-9).
+- **Rooms (D-5, D-10, D-11, D-17, D-19, A-17).** `leave` acts on a room of either kind (a membership change carries no content
+  or ephemeral signal); `RoomRow` gains `last_ts` and renames `kind` to `room_kind`; the last event's text is the front-end's
+  `messages(room, None, 1)` when it opens a room; `homeserver()`; the transport's `history` pages on while the token moves,
+  `members` asks the server to leave out departed members, `create_room` fails closed when the server encrypted the new room.
+- **Push (M9).** A pusher's URL is `https`; removing a pusher or the PqChat rule is allowed in a hidden profile.
+- **Errors (A-14, D-15).** `Argument` renamed `MatrixArgument` (scaas-app's §7 has an `Argument` of another meaning); a homeserver
+  failure of a recovery or backup call is `MatrixSend`, `MatrixStore` stays for local stores. Names now: `EndpointScheme`,
+  `MatrixLogin`, `MatrixSession`, `MatrixStore`, `MatrixVerification`, `MatrixSend`, `Internal` (in scaas-app's §7), and
+  `MatrixRoom`, `MatrixRoomKind`, `MatrixProfileBusy`, `MatrixPushHidden`, `MatrixDeviceUnverified`, `MatrixArgument` (O1:
+  scaas-app appends them).
+- **Other (B-6, B-8, B-11, E-13, F-10).** `EVENT_MAX` lives in `pqchat-transport`; `RoomEvent`'s and `HttpPusher`'s `Debug` hide
+  content and push key; `#![forbid(unsafe_code)]` in both crates; the profile directory is mode 0700 and the lock file 0600 on
+  unix; `StoreKey::from_bytes(&mut [u8; 32])` wipes the caller's copy.
+- **Conformance (B-3, B-4, B-5).** `Witness::user_id`; `conformance` checks `joined`, that an invited member is in `members`, and
+  that both accounts are in the joined room's `members`; `pqchat-core`'s fake fails it by name with a rewritten content and with
+  members that leave out the invited; the literal is pinned to the codec's `event`; `scaas-matrix`'s e2e holds an invite
+  unanswered across sync rounds.
+- **The scaas build (D-3).** Until `pqchat-core` previews a pending session, its room's invite is an ordinary Matrix invite to
+  this crate (nothing in the invite tells them apart): the scaas build previews pending sessions before it lists Matrix invites
+  (scaas-app's item).
+- **Recorded, not changed:** F-9 (in-room verification requests: PLANNED), F-10's password copies inside matrix-sdk, D-13
+  (matrix-sdk's spans carry the store path: the app filters its tracing), D-18 (with a pusher, the default invite rule pushes an
+  invite to a PqChat room before `preview`; the push is `event_id_only`), A-12 (the 4,096 marks are a lifetime cap), B-7 (one
+  transport error code), E-13's verification prompts from any sender (Matrix's model: the user decides).
+- **Supply chain (D-6).** The lockfile's crates published after 2026-11-13 are moved back to their newest release at least 14
+  days old where the graph allows; the rest are named in the gate summary.
+
