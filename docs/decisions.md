@@ -13129,17 +13129,17 @@ older revisions sit in a cloud account open to offline guessing.
 **Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, C1: exclude; [mobile key storage note](research/2026-11-27-mobile-key-storage.md) §4, §7 item 6.
 
 <a id="CLI-SDK-35"></a>
-### CLI-SDK-35 — One review model in the SDK, from descriptors compiled into it; third-party descriptors pinned by hash; simulation as supporting evidence only
+### CLI-SDK-35 — One `SignReview` model in the SDK, from descriptors compiled into it; third-party descriptors pinned by hash; simulation as supporting evidence only
 - old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#CLI-SDK-35 · superseded-by: —
 
 **Rule.**
-- **(E1) One review model, one source.** For every operation, record and app call the SDK emits one review model: typed rows
+- **(E1) One `SignReview` model, one source.** For every operation, record and app call the SDK emits one `SignReview`: typed rows
   (amounts with decimals and symbol, UAs with kind and book name, chains, times, durations, hashes and the length and sha256 of
   crypto bytes), each with its source (signed, request, derived, simulated) and visibility (public, encrypted on chain, local
   only); the steps (the "N transactions" line); the payer and the cost path; alternatives and deferred costs; and warnings
   with three severities (Info shown, Caution shown beside its rows, Block disables confirm) and stable codes, computed in the
   SDK. Today's flat list of every signed field ([CLI-SDK-08](clients/scaas-sdk.md#CLI-SDK-08)) stays as the model's raw
-  section. The model is built from **descriptors compiled into the SDK**, one per `(struct, domain kind)` of
+  section, its rows still `ReviewField`. The model is built from **descriptors compiled into the SDK**, one per `(struct, domain kind)` of
   `smartcontracts/vectors/typed/typed_ops.json`, keyed by the pinned typehash; a test holds that every row has exactly one
   descriptor and that every field of the struct is in it. The contract a review names is bound through the chain profile's
   curated contracts, then the factory (`isRegisteredToken`, `versionOf`, `isTokenDeprecated`); a token of an unregistered
@@ -13157,11 +13157,16 @@ older revisions sit in a cloud account open to offline guessing.
   decoded struct is the effect); the post-sign simulation stays as built. No simulation vendor in the SDK. No review line is
   computed from decrypting a ciphertext someone else chose ([ARCH-POS-13](#ARCH-POS-13)).
 
-**Status.** SPECIFIED, nothing built; the model's field names are fixed by the SDK spec, not here. UNAUDITED.
+**Names** (owner 2026-11-27): the model is `scaas_sdk::SignReview` (never a bare "Review", which in this repository means a code or
+spec review); a raw row stays `ReviewField`; a warning is `ReviewWarning` (stable code, severity Info / Caution / Block); a
+descriptor is `SignDescriptor`, keyed by the typehash.
+
+**Status.** SPECIFIED, nothing built; built after the pre-freeze tag, before the freeze, with scaas-app and the extension
+(owner 2026-11-27); the model's field names are fixed by the SDK spec, not here. UNAUDITED.
 **Why.** Six front-ends writing the warnings six times drift (CLI-APP-09 already exists for one); a descriptor fetched at run
 time adds a party the user must trust and lets whoever serves it change what the user is shown.
 **Cost if wrong.** A front-end that omits a warning another shows; a display a registry or a node can alter.
-**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, E1 one review model from SDK descriptors, no run-time fetch, the single source; E2 hash-pinned with a Caution; E3 later; E4 build it, as supporting evidence only, its majority basis shown; [clear-signing note](research/2026-11-27-clear-signing.md) §4 to §8.
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the recommendations of the owner questions of 2026-11-27 accepted as recommended, E1 one review model from SDK descriptors, no run-time fetch, the single source; E2 hash-pinned with a Caution; E3 later; E4 build it, as supporting evidence only, its majority basis shown; [clear-signing note](research/2026-11-27-clear-signing.md) §4 to §8. Name (owner 2026-11-27): the model is `SignReview`, not "Review", to keep it apart from code and spec reviews; `ReviewField` keeps its name.
 
 <a id="CLI-SDK-36"></a>
 ### CLI-SDK-36 — An app core signs a record only after the user's confirm

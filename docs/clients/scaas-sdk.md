@@ -170,7 +170,8 @@ allow-list; an undecoded call exists only behind its own feature and marker, fla
 ([CLI-SGN-29](signers-clientkeys.md#CLI-SGN-29)); no EIP-7702 authorization or type-4 transaction is built
 ([CLI-SGN-40](signers-clientkeys.md#CLI-SGN-40); `TxTypeRefused`). The review lists every token or market the operation touches, with its address and its listed or unlisted mark (owner 2026-11-17, "OK, all four points as proposed").
 
-**The review model** (owner 2026-11-27; SPECIFIED, nothing built): the review above becomes the raw section of one review model the
+**The `SignReview` model** (owner 2026-11-27; SPECIFIED, nothing built): the review above becomes the raw section (rows still
+`ReviewField`) of one `SignReview` the
 SDK emits for every operation, record and app call, built from descriptors compiled into the SDK (one per `(struct, domain kind)`,
 keyed by the pinned typehash, none fetched at run time), with typed rows, steps, the payer, warnings by severity and stable code, a
 third party's descriptor only as hash-pinned release data under a Caution, and a pre-sign simulation of opaque and app calls as
