@@ -80,6 +80,8 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: wasm32-unknown-unknown
+          # the ffi and rust steps run cargo clippy (no float arithmetic in the cores)
+          components: clippy
       # the registry only: one set's targets are several GB and would evict scaas-ci's caches
       - uses: Swatinem/rust-cache@v2
         with:
