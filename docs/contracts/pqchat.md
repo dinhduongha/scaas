@@ -100,7 +100,7 @@ reads its chain values from its own `ChainEnv`, is initialised once by the facto
 - **The owner UA names the instance and nothing more** (Q2): `owner()` returns it; it has no power over sessions, epochs,
   messages, topics, entries or votes, and no entry reads it. The instance has no pause, no admin and no upgrade.
 - **Introspection**: `factoryInfo()` returns `(factory, chainUid, contractClass = 3, kind = 0, version,
-  initialized)` (CTR-GOV-23: no owner in it; the instance's `owner()` answers its owner UA); `supportsInterface` answers ERC-165 (`0x01ffc9a7`), `type(IPqChat).interfaceId` (`0x8412b2f1` since the path-less delta's records; `0x7b7acc12` before) and the tree views'
+  initialized)` (CTR-GOV-23: no owner in it; the instance's `owner()` answers its owner UA); `supportsInterface` answers ERC-165 (`0x01ffc9a7`), `type(IPqChat).interfaceId` (`0xe9e2068a` since `entryRows`, [CTR-CHAT-30](#CTR-CHAT-30); `0x8412b2f1` since the path-less delta's records; `0x7b7acc12` before) and the tree views'
   `type(IPqChatTreeViews).interfaceId` (`0xec42e734`).
 - **The body module** ([CTR-TOK-30](token-wrappers.md#CTR-TOK-30), applied by 3C-D2 when the release passed the
   33,594 B line at 34,223 B): `PqChatTopics` holds the bodies of the public topics and votes (§9: the six writes and
@@ -667,7 +667,8 @@ checked** (owner D19, D20 and Q1 of 2026-11-07; topics spec P33, P35, P38).
   got)`), `mediaType` and `body` as above, signed by `author`, nonce in the original's topic scope. An edit keeps the
   original's topic, parent, reference, votes and place in every list; replies and votes attach to the original id.
   `entryOf(entryId)` returns the place and the latest version (`versionCount` included), `versionAt(entryId, version)`
-  any version, 1 being the original (`PqTopicVersion(count, version)` outside `1..count`).
+  any version, 1 being the original (`PqTopicVersion(count, version)` outside `1..count`); both also return the times of
+  [CTR-CHAT-29](#CTR-CHAT-29) and the version's nonce of [CTR-CHAT-31](#CTR-CHAT-31).
 
 <a id="CTR-CHAT-17"></a>**CTR-CHAT-17** — **One vote per UA per entry, changeable; the counts `up` and `down` are kept in
 state** (owner D21 of 2026-11-07; topics spec P40).
@@ -685,6 +686,37 @@ total)`** (owner 2026-11-07, topics spec P42; the shape 3C-D8 is a controller ca
 count)`, `replies(parentId, start, count)` and `byAuthor(author, start, count)` (originals only, every topic) return at
 most `count` ids from `start`, fewer at the end, empty past it, and the list's length; `count = 0` is the count view. No
 clamp: the call's gas bounds a page. The node's indexer may mirror them; the state is the answer.
+
+<a id="CTR-CHAT-29"></a>**CTR-CHAT-29** — **Every entry and every edit keeps the block time it landed, in the slot it
+already has** (owner 2026-11-27, public-topics UI research §8 G1). Status: **BUILT** (`test/pqchat/PqTopicRows.t.sol`,
+`PqChatLayout.t.sol` `test_entryTimesArePinned`), UNAUDITED.
+
+- `postEntry` stores `postedAt = uint64(block.timestamp)` in the entry's slot beside the head blob's address and `depth`
+  (`record | depth << 160 | postedAt << 192`, the 64 bits that were free); `editEntry` stores `editedAt` beside each
+  version's pointer (`versions[id][i] = record | editedAt << 160`, the element was the address alone). No slot is added; the
+  records, their typehashes and the vectors are unchanged.
+- `entryOf` returns `postedAt` (the original's, never moved by an edit) and `editedAt` (the latest edit's, 0 before one);
+  `versionAt(entryId, v)` returns the original's `postedAt` and version `v`'s `editedAt` (0 for version 1).
+- The time is the block's, as the chain reports it; a reader ranks and shows it as such ("Hot", "Active", "2 h ago").
+
+<a id="CTR-CHAT-30"></a>**CTR-CHAT-30** — **`entryRows(ids, viewer)` returns a feed's rows in one call, without the
+bodies** (owner 2026-11-27, research §8 G2). Status: **BUILT** (`test/pqchat/PqTopicRows.t.sol`), UNAUDITED.
+
+`entryRows(bytes32[] entryIds, bytes32 viewer) returns (EntryRow[] rows)`: one row per id, in the order asked, each
+`entryOf`'s fields without `body` (`topicId`, `author`, `parentId`, `depth`, `ref`, the latest version's `mediaType`,
+`sigHash` and `nonce`, `versionCount`, `postedAt`, `editedAt`), plus the latest version's `bodyLength`, `up` and `down`
+(`scoreOf`), the viewer's `vote` (`voteOf(id, viewer)`'s value, 0 when none) and `replies`, the direct reply count
+(`replies(id, 0, 0)`'s total). At most `ENTRY_ROWS_MAX` = 64 ids (`PqTopicRows(count)` above it, as `PqChat.ENTRY_ROWS_MAX()`
+reports); an id not here is `PqTopicUnknown(id)`; no id, no row. The row reads the head blob's fixed words and the slots,
+never the body: 64 rows cost about 1.49 M gas of an `eth_call` whether each body is 8 B or a 150,000-B chain of blobs
+(`test_topics_entryRowsSkipTheBody`). A body is read by `entryOf` or `versionAt`.
+
+<a id="CTR-CHAT-31"></a>**CTR-CHAT-31** — **The views return each version's nonce** (owner 2026-11-27, research §8 G5).
+Status: **BUILT** (`test/pqchat/PqTopicRows.t.sol`), UNAUDITED.
+
+`entryOf` and `entryRows` return the latest version's `nonce` (the original's before an edit), `versionAt(entryId, v)`
+version `v`'s. With the place, the media type and the body, that rebuilds the typed digest of any version from state, the
+`contentHash` a `ref` may pin ([CTR-CHAT-16](#CTR-CHAT-16)).
 
 ## 10. Every external entry
 
@@ -727,6 +759,7 @@ Status: **BUILT**. Errors are those of `IPqChat.sol`; "registry" means the bubbl
 | `epochCount(sessionId)`, `epochsOf(sessionId, offset, limit)`, `latestEpoch(sessionId)`, `EPOCHS_RANGE_MAX()` | view | page clamped to 128; 0 while the session is incomplete here | none |
 | `topicOf(topicId)`, `entryOf(entryId)` | view | known id | `PqTopicUnknown` |
 | `versionAt(entryId, version)` | view | known id, `1 ≤ version ≤ count` | `PqTopicUnknown`, `PqTopicVersion` |
+| `entryRows(entryIds, viewer)`, `ENTRY_ROWS_MAX()` | view | at most 64 ids, each known ([CTR-CHAT-30](#CTR-CHAT-30)) | `PqTopicRows`, `PqTopicUnknown` |
 | `writerOf`, `scoreOf`, `voteOf`, `topicNonceUsed`, `entryNonceUsed` | view | — | none: zero when unknown |
 | `topics`, `topicsByAdmin`, `writersOf`, `posts`, `replies`, `byAuthor` | view | `(ids, total)`, no clamp | none |
 
@@ -764,7 +797,10 @@ the size gate's row `PqChat` in `smartcontracts/evm/size-baseline.json`).
 `DeployBase._module` (its gate, forge's estimate × 1.05 within 60 M) and the onchain script's `PqChat.s.sol` `_module`,
 with an explicit limit of 59 M (that script runs at × 1.3, which for a 33 KB module would ask about 73 M; the code
 review's A-11). The history of the release's size is in
-the pins' comments; before the first split it was 34,223 B and asked 58.0 M.
+the pins' comments; before the first split it was 34,223 B and asked 58.0 M. Since the topics' G1, G2 and G5
+([CTR-CHAT-29](#CTR-CHAT-29) to [CTR-CHAT-31](#CTR-CHAT-31), 2026-11-27): `PqChat` 34,029 B (2,368,552 + 52,639,650,
+57.8 M asked), `PqChatTopics` 18,523 B (1,236,756 + 28,523,790, 31.2 M asked); the topic writes' rows below moved by
+less than the ±500 pin slack, their state gas not at all (the times sit in slots already written).
 
 **Per transaction** (regular / state gas; the stand-in verifier, so a real signer adds its verifier's regular gas: about
 2.3 M for FN-DSA-512, 5.8 M for ML-DSA-65 on its cached key, 0.2 M for an EIP-8355 precompile):
@@ -838,6 +874,7 @@ Status: **BUILT** for the files below, mutants included (T91: `smartcontracts/ev
 | `PqChatMessages.t.sol` | `postMessage` (hash in state, bytes in the event, device dimension, a device id never parsed, one blob), `storeMessage`, `storedRange` |
 | `PqChatRecovery.t.sol` | `sessionsOf`, `epochsOf`, `latestEpoch`: entries, paging, the end, the clamp, home against replica |
 | `PqTopics.t.sol`, `PqTopicVotes.t.sol` | the topics spec §8 tests 1–10 |
+| `PqTopicRows.t.sol` | CTR-CHAT-29 to CTR-CHAT-31: the times of an entry and its versions, each version's nonce rebuilding its typed digest, `entryRows` field by field against `entryOf` (a chained body, a 64-B media type, an edit, votes, replies, two viewers), 64 ids answered and 65 refused, an unknown id refused |
 | `PqChatLayout.t.sol` | the ERC-7201 namespace and field slots |
 | `PqChatGas.t.sol` | the gas rows and the deployment figures of §12 (T90), the tests' instance at `sstore2` |
 | `PqChatDevices.t.sol` | CTR-CHAT-24: two keys of a member, one wrap each and one `sessionsOf` entry; `(ua, keyId)` order and a repeated key refused; 8 keys land, 9 refused; two keys of one UA are one member; a member's keys change in a plain rekey, adding a UA does not; leave and removal take every key of the UA |

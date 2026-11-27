@@ -92,9 +92,13 @@ contract PqChatGasTest is PqTopicsBase {
     // 2,295,734; state 50,898,510 -> 50,949,000 (+33 x 1,530); asked x 1.05 55,906,970 of 60 M.
     // The path-less delta P4 (C24, C41-C44: `pathless`, `confirmTag`, `pathRefreshBound`, the counter): 32,924 -> 33,354
     // B; regular 2,295,734 -> 2,324,861; state 50,949,000 -> 51,606,900 (+430 x 1,530); asked x 1.05 56,628,349 of 60 M.
-    uint256 internal constant RUNTIME = 33_354;
-    uint256 internal constant RELEASE_REGULAR = 2_324_861;
-    uint256 internal constant RELEASE_STATE = 51_606_900;
+    // CTR-CHAT-29, CTR-CHAT-31 (owner 2026-11-27, G1 and G5: `versionAt`'s stub returns six values): 33,354 -> 33,470 B;
+    // regular 2,324,861 -> 2,331,103; state 51,606,900 -> 51,784,380 (+116 x 1,530); asked x 1.05 56,821,257 of 60 M.
+    // CTR-CHAT-30 (owner 2026-11-27, G2: the `entryRows` stub and `ENTRY_ROWS_MAX`): 33,470 -> 34,029 B; regular 2,331,103
+    // -> 2,368,552; state 51,784,380 -> 52,639,650 (+559 x 1,530); asked x 1.05 57,758,612 of 60 M.
+    uint256 internal constant RUNTIME = 34_029;
+    uint256 internal constant RELEASE_REGULAR = 2_368_552;
+    uint256 internal constant RELEASE_STATE = 52_639_650;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice:
     // 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
@@ -104,9 +108,13 @@ contract PqChatGasTest is PqTopicsBase {
     // code-format F2 (`bytecode_hash = "none"`, 41 B less runtime and init code; code unchanged):
     // 16,449 -> 16,408 B; regular
     // 1,101,523 -> 1,099,442; state 25,350,570 -> 25,287,840 (-41 x 1,530)
-    uint256 internal constant MODULE_RUNTIME = 16_408;
-    uint256 internal constant MODULE_REGULAR = 1_099_442;
-    uint256 internal constant MODULE_STATE = 25_287_840;
+    // CTR-CHAT-29, CTR-CHAT-31 (G1 and G5: the times stored and read, the nonce in `entryOf` and `versionAt`): 16,408 ->
+    // 16,800 B; regular 1,099,442 -> 1,124,408; state 25,287,840 -> 25,887,600 (+392 x 1,530); asked x 1.05 28,362,608
+    // CTR-CHAT-30 (G2: `entryRows`, its row reader and bound): 16,800 -> 18,523 B; regular 1,124,408 -> 1,236,756; state
+    // 25,887,600 -> 28,523,790 (+1,723 x 1,530); asked x 1.05 31,248,573
+    uint256 internal constant MODULE_RUNTIME = 18_523;
+    uint256 internal constant MODULE_REGULAR = 1_236_756;
+    uint256 internal constant MODULE_STATE = 28_523_790;
     // A-11 (the code review of 2026-11-24): the tree's three modules, first pins (2026-11-25), each under 60 M asked
     // The path-less delta P4 (C24, C41-C44), old -> new: PqChatTree 32,812 -> 33,711 B,
     // regular 2,166,743 -> 2,224,997, state 50,385,960 -> 51,761,430 (+899 x 1,530); PqChatTreeViews 9,640 -> 9,761 B,
@@ -387,14 +395,16 @@ contract PqChatGasTest is PqTopicsBase {
         vm.prank(STRANGER);
         bytes32 tid = chat.createTopic(t, sig);
         // CTR-CHAT-23 (the release's dispatcher before the forward; the module unchanged): regular 179,045 -> 179,192
-        _row("createTopic 256 B about", 179_192, 1_851_300);
+        // CTR-CHAT-29, CTR-CHAT-31 (the dispatcher and the module; postEntry and editEntry store the time): regular 179,192 -> 179,633
+        _row("createTopic 256 B about", 179_633, 1_851_300);
 
         IPqChat.PqTopicWriter memory w = IPqChat.PqTopicWriter(tid, ids[1], true, 1);
         sig = _sig(ids[0], h.topicWriter(w));
         vm.prank(STRANGER);
         chat.setTopicWriter(w, sig);
         // CTR-CHAT-23: regular 112,920 -> 113,046
-        _row("setTopicWriter grant", 113_046, 293_760);
+        // CTR-CHAT-29, CTR-CHAT-31 (the dispatcher and the module; postEntry and editEntry store the time): regular 113,046 -> 113,350
+        _row("setTopicWriter grant", 113_350, 293_760);
 
         IPqChat.PqTopicEntry memory p = _entryRec(tid, ids[0], 1, 0, new bytes(1024));
         sig = _sig(p.author, h.entry(p));
@@ -402,14 +412,16 @@ contract PqChatGasTest is PqTopicsBase {
         bytes32 pid = chat.postEntry(p, sig);
         // CTR-CHAT-23 (the release's dispatcher): regular 178,583 -> 178,686
         // TreeKEM T3a (the dispatcher with the tree module's selectors, `_forward(module)`): regular 178,686 -> 179,259
-        _row("postEntry 1 KiB post", 179_259, 3_075_300);
+        // CTR-CHAT-29, CTR-CHAT-31 (the dispatcher and the module; postEntry and editEntry store the time): regular 179,259 -> 179,334
+        _row("postEntry 1 KiB post", 179_334, 3_075_300);
 
         IPqChat.PqTopicEntry memory r = _entryRec(tid, ids[2], 1, pid, new bytes(256));
         sig = _sig(r.author, h.entry(r));
         vm.prank(STRANGER);
         chat.postEntry(r, sig);
         // CTR-CHAT-23 (the release's dispatcher): regular 183,285 -> 183,388
-        _row("postEntry 256 B reply", 183_388, 1_900_260);
+        // CTR-CHAT-29, CTR-CHAT-31 (the dispatcher and the module; postEntry and editEntry store the time): regular 183,388 -> 183,879
+        _row("postEntry 256 B reply", 183_879, 1_900_260);
 
         IPqChat.PqTopicEdit memory d = IPqChat.PqTopicEdit(pid, ids[0], 2, 2, "text/markdown", new bytes(1024));
         sig = _sig(d.author, h.edit(d));
@@ -417,20 +429,23 @@ contract PqChatGasTest is PqTopicsBase {
         chat.editEntry(d, sig);
         // CTR-CHAT-23 (the release's dispatcher): regular 144,427 -> 144,596
         // TreeKEM T3a (the dispatcher with the tree module's selectors): regular 144,596 -> 145,142
-        _row("editEntry 1 KiB", 145_142, 2_487_780);
+        // CTR-CHAT-29, CTR-CHAT-31 (the dispatcher and the module; postEntry and editEntry store the time): regular 145,142 -> 145,268
+        _row("editEntry 1 KiB", 145_268, 2_487_780);
 
         IPqChat.PqTopicVote memory v = IPqChat.PqTopicVote(pid, ids[3], 1, 1);
         sig = _sig(v.voter, h.vote(v));
         vm.prank(STRANGER);
         chat.voteEntry(v, sig);
         // CTR-CHAT-23 (the release's dispatcher): regular 101,326 -> 101,429
-        _row("voteEntry first on the entry", 101_429, 195_840);
+        // CTR-CHAT-29, CTR-CHAT-31 (the dispatcher and the module; postEntry and editEntry store the time): regular 101,429 -> 101,777
+        _row("voteEntry first on the entry", 101_777, 195_840);
         v = IPqChat.PqTopicVote(pid, ids[3], -1, 2);
         sig = _sig(v.voter, h.vote(v));
         vm.prank(STRANGER);
         chat.voteEntry(v, sig);
         // CTR-CHAT-23 (the release's dispatcher): regular 102,292 -> 102,395
-        _row("voteEntry changed", 102_395, 0);
+        // CTR-CHAT-29, CTR-CHAT-31 (the dispatcher and the module; postEntry and editEntry store the time): regular 102,395 -> 102,743
+        _row("voteEntry changed", 102_743, 0);
     }
 
     /// The release transaction (`deployImplementation` through the factory:

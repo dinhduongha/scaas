@@ -106,4 +106,27 @@ contract PqChatLayoutTest is PqTopicsBase {
         assertEq(_at(l), 1, "topicsByAdmin[admin]: one topic");
         assertEq(bytes32(_at(uint256(keccak256(abi.encode(l))))), tid, "topicsByAdmin[admin][0]");
     }
+
+    /// CTR-CHAT-29 (owner 2026-11-27, G1): `entries[id]` (+9) is one slot, record | depth << 160 | postedAt << 192 (was
+    /// record | depth << 160, bits 192-255 free); each `versions[id]` element (+10) is one slot, record | editedAt << 160 (was
+    /// the address alone, bits 160-255 free). No slot added.
+    function test_entryTimesArePinned() public {
+        uint256 r = _root();
+        bytes32 tid = _newTopic(true);
+        vm.warp(1_900_000_000);
+        bytes32 p = _post(chat, tid, ids[0], 1, 0);
+        bytes32 q = _post(chat, tid, ids[2], 1, p);
+        uint256 e = _at(_map(q, r + 9));
+        assertTrue(address(uint160(e)).code.length > 0, "the record blob");
+        assertEq(e >> 160 & type(uint32).max, 1, "depth");
+        assertEq(e >> 192, 1_900_000_000, "postedAt");
+        assertEq(_at(_map(q, r + 9) + 1), 0, "no second slot");
+        vm.warp(1_900_000_500);
+        _edit(chat, _editRec(p, ids[0], 2, 2));
+        uint256 l = _map(p, r + 10);
+        assertEq(_at(l), 1, "versions[p]: one edit");
+        uint256 v0 = _at(uint256(keccak256(abi.encode(l))));
+        assertTrue(address(uint160(v0)).code.length > 0, "the edit's blob");
+        assertEq(v0 >> 160, 1_900_000_500, "editedAt");
+    }
 }

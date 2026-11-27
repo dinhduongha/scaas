@@ -6,7 +6,8 @@
 //! simulation) refuses what the contract refuses. Every list is paged from state. A `ref` is shown unverified until
 //! [`PqChat::resolve_ref`] reads its chain: the factory lists its instance, the referenced entry's topic names that instance
 //! as its home (Fable P3-4), and `contentHash` is zero; a pinned `contentHash` stays unverified (`HashUnchecked`): the views
-//! give no version's nonce, so its typed digest cannot be rebuilt from state. An `msig` author: `MsigAuthorPlanned`.
+//! now give each version's nonce (CTR-CHAT-31), the digest check itself is not built here yet. An `msig` author:
+//! `MsigAuthorPlanned`.
 //! Nothing here is encrypted; bodies are public, untrusted Markdown (rendered by the front-end, P46).
 use crate::model::{self, at, ZERO32};
 use crate::session::{seed_of, sig_json, Me};
@@ -109,6 +110,25 @@ pub struct Entry {
     pub media_type: String,
     pub body: Vec<u8>,
     pub version_count: u64,
+    /// the block time the original landed (CTR-CHAT-29)
+    pub posted_at: u64,
+    /// the latest edit's block time, 0 before one (CTR-CHAT-29)
+    pub edited_at: u64,
+    /// the latest version's nonce (CTR-CHAT-31)
+    pub nonce: u64,
+}
+
+/// A version as `versionAt` returns it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Version {
+    pub media_type: String,
+    pub body: Vec<u8>,
+    /// this version's nonce (CTR-CHAT-31)
+    pub nonce: u64,
+    /// the original's block time (CTR-CHAT-29)
+    pub posted_at: u64,
+    /// this version's block time, 0 for version 1 (CTR-CHAT-29)
+    pub edited_at: u64,
 }
 
 /// One page of a list: at most the asked count of ids and the list's length.
@@ -436,16 +456,19 @@ impl PqChat {
             media_type: at(e, "mediaType").as_str().ok_or_else(bad)?.into(),
             body: model::bytes(at(e, "body"))?,
             version_count: model::num(at(e, "versionCount"))?,
+            posted_at: model::num(at(e, "postedAt"))?,
+            edited_at: model::num(at(e, "editedAt"))?,
+            nonce: model::num(at(e, "nonce"))?,
         })
     }
 
-    /// Version `version` of `entry_id` (1 the original): its media type and body.
+    /// Version `version` of `entry_id` (1 the original): its media type, body, nonce and times.
     pub async fn version_at(
         &self,
         on: &At,
         entry_id: &str,
         version: u64,
-    ) -> Result<(String, Vec<u8>), PqChatError> {
+    ) -> Result<Version, PqChatError> {
         let v = self
             .net
             .read(
@@ -455,10 +478,13 @@ impl PqChat {
                 json!({"entryId": entry_id.to_ascii_lowercase(), "version": version.to_string()}),
             )
             .await?;
-        Ok((
-            at(&v, "mediaType").as_str().ok_or_else(bad)?.into(),
-            model::bytes(at(&v, "body"))?,
-        ))
+        Ok(Version {
+            media_type: at(&v, "mediaType").as_str().ok_or_else(bad)?.into(),
+            body: model::bytes(at(&v, "body"))?,
+            nonce: model::num(at(&v, "nonce"))?,
+            posted_at: model::num(at(&v, "postedAt"))?,
+            edited_at: model::num(at(&v, "editedAt"))?,
+        })
     }
 
     /// `scoreOf(entry_id)`: `(up, down)`, never a combined score.

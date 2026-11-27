@@ -26,6 +26,13 @@ abstract contract PqChatCore is PqGroupBase, PqGroupTree {
     struct Entry {
         address record; // the original's head blob; 0 = unknown
         uint32 depth;
+        uint64 postedAt; // CTR-CHAT-29: the block time the original landed, in the slot's free 64 bits
+    }
+
+    /// @dev CTR-CHAT-29: an edit's head blob and the block time it landed, one slot (was the `address` alone).
+    struct Version {
+        address record;
+        uint64 editedAt;
     }
 
     struct Vote {
@@ -56,7 +63,7 @@ abstract contract PqChatCore is PqGroupBase, PqGroupTree {
         mapping(bytes32 => Topic) topics;
         mapping(bytes32 => mapping(bytes32 => Writer)) writers;
         mapping(bytes32 => Entry) entries;
-        mapping(bytes32 => address[]) versions;
+        mapping(bytes32 => Version[]) versions;
         mapping(bytes32 => mapping(bytes32 => Vote)) votes;
         mapping(bytes32 => Score) scores;
         bytes32[] allTopics;
