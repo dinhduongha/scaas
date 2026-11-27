@@ -99,7 +99,11 @@ fn pass_rows() {
                 &a12(&r["nonce"]),
             )
             .unwrap();
-        assert_eq!(ProfileKeys::kdf_runs(), runs + 1, "{case}: one Argon2id run");
+        assert_eq!(
+            ProfileKeys::kdf_runs(),
+            runs + 1,
+            "{case}: one Argon2id run"
+        );
         assert_eq!(stretched, unhex(&r["argon2id"]), "{case}");
         assert_eq!(kek, unhex(&r["kek_pass"]), "{case}");
         assert_eq!(wrap, unhex(&r["pass"]), "{case}");
@@ -186,10 +190,7 @@ fn sub_key_rows() {
 }
 
 fn dek_of(e: &Value, key: &str, val: &Value) -> [u8; 32] {
-    a32(&rows(e, "sub_keys")
-        .iter()
-        .find(|x| x[key] == *val)
-        .unwrap()["dek"])
+    a32(&rows(e, "sub_keys").iter().find(|x| x[key] == *val).unwrap()["dek"])
 }
 
 #[test]
@@ -202,7 +203,11 @@ fn label_rows() {
             .vectors_seal_label(s(&r["id"]), b(&r["plaintext"]), &a12(&r["nonce"]))
             .unwrap();
         assert_eq!(sealed, unhex(&r["sealed"]), "{case}");
-        assert_eq!(Base64::encode_string(&sealed), s(&r["sealed_b64"]), "{case}");
+        assert_eq!(
+            Base64::encode_string(&sealed),
+            s(&r["sealed_b64"]),
+            "{case}"
+        );
         assert_eq!(
             &k.open_label(s(&r["id"]), &sealed).unwrap()[..],
             b(&r["plaintext"])
@@ -262,8 +267,12 @@ fn envelope_file_rows() {
             let row = &rows(&e, "platform")[0];
             assert_eq!(row["k_plat"], r["k_plat"]);
             let o = ProfileKeys::new();
-            o.open_platform(&unhex(&row["secret"]), b(&r["public_json"]), &unb64(&pl["wrap"]))
-                .unwrap();
+            o.open_platform(
+                &unhex(&row["secret"]),
+                b(&r["public_json"]),
+                &unb64(&pl["wrap"]),
+            )
+            .unwrap();
             assert_eq!(o.vectors_reveal().unwrap()[0], unhex(&r["dek"]));
         }
         opened += 1;
@@ -289,7 +298,11 @@ fn wrap_refusal_rows() {
             let (p, salt) = kdf(&pr["kdf"]);
             let pass = b(&pr["passphrase"]);
             let k = ProfileKeys::new();
-            assert_eq!(k.open_pass(pass, &salt, p, bad, &wrap), Err(Error::Aead), "{case}");
+            assert_eq!(
+                k.open_pass(pass, &salt, p, bad, &wrap),
+                Err(Error::Aead),
+                "{case}"
+            );
             k.open_pass(pass, &salt, p, good, &wrap).unwrap();
             assert_eq!(k.vectors_reveal().unwrap()[0], unhex(&r["dek"]), "{case}");
         } else {
@@ -299,7 +312,11 @@ fn wrap_refusal_rows() {
                 .unwrap();
             let secret = unhex(&pl["secret"]);
             let k = ProfileKeys::new();
-            assert_eq!(k.open_platform(&secret, bad, &wrap), Err(Error::Aead), "{case}");
+            assert_eq!(
+                k.open_platform(&secret, bad, &wrap),
+                Err(Error::Aead),
+                "{case}"
+            );
             k.open_platform(&secret, good, &wrap).unwrap();
             assert_eq!(k.vectors_reveal().unwrap()[0], unhex(&r["dek"]), "{case}");
         }
@@ -320,8 +337,14 @@ fn name_hint_rows() {
         let pr = pass_row(&e, &r["public_json"]);
         let (p, salt) = kdf(&f["kdf"]);
         let k = ProfileKeys::new();
-        k.open_pass(b(&pr["passphrase"]), &salt, p, b(&r["public_json"]), &unb64(&f["pass"]))
-            .unwrap();
+        k.open_pass(
+            b(&pr["passphrase"]),
+            &salt,
+            p,
+            b(&r["public_json"]),
+            &unb64(&f["pass"]),
+        )
+        .unwrap();
         assert_eq!(k.vectors_reveal().unwrap()[0], unhex(&r["dek"]));
     }
 }
@@ -357,7 +380,11 @@ fn item_rows() {
             "{case}"
         );
         assert_eq!(&k.open_item(part, item, rev, &sealed).unwrap()[..], &pt[..]);
-        assert_eq!(k.item_file(part, item).unwrap(), s(&r["file_name"]), "{case}");
+        assert_eq!(
+            k.item_file(part, item).unwrap(),
+            s(&r["file_name"]),
+            "{case}"
+        );
     }
 }
 
@@ -372,13 +399,23 @@ fn item_refusal_rows() {
         let sealed = unhex(&r["sealed"]);
         let c = &r["control"];
         assert_eq!(
-            &k.open_item(s(&c["part"]), s(&c["item"]), c["rev"].as_u64().unwrap(), &sealed)
-                .unwrap()[..],
+            &k.open_item(
+                s(&c["part"]),
+                s(&c["item"]),
+                c["rev"].as_u64().unwrap(),
+                &sealed
+            )
+            .unwrap()[..],
             &unhex(&c["plaintext"])[..],
             "{case}: control"
         );
         assert_eq!(
-            k.open_item(s(&r["part"]), s(&r["item"]), r["rev"].as_u64().unwrap(), &sealed),
+            k.open_item(
+                s(&r["part"]),
+                s(&r["item"]),
+                r["rev"].as_u64().unwrap(),
+                &sealed
+            ),
             Err(Error::Aead),
             "{case}"
         );
@@ -465,7 +502,11 @@ fn export_file_rows() {
     for r in rows(&x, "files") {
         let case = s(&r["case"]);
         let pl = payload(r);
-        assert_eq!(pl.len() as u64, r["payload_len"].as_u64().unwrap(), "{case}");
+        assert_eq!(
+            pl.len() as u64,
+            r["payload_len"].as_u64().unwrap(),
+            "{case}"
+        );
         if r.get("payload").is_some() {
             assert_eq!(pl, unhex(&r["payload"]), "{case}");
         }
@@ -482,7 +523,11 @@ fn export_file_rows() {
         }
         assert_eq!(n as u64, r["chunks"].as_u64().unwrap(), "{case}");
         assert_eq!(file.len() as u64, r["file_len"].as_u64().unwrap(), "{case}");
-        assert_eq!(Sha256::digest(&file)[..], unhex(&r["file_sha256"])[..], "{case}");
+        assert_eq!(
+            Sha256::digest(&file)[..],
+            unhex(&r["file_sha256"])[..],
+            "{case}"
+        );
         assert_eq!(file[..64], unhex(&r["first64"])[..], "{case}");
         assert_eq!(file[file.len() - 64..], unhex(&r["last64"])[..], "{case}");
         if r.get("file").is_some() {
@@ -616,11 +661,30 @@ fn export_chunk_bounds() {
         assert_eq!(k.seal_chunk(&pre, i, last, hd, pt), Err(Error::Argument));
     }
     let c = k.seal_chunk(&pre, 0, false, &h, &full).unwrap();
-    assert_eq!(k.open_chunk(&pre, 0, true, &h, &c), Err(Error::Aead), "the flag");
-    assert_eq!(k.open_chunk(&pre, 1, false, &h, &c), Err(Error::Aead), "the index");
-    assert_eq!(k.open_chunk(&pre, 0, false, b"{ }", &c), Err(Error::Aead), "the header");
-    assert_eq!(k.open_chunk(&pre, 0, false, &h, &c[1..]), Err(Error::Aead), "the length");
-    assert_eq!(&k.open_chunk(&pre, 0, false, &h, &c).unwrap()[..], &full[..]);
+    assert_eq!(
+        k.open_chunk(&pre, 0, true, &h, &c),
+        Err(Error::Aead),
+        "the flag"
+    );
+    assert_eq!(
+        k.open_chunk(&pre, 1, false, &h, &c),
+        Err(Error::Aead),
+        "the index"
+    );
+    assert_eq!(
+        k.open_chunk(&pre, 0, false, b"{ }", &c),
+        Err(Error::Aead),
+        "the header"
+    );
+    assert_eq!(
+        k.open_chunk(&pre, 0, false, &h, &c[1..]),
+        Err(Error::Aead),
+        "the length"
+    );
+    assert_eq!(
+        &k.open_chunk(&pre, 0, false, &h, &c).unwrap()[..],
+        &full[..]
+    );
 }
 
 // ------------------------------------------------------------------ KDF bounds and out of memory (§7.5), G8
@@ -651,7 +715,11 @@ fn kdf_bound_rows() {
             continue;
         }
         let runs = ProfileKeys::kdf_runs();
-        assert_eq!(ProfileKeys::kdf_check(p, &salt), Err(Error::Argument), "{case}");
+        assert_eq!(
+            ProfileKeys::kdf_check(p, &salt),
+            Err(Error::Argument),
+            "{case}"
+        );
         if salt.len() == 16 {
             // the dummy run draws its own salt: only the parameters' rows reach it
             assert_eq!(ProfileKeys::dummy_kdf(p), Err(Error::Argument), "{case}");
@@ -667,7 +735,11 @@ fn kdf_bound_rows() {
             "{case}"
         );
         let k = with_dek(&dek);
-        assert_eq!(k.wrap_pass(b"pass phrase", &salt, p, pubj), Err(Error::Argument), "{case}");
+        assert_eq!(
+            k.wrap_pass(b"pass phrase", &salt, p, pubj),
+            Err(Error::Argument),
+            "{case}"
+        );
         assert_eq!(
             k.check_pass(b"pass phrase", &salt, p, pubj, &wrap),
             Err(Error::Argument),
@@ -697,7 +769,9 @@ fn kdf_out_of_memory() {
     let got = [
         ProfileKeys::dummy_kdf(p).err(),
         ExportKey::derive(pass, &salt, p).err(),
-        ProfileKeys::new().open_pass(pass, &salt, p, pubj, &wrap).err(),
+        ProfileKeys::new()
+            .open_pass(pass, &salt, p, pubj, &wrap)
+            .err(),
         k.wrap_pass(pass, &salt, p, pubj).err(),
         k.check_pass(pass, &salt, p, pubj, &wrap).err(),
     ];
@@ -706,7 +780,9 @@ fn kdf_out_of_memory() {
     assert_eq!(Error::KdfOutOfMemory.code(), "KdfOutOfMemory");
     assert_eq!(ProfileKeys::kdf_runs(), runs + 5);
     // the control: the hook off, the same call opens
-    ProfileKeys::new().open_pass(pass, &salt, p, pubj, &wrap).unwrap();
+    ProfileKeys::new()
+        .open_pass(pass, &salt, p, pubj, &wrap)
+        .unwrap();
 }
 
 // ------------------------------------------------------------------ the arena (§7.1, G15)
@@ -721,23 +797,36 @@ fn lock_wipes_the_arena() {
     let (p, salt) = kdf(&r["kdf"]);
     let (pass, pubj, wrap) = (b(&r["passphrase"]), b(&r["public_json"]), unhex(&r["pass"]));
     let fresh = ProfileKeys::new();
-    assert_eq!(fresh.seal_item("sdk", "settings", 1, b"x"), Err(Error::WalletLocked));
+    assert_eq!(
+        fresh.seal_item("sdk", "settings", 1, b"x"),
+        Err(Error::WalletLocked)
+    );
     assert_eq!(fresh.item_file("sdk", "settings"), Err(Error::WalletLocked));
 
     let k = ProfileKeys::new();
     k.open_pass(pass, &salt, p, pubj, &wrap).unwrap();
-    assert!(k.memory_protection().chunks >= 1, "the arena holds the keys");
+    assert!(
+        k.memory_protection().chunks >= 1,
+        "the arena holds the keys"
+    );
     let sealed = k.seal_item("sdk", "settings", 1, b"x").unwrap();
     let label = k.seal_label("id", b"{}").unwrap();
     let runs = ProfileKeys::kdf_runs();
     assert_eq!(k.create_dek(), Err(Error::Argument));
-    assert_eq!(k.open_pass(pass, &salt, p, pubj, &wrap), Err(Error::Argument));
+    assert_eq!(
+        k.open_pass(pass, &salt, p, pubj, &wrap),
+        Err(Error::Argument)
+    );
     assert_eq!(ProfileKeys::kdf_runs(), runs, "a KDF ran on an open arena");
 
     let before = scaas_ua::wallet::vectors_chunks_released();
     k.lock();
     let after = scaas_ua::wallet::vectors_chunks_released();
-    assert_eq!(k.memory_protection(), MemoryProtection::default(), "lock() left the arena");
+    assert_eq!(
+        k.memory_protection(),
+        MemoryProtection::default(),
+        "lock() left the arena"
+    );
     assert!(after.0 > before.0, "lock() released the arena's chunks");
     assert_eq!(after.1, 0, "a chunk released with a non-zero byte");
 
@@ -776,12 +865,18 @@ fn create_wrap_open() {
     let (p, salt) = (ProfileKeys::KDF_TEST, [9u8; 16]);
     let k = ProfileKeys::new();
     k.create_dek().unwrap();
-    let w = k.wrap_pass(b"pass phrase", &salt, p, b"{\"pub\":1}").unwrap();
+    let w = k
+        .wrap_pass(b"pass phrase", &salt, p, b"{\"pub\":1}")
+        .unwrap();
     assert_eq!(w.len(), 60);
     let sealed = k.seal_item("sdk", "keystore", 3, b"secret").unwrap();
     let o = ProfileKeys::new();
-    o.open_pass(b"pass phrase", &salt, p, b"{\"pub\":1}", &w).unwrap();
-    assert_eq!(&o.open_item("sdk", "keystore", 3, &sealed).unwrap()[..], b"secret");
+    o.open_pass(b"pass phrase", &salt, p, b"{\"pub\":1}", &w)
+        .unwrap();
+    assert_eq!(
+        &o.open_item("sdk", "keystore", 3, &sealed).unwrap()[..],
+        b"secret"
+    );
     assert_eq!(
         o.item_file("sdk", "keystore").unwrap(),
         k.item_file("sdk", "keystore").unwrap()
@@ -789,7 +884,10 @@ fn create_wrap_open() {
     // another profile's key opens nothing of this one
     let other = ProfileKeys::new();
     other.create_dek().unwrap();
-    assert_eq!(other.open_item("sdk", "keystore", 3, &sealed), Err(Error::Aead));
+    assert_eq!(
+        other.open_item("sdk", "keystore", 3, &sealed),
+        Err(Error::Aead)
+    );
     assert_ne!(
         other.item_file("sdk", "keystore").unwrap(),
         k.item_file("sdk", "keystore").unwrap()
