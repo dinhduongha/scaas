@@ -30,7 +30,8 @@ what both sides share: `MatrixTransport`, `TransportError`, `RoomEvent`, `Histor
 (`Seen`, `Witness`, `conformance`), with `serde`, `serde_json` and `async-trait` as its only dependencies; `pqchat-core` re-exports
 them at `pqchat_core::matrix` and keeps the event codec, and still pulls no Matrix crate (CLI-PQC-01). A pinned version is a
 release at least 14 days old; cargo-deny (licences, advisories, bans, sources) and cargo audit cover the tree, each exception named
-with its reason in the crate's `deny.toml` and `.cargo/audit.toml`.
+with its reason in the crate's `deny.toml` and `.cargo/audit.toml`; the MPL-2.0 licence is accepted for seven named matrix-sdk
+dependencies only, used unmodified (owner 2026-11-27, CLI-MTX-01's Change in decisions.md).
 
 ## 2. Profiles, store key, session
 

@@ -88,13 +88,14 @@ is built with `rustls-no-provider`; the crate installs ring as the process's def
 crate comes through these. `tests/deps.rs` proves from `cargo tree` that the normal graph holds no `scaas-sdk`, `pqchat-core`,
 `scaas-ua` or `scaas-rpc` (with a positive control), and the crate has its own `deny.toml` and `.cargo/audit.toml`.
 
-**Exceptions in `deny.toml`, each named** (controller calls, owner may override): MPL-2.0 for seven crates only, each a hard
+**Exceptions in `deny.toml`, each named**: MPL-2.0 for seven crates only (owner ruling 2026-11-27, CLI-MTX-01's Change), each a hard
 dependency of matrix-sdk 0.19.1 with no feature that drops it (`as_variant`, `eyeball`, `eyeball-im`, `imbl`, `imbl-sized-chunks`,
-`readlock`, `readlock-tokio`): file-level copyleft, used unmodified, the source available as published (the terms of the Status QML
-files in scaas-app); MPL-2.0 is not on the allow list, so a new MPL crate fails until named. Advisories: RUSTSEC-2026-0459 (the
+`readlock`, `readlock-tokio`): file-level copyleft, used unmodified, the source available as published (a modified MPL file would need its changes
+published); MPL-2.0 is not on the allow list, so a new MPL crate fails until named. Advisories: RUSTSEC-2026-0459 (the
 bundled SQLite 3.53.2 of libsqlite3-sys 0.38.2: stale page-cache bytes when a crafted `-wal` file of another page size sits beside the
 database; local only, and the files are the profile's own store in its private directory; the fix needs matrix-sdk 0.20, O5);
-RUSTSEC-2026-0319 (`anymap2`) and RUSTSEC-2026-0543 (`chrono` through `oauth2`), unmaintained, no vulnerability. Banned outright:
+RUSTSEC-2026-0319 (`anymap2`) and RUSTSEC-2026-0543 (`chrono` through `oauth2`), unmaintained, no vulnerability. The advisory
+exceptions are controller calls (accepted 2026-11-27; RUSTSEC-2026-0459 until the matrix-sdk 0.20 bump on 2026-12-09). Banned outright:
 `aws-lc-sys`, `aws-lc-rs`, `openssl-sys`, `native-tls`.
 
 ## 4. Profiles, the store key and the session

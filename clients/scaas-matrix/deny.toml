@@ -41,10 +41,9 @@ allow = [
   "Zlib",
 ]
 confidence-threshold = 0.9
-# MPL-2.0 (file-level copyleft) only for these crates, each a hard dependency of matrix-sdk 0.19.1 with no feature that drops
-# it; used unmodified from crates.io, so the obligation is to keep their source available as published (controller call
-# 2026-11-27, CLI-MTX-01, owner may override; the same terms as the Status QML files of scaas-app). Not on the allow list:
-# a new MPL crate fails the check until it is named here.
+# MPL-2.0 (file-level copyleft) only for these seven crates, each a hard dependency of matrix-sdk 0.19.1 with no feature that
+# drops it, used unmodified from crates.io (owner ruling 2026-11-27, CLI-MTX-01's Change). A modified MPL-2.0 file would need its
+# changes published under MPL-2.0. Not on the allow list: a new MPL crate fails the check until it is named here.
 exceptions = [
   { crate = "as_variant", allow = [
     "MPL-2.0",

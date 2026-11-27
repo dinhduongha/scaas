@@ -13836,6 +13836,12 @@ reachable from another profile.
 **Cost if wrong.** The SDK in the default app build, or a Matrix crate in `pqchat-core`.
 **Source.** Controller call 2026-11-27 (`scaas-matrix` round; owner may override); [spec](superpowers/specs/2026-11-27-scaas-matrix.md) §3; the coordinator's constraint of 2026-11-27.
 
+Change (owner 2026-11-27; owner: yes; status: BUILT on branch `scaas-matrix`): **the MPL-2.0 licence is accepted for exactly seven crates
+that matrix-sdk 0.19.1 pulls**, `as_variant`, `eyeball`, `eyeball-im`, `imbl`, `imbl-sized-chunks`, `readlock` and `readlock-tokio`, used
+unmodified from crates.io. MPL-2.0 stays off the general licence allow list: `clients/scaas-matrix/deny.toml` names each crate, and any
+other MPL crate fails the check until it is named. A modified MPL-2.0 file would have its changes published under MPL-2.0 (the licence's
+file-level terms). Source: owner ruling 2026-11-27, relayed by the controller.
+
 ### CLI-MTX-02 — One `scaas-matrix` client per profile directory, under an OS file lock
 - old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-matrix.md#CLI-MTX-02 · superseded-by: —
 
