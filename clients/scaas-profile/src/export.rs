@@ -18,7 +18,7 @@
 //! - **Import** seals a new profile (a new UUIDv7) under the new passphrase from its first byte in `p/.tmp-<random>/` under its
 //!   `build.lock`, with the settings the review's filter keeps, and commits as a create (the journal, one rename, the row; none
 //!   for a hidden profile, whose duplicate search runs first).
-use crate::envelope::{self, Envelope, Kdf, KdfParams, Label, State, B64};
+use crate::envelope::{self, label_json, Envelope, Kdf, KdfParams, Label, State, B64};
 use crate::file::{self, lock_file, read_bounded, rev_of, MAX_BYTES};
 use crate::hidden::{seal_label, search, taken};
 use crate::names::{check_name, new_id, random, same_name};
@@ -69,7 +69,8 @@ pub enum ImportSource<'a> {
 pub struct ImportReview {
     name: Zeroizing<String>,
     hidden: bool,
-    settings: ProfileSettings,
+    /// the settings JSON as the file holds it (checked by `ProfileSettings::parse` at the preview), wiped at drop
+    settings: Zeroizing<Vec<u8>>,
     items: Vec<(&'static str, Zeroizing<Vec<u8>>)>,
 }
 
@@ -85,7 +86,9 @@ impl ImportReview {
 
     /// Every setting, each with its item id and whether it is kept without a confirm (credential references never listed).
     pub fn settings(&self) -> Vec<ReviewItem> {
-        settings::review(&self.settings)
+        ProfileSettings::parse(&self.settings)
+            .map(|s| settings::review(&s))
+            .unwrap_or_default()
     }
 
     /// The item `name` (`keystore`, `sdk.state`) when the file holds it.
@@ -307,11 +310,7 @@ fn parse_payload(pl: &[u8]) -> Result<ImportReview, Refusal> {
     let label = r.field(4)?;
     let l: Label = serde_json::from_slice(label).map_err(|_| no("label"))?;
     let name = Zeroizing::new(l.name);
-    let canonical = serde_json::to_vec(&Label {
-        name: name.to_string(),
-        hidden: l.hidden,
-    })
-    .map(Zeroizing::new);
+    let canonical = label_json(&name, l.hidden);
     let ok =
         canonical.is_ok_and(|c| c[..] == *label) && check_name(&name).is_ok_and(|n| n == *name);
     if !ok {
@@ -334,17 +333,51 @@ fn parse_payload(pl: &[u8]) -> Result<ImportReview, Refusal> {
     if r.o != pl.len() {
         return Err(no("payload"));
     }
-    let settings = ProfileSettings::parse(settings).map_err(|_| no("settings"))?;
-    settings.check_shown().map_err(|_| no("settings"))?;
+    ProfileSettings::parse(settings)
+        .and_then(|s| s.check_shown())
+        .map_err(|_| no("settings"))?;
     if items.iter().any(|(_, b)| b.len() > MAX_BYTES) {
         return Err(no("item"));
+    }
+    // spec §10.1: operations in flight are imported marked `imported`, followed only on the user's word (review E-3: here,
+    // so an app without the SDK imports them so too)
+    for (n, b) in &mut items {
+        if *n == "sdk.state" {
+            *b = mark_imported(b)?;
+        }
     }
     Ok(ImportReview {
         name,
         hidden: l.hidden,
-        settings,
+        settings: Zeroizing::new(settings.to_vec()),
         items,
     })
+}
+
+/// `sdk.state` with every operation a chain fact has not ended (`landed`, `reverted`, `consumed`, `expired`) marked
+/// `imported` in its `state`: none is sent or followed without the user's word. A state of no such form (`ops`, each with a
+/// string `state`) is refused (`item`).
+// ponytail: the parsed `Value`'s strings are plain heap copies, freed unwiped, as the SDK's parse of the same item
+fn mark_imported(bytes: &[u8]) -> Result<Zeroizing<Vec<u8>>, Refusal> {
+    use serde_json::Value;
+    if scaas_ua::json::depth_within(bytes, 64).is_err() {
+        return Err(no("item"));
+    }
+    let mut v: Value = serde_json::from_slice(bytes).map_err(|_| no("item"))?;
+    let ops = v
+        .get_mut("ops")
+        .and_then(Value::as_array_mut)
+        .ok_or(no("item"))?;
+    for op in ops {
+        let s = op.get_mut("state").ok_or(no("item"))?;
+        match s.as_str().ok_or(no("item"))? {
+            "landed" | "reverted" | "consumed" | "expired" => {}
+            _ => *s = Value::from("imported"),
+        }
+    }
+    let mut out = Zeroizing::new(Vec::with_capacity(bytes.len() + 64 * 8));
+    serde_json::to_writer(&mut *out, &v).map_err(|_| no("item"))?;
+    Ok(out)
 }
 
 /// `bytes` to a new file `target` (`O_CREAT | O_EXCL`, mode `0600`): an existing file or a symlink there is `Argument`; the
@@ -408,12 +441,7 @@ impl OpenProfile {
         let (argon, salt) = k.check(self.kdf_max_kib)?;
         let (env, _) = read_envelope(self.core.dir(), &info.id)?.ok_or(Error::ProfileFormat)?;
         self.check_pass(&env, profile_pass)?;
-        let label = serde_json::to_vec(&Label {
-            name: info.name.clone(),
-            hidden: info.hidden,
-        })
-        .map(Zeroizing::new)
-        .map_err(|_| Error::Argument)?;
+        let label = label_json(&info.name, info.hidden)?;
         let mut s = self.settings()?;
         s.credentials.clear();
         let mut items = Vec::new();
@@ -497,7 +525,7 @@ impl Profiles {
                 "",
             )?;
         }
-        let settings = settings::filter(&review.settings, confirmed).json()?;
+        let settings = settings::filter(&ProfileSettings::parse(&review.settings)?, confirmed).json()?;
         let id = new_id()?;
         let mut env = Envelope {
             state: State::Protected,

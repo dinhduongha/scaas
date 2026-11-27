@@ -37,7 +37,7 @@ pub use anchor::{Anchor, Head, Verdict};
 pub use envelope::{Envelope, Kdf, KdfParams, State};
 pub use export::{ImportReview, ImportSource, FILE_MAX};
 pub use file::rev_of;
-pub use lifecycle::{ConfirmDeleteUnreadable, ConfirmRebuildIndex};
+pub use lifecycle::{ConfirmDeleteUnbacked, ConfirmDeleteUnreadable, ConfirmRebuildIndex};
 pub use names::{check_name, name_key, same_name, uuid7};
 pub use profile::{MatrixStore, OpenProfile, ProfileEvent, ProfileInfo, Profiles, ProfilesConfig};
 pub use reseal::Step;

@@ -609,13 +609,13 @@ fn manifest_rows() {
         let m = Manifest::from_lists(rev, list(&r["items"]), list(&r["tombstones"])).unwrap();
         let json = r["json"].as_str().unwrap();
         assert_eq!(
-            String::from_utf8(m.json(part).unwrap()).unwrap(),
+            String::from_utf8(m.json(part).unwrap().to_vec()).unwrap(),
             json,
             "{}",
             r["case"]
         );
         let back = Manifest::parse(part, rev, json.as_bytes()).unwrap();
-        assert_eq!(back.json(part).unwrap(), json.as_bytes());
+        assert_eq!(&back.json(part).unwrap()[..], json.as_bytes());
         assert_eq!(
             code(Manifest::parse("other", rev, json.as_bytes())),
             "VaultFormat"

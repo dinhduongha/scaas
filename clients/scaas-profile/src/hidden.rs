@@ -10,7 +10,7 @@
 //! - **No duplicate**: `create_hidden`, `hide()`, a hidden rename and a hidden passphrase change first run the search with the
 //!   resulting (name, passphrase); a match other than the profile itself is `ProfileNameTaken`.
 //! - At most 16 hidden profiles (`ProfileHiddenLimit`); a hidden profile writes no index byte and never `last`.
-use crate::envelope::{self, Envelope, Kdf, KdfParams, Label, State, B64};
+use crate::envelope::{self, label_json, Envelope, Kdf, KdfParams, State, B64};
 use crate::file::{self, lock_file, mkdir, try_lock_file};
 use crate::index::{self, Row};
 use crate::names::{check_name, new_id, random_vec, same_name};
@@ -166,15 +166,8 @@ pub(crate) fn seal_label(
     name: &str,
     hidden: bool,
 ) -> Result<String, Error> {
-    let l = Label {
-        name: name.into(),
-        hidden,
-    };
-    let pt = serde_json::to_vec(&l).map(Zeroizing::new);
-    drop(Zeroizing::new(l.name));
-    let sealed = keys
-        .seal_label(id, &pt.map_err(|_| Error::Argument)?)
-        .map_err(kdf_code)?;
+    let pt = label_json(name, hidden)?;
+    let sealed = keys.seal_label(id, &pt).map_err(kdf_code)?;
     Ok(B64.encode(sealed))
 }
 

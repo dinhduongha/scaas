@@ -12,7 +12,10 @@ description = "SCaaS user profiles' local store (CLI-UPR-02): the sealed store o
 # profile; the SDK (feature `user-profile`) depends on it. Every KDF, AEAD and MAC runs in `scaas-ua`'s profile arena
 # (`ProfileKeys`); this crate holds handles, public bytes and files.
 [features]
-default = []
+# the profile arena in locked pages excluded from core dumps (spec §7.1; review B-3): an app's build without the SDK links
+# `scaas-ua` through this crate alone
+default = ["mlock"]
+mlock = ["scaas-ua/mlock"]
 # user-profiles spec §7.5: the test KDF set (scaas-ua's) and the store's test hooks; refused in a release build
 # (`compile_error!` without `debug_assertions`; scripts/check_test_features.py)
 test-hooks = ["scaas-ua/test-hooks"]

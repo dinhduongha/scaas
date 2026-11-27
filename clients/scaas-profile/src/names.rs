@@ -42,9 +42,11 @@ pub fn is_id(s: &str) -> bool {
     uuid::Uuid::try_parse(s).is_ok_and(|u| u.hyphenated().to_string() == s)
 }
 
-/// The comparison key of a name: NFKC, then Unicode lower case (`str::to_lowercase`).
-pub fn name_key(s: &str) -> String {
-    s.nfkc().collect::<String>().to_lowercase()
+/// The comparison key of a name: NFKC, then Unicode lower case (`str::to_lowercase`); both forms in wiped buffers (a hidden
+/// name is a secret input, review A-11).
+pub fn name_key(s: &str) -> zeroize::Zeroizing<String> {
+    let nfkc = zeroize::Zeroizing::new(s.nfkc().collect::<String>());
+    zeroize::Zeroizing::new(nfkc.to_lowercase())
 }
 
 /// Whether two names have one `name_key`, compared in constant time over the longer length (each padded with zeros).

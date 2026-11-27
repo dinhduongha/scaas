@@ -131,13 +131,13 @@ fn delete_open_profile() {
     o.core()
         .put_if(SDK, "settings", None, br#"{"rev":1}"#)
         .unwrap();
-    assert_eq!(code(p.delete(&o, b"Alpha2")), "ConfirmationMissing");
-    assert_eq!(code(p.delete(&o, b"default")), "ConfirmationMissing");
+    assert_eq!(code(p.delete(&o, b"Alpha2", None)), "ConfirmationMissing");
+    assert_eq!(code(p.delete(&o, b"default", None)), "ConfirmationMissing");
     assert_eq!(names(&p), ["Alpha", "default"]);
     assert!(kc.has_any(&a));
     assert_eq!(code(o.core().get(SDK, "settings")), "ok", "still open");
     // the positive control: the name by name_key
-    p.delete(&o, "ALPHA".as_bytes()).unwrap();
+    p.delete(&o, "ALPHA".as_bytes(), None).unwrap();
     assert_eq!(names(&p), ["default"]);
     assert!(!root.join("p").join(&a).exists());
     assert!(!root.join("p").join(format!("{a}.deleted")).exists());
@@ -146,7 +146,7 @@ fn delete_open_profile() {
     let ix = std::fs::read_to_string(root.join("profiles.json")).unwrap();
     assert!(!ix.contains(&a), "the row dropped");
     assert_eq!(code(o.core().get(SDK, "settings")), "ProfileLocked");
-    assert_eq!(code(p.delete(&o, b"Alpha")), "ProfileLocked");
+    assert_eq!(code(p.delete(&o, b"Alpha", None)), "ProfileLocked");
     assert_eq!(code(p.open(&b, None)), "ok");
 }
 
@@ -156,7 +156,8 @@ fn delete_last_profile() {
     let (root, kc) = (tmp(), Arc::new(Keychain::default()));
     let p = Profiles::new(cfg(&root, &kc)).unwrap();
     let id = id_of(&p, "default");
-    p.delete(&p.open(&id, None).unwrap(), b"default").unwrap();
+    p.delete(&p.open(&id, None).unwrap(), b"default", None)
+        .unwrap();
     assert!(names(&p).is_empty());
     let p = Profiles::new(cfg(&root, &kc)).unwrap();
     assert_eq!(names(&p), ["default"]);
@@ -213,7 +214,7 @@ fn damaged_directory_reported_never_removed() {
         !root.join("p").join(&tomb).exists(),
         "the control: a tombstone removed"
     );
-    p.delete(&p.open(&b, None).unwrap(), b"b").unwrap();
+    p.delete(&p.open(&b, None).unwrap(), b"b", None).unwrap();
     p.rebuild_index(ConfirmRebuildIndex {}).unwrap();
     let p = Profiles::new(cfg(&root, &kc)).unwrap();
     assert!(p.drain_events().contains(&ProfileEvent::ProfileDamaged));
@@ -387,7 +388,7 @@ mod hooks {
             let p = Profiles::new(c).unwrap();
             let o = p.open(&a, None).unwrap();
             kc.plant(&a);
-            assert_eq!(code(p.delete(&o, b"a")), "VaultIo", "{stop:?}");
+            assert_eq!(code(p.delete(&o, b"a", None)), "VaultIo", "{stop:?}");
             drop(o);
             let tomb = format!("{a}.deleted");
             assert!(root.join("p").join(&tomb).is_dir(), "{stop:?}");
@@ -417,7 +418,7 @@ mod hooks {
         assert_eq!(code(p.delete_locked(&id, b"secret", c)), "ProfileUnknown");
         assert!(root.join("p").join(&id).join("profile.envelope").is_file());
         let h = p.open_hidden(b"secret", PASS).unwrap();
-        p.delete(&h, b"secret").unwrap();
+        p.delete(&h, b"secret", None).unwrap();
         assert!(!root.join("p").join(&id).exists());
     }
 

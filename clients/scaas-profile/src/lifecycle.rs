@@ -15,7 +15,7 @@ use crate::profile::{
     read_envelope, remove_dir, remove_file, sync_dir, without, OpenProfile, Profiles,
     INSTANCE_LOCK, TOMBSTONE,
 };
-use crate::{Error, Step};
+use crate::{Error, ProfilePart, Step};
 use std::fs::File;
 
 /// The marker of [`Profiles::delete_locked`] (spec §10): the user was told that this profile's data cannot be opened and will
@@ -23,16 +23,33 @@ use std::fs::File;
 #[derive(Debug, Clone, Copy)]
 pub struct ConfirmDeleteUnreadable {}
 
+/// The marker of [`Profiles::delete`] for a profile holding a keystore (spec §10): the caller checked its seeds' backups (the
+/// SDK counts `backup: pending`) and the user confirmed losing any without one.
+#[derive(Debug, Clone, Copy)]
+pub struct ConfirmDeleteUnbacked {}
+
 /// The marker of [`Profiles::rebuild_index`] (spec §6: on demand with a typed confirm).
 #[derive(Debug, Clone, Copy)]
 pub struct ConfirmRebuildIndex {}
 
 impl Profiles {
-    /// Deletes the open profile `open` (spec §10 "delete"): `confirm_name` its name typed again. The profile is locked first
-    /// (its stores closed, its arena wiped); then the tombstone's steps. The caller (the SDK) has checked the seeds' backups.
-    pub fn delete(&self, open: &OpenProfile, confirm_name: &[u8]) -> Result<(), Error> {
+    /// Deletes the open profile `open` (spec §10 "delete"): `confirm_name` its name typed again; a profile holding a keystore
+    /// (or one that does not read) also `unbacked`, the caller's word that the seeds' backups were checked and any loss
+    /// confirmed (the SDK, after its own count; review E-3), else `ConfirmationMissing`, nothing changed. The profile is locked
+    /// first (its stores closed, its arena wiped); then the tombstone's steps.
+    pub fn delete(
+        &self,
+        open: &OpenProfile,
+        confirm_name: &[u8],
+        unbacked: Option<ConfirmDeleteUnbacked>,
+    ) -> Result<(), Error> {
+        open.core().live()?;
         let info = open.info();
         confirm(&info.name, confirm_name)?;
+        let keystore = open.core().get(ProfilePart::Sdk, "keystore");
+        if unbacked.is_none() && !matches!(keystore, Ok(None)) {
+            return Err(Error::ConfirmationMissing);
+        }
         let instance = open.release().ok_or(Error::ProfileLocked)?;
         self.entomb(&info.id, instance)
     }

@@ -990,6 +990,7 @@ dependencies = [
  "hkdf",
  "hmac",
  "k256",
+ "libc",
  "p256",
  "rand_core 0.6.4",
  "serde_json",

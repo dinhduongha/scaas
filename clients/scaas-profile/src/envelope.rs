@@ -124,6 +124,20 @@ pub(crate) struct Label {
     pub hidden: bool,
 }
 
+/// The label's canonical plaintext `{name, hidden}` (pinned format 5) in a wiped buffer; the copy of the name it serializes
+/// from is wiped too (review A-11).
+pub(crate) fn label_json(name: &str, hidden: bool) -> Result<zeroize::Zeroizing<Vec<u8>>, Error> {
+    let l = Label {
+        name: name.into(),
+        hidden,
+    };
+    let mut out = zeroize::Zeroizing::new(Vec::with_capacity(32 + 6 * name.len()));
+    let r = serde_json::to_writer(&mut *out, &l);
+    drop(zeroize::Zeroizing::new(l.name));
+    r.map_err(|_| Error::Argument)?;
+    Ok(out)
+}
+
 impl Envelope {
     /// A new unprotected, visible profile's envelope at rev 1.
     pub fn unprotected(id: &str, name: &str) -> Envelope {

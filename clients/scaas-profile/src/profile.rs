@@ -52,6 +52,8 @@ pub struct ProfilesConfig {
     /// the CLI's overlay of today (`$XDG_CONFIG_HOME/scaas/overlay.json`, spec §12), moved into "default"'s `settings` by the
     /// migration; the caller computes it
     pub legacy_overlay: Option<PathBuf>,
+    /// whether an open writes the index's `last` (spec §6, §13): an app or a TUI instance, yes; the CLI, never
+    pub write_last: bool,
     /// test-only (feature `test-hooks`): called after each step of a delete and a migration; `true` stops there as if the
     /// process died (`VaultIo`, the files left as they are)
     #[cfg(feature = "test-hooks")]
@@ -67,6 +69,7 @@ impl ProfilesConfig {
             max_concurrent_heavy: 1,
             legacy: None,
             legacy_overlay: None,
+            write_last: true,
             #[cfg(feature = "test-hooks")]
             hook: None,
         }
@@ -143,6 +146,7 @@ pub struct Profiles {
     pub(crate) keychain: Option<Arc<dyn ProfileKeychain>>,
     pub(crate) kdf_max_kib: u32,
     pub(crate) heavy: Arc<Heavy>,
+    write_last: bool,
     events: Arc<Mutex<Vec<ProfileEvent>>>,
     /// the last refused import preview's local reason (spec §10.1: a log line's)
     pub(crate) refusal: Mutex<Option<&'static str>>,
@@ -153,7 +157,8 @@ pub struct Profiles {
 }
 
 /// The root's own checks (spec §5 "Modes"): made `0700` when missing; a symlink or not a directory refused; a wider mode
-/// tightened only when it holds `profiles.json` or `p/`, else `ProfileRootUnsafe`.
+/// tightened only when it holds `profiles.json` or `p/`, else `ProfileRootUnsafe`; on Unix a root another user owns
+/// `ProfileRootUnsafe` (its owner against the process's uid, read from a probe file it creates).
 fn prepare_root(root: &Path) -> Result<(), Error> {
     let m = match std::fs::symlink_metadata(root) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -179,8 +184,43 @@ fn prepare_root(root: &Path) -> Result<(), Error> {
             std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700))
                 .map_err(|_| Error::ProfileRootUnsafe)?;
         }
+        // a root another user owns is refused (review Q5)
+        use std::os::unix::fs::MetadataExt;
+        same_owner(m.uid(), process_uid(root)?)?;
     }
     Ok(())
+}
+
+/// The root's owner against the process's uid (spec §5: a root that is not the user's is refused): another is
+/// `ProfileRootUnsafe`.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn same_owner(root: u32, process: u32) -> Result<(), Error> {
+    match root == process {
+        true => Ok(()),
+        false => Err(Error::ProfileRootUnsafe),
+    }
+}
+
+/// The process's uid, without `unsafe` (review Q5): the owner of a file it creates in `root` (`O_CREAT | O_EXCL`, mode `0600`,
+/// read through its handle), removed again. A root it cannot write in is `ProfileRootUnsafe` (permission) or `VaultIo`.
+#[cfg(unix)]
+fn process_uid(root: &Path) -> Result<u32, Error> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let tag: String = random::<8>()?.iter().map(|b| format!("{b:02x}")).collect();
+    let probe = root.join(format!(".owner-{tag}"));
+    let f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&probe)
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::PermissionDenied => Error::ProfileRootUnsafe,
+            _ => Error::VaultIo,
+        })?;
+    let uid = f.metadata().map(|m| m.uid());
+    drop(f);
+    let _ = std::fs::remove_file(&probe);
+    uid.map_err(|_| Error::VaultIo)
 }
 
 pub(crate) fn remove_dir(p: &Path) -> Result<(), Error> {
@@ -275,6 +315,7 @@ impl Profiles {
                 free: Condvar::new(),
                 max: config.max_concurrent_heavy.max(1),
             }),
+            write_last: config.write_last,
             events: Arc::default(),
             refusal: Mutex::new(None),
             #[cfg(feature = "test-hooks")]
@@ -886,12 +927,16 @@ pub(crate) fn open_label(keys: &ProfileKeys, env: &Envelope) -> Result<OpenLabel
 }
 
 impl Profiles {
-    /// After an open: the row checked against the name (rewritten; whether it differed), `last` written when it changes.
+    /// After an open: the row checked against the name (rewritten; whether it differed), `last` written when it changes (an
+    /// instance with `write_last` off never writes it).
     fn after_open(&self, id: &str, name: &str) -> Result<bool, Error> {
         let mut mismatch = false;
         self.update_index(|ix| {
-            let mut changed = ix.last.as_deref() != Some(id);
-            ix.last = Some(id.into());
+            // the CLI never writes `last` (spec §6, §13; review E-5)
+            let mut changed = self.write_last && ix.last.as_deref() != Some(id);
+            if changed {
+                ix.last = Some(id.into());
+            }
             let room = ix.profiles.len() < index::ROWS;
             match ix.profiles.iter_mut().find(|r| r.id == id) {
                 Some(r) if r.name == name => {}
@@ -1041,6 +1086,15 @@ impl OpenProfile {
         if let Some(k) = self.core.keys() {
             k.lock();
         }
+        // the name too (a hidden profile's is a secret input, review A-11)
+        let name = std::mem::take(
+            &mut self
+                .info
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .name,
+        );
+        drop(Zeroizing::new(name));
         self.instance
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -1080,5 +1134,17 @@ impl Profiles {
             .before_kdf
             .lock()
             .unwrap_or_else(PoisonError::into_inner) = Some(f);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Q5: the root's owner against the process's uid: another owner is `ProfileRootUnsafe`. Control: the same uid passes. (A
+    /// test cannot make a directory another uid owns without root, so the comparison is tested with given uids.)
+    #[test]
+    fn q5_root_owner_compared() {
+        assert_eq!(super::same_owner(1000, 1000), Ok(()));
+        assert_eq!(super::same_owner(0, 1000), Err(crate::Error::ProfileRootUnsafe));
+        assert_eq!(super::same_owner(1001, 1000), Err(crate::Error::ProfileRootUnsafe));
     }
 }

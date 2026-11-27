@@ -114,9 +114,11 @@ pub enum CredentialKind {
 }
 
 impl ProfileSettings {
-    /// The canonical bytes.
-    pub fn json(&self) -> Result<Vec<u8>, Error> {
-        serde_json::to_vec(self).map_err(|_| Error::Argument)
+    /// The canonical bytes, in a wiped buffer reserved at the settings' bound (no reallocation leaves a copy below it).
+    pub fn json(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, Error> {
+        let mut out = zeroize::Zeroizing::new(Vec::with_capacity(MAX + 1));
+        serde_json::to_writer(&mut *out, self).map_err(|_| Error::Argument)?;
+        Ok(out)
     }
 
     /// From bytes: bounded (1 MiB, depth 6), the forms of [`ProfileSettings::check`]; else `VaultFormat`.

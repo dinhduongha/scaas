@@ -456,7 +456,10 @@ mod hooks {
         assert!(contains(&pl, b"the keystore marker") && contains(&pl, b"strict_majority"));
         let r = p.import_preview(ImportSource::Path(&t), XPASS).unwrap();
         assert!(r.name() == "Alice" && !r.hidden());
-        assert!(r.item("keystore") == Some(KEYSTORE) && r.item("sdk.state") == Some(STATE));
+        assert!(r.item("keystore") == Some(KEYSTORE));
+        // the operation in flight marked `imported` by the preview (spec §10.1; review E-3: the crate marks it)
+        let st: Value = serde_json::from_slice(r.item("sdk.state").unwrap()).unwrap();
+        assert_eq!((st["rev"].as_u64(), &st["ops"][0]["state"]), (Some(2), &Value::from("imported")));
         // an unprotected profile is not exported
         let u = p.create("plain").unwrap();
         let u = p.open(&u.id, None).unwrap();

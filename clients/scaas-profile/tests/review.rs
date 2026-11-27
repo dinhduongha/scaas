@@ -13,8 +13,9 @@
 
 use scaas_profile::settings::{ChainSettings, Endpoint, EndpointList};
 use scaas_profile::{
-    keychain_name, uuid7, Envelope, Error, ImportSource, KdfParams, OpenProfile, ProfileEvent,
-    ProfileKeychain, ProfilePart, ProfileSettings, Profiles, ProfilesConfig,
+    keychain_name, uuid7, ConfirmDeleteUnbacked, Envelope, Error, ImportSource, KdfParams,
+    OpenProfile, ProfileEvent, ProfileKeychain, ProfilePart, ProfileSettings, Profiles,
+    ProfilesConfig,
 };
 use scaas_ua::wallet::ProfileKeys;
 use std::collections::HashMap;
@@ -599,4 +600,85 @@ fn g10_index_reconciled_with_the_envelopes() {
     p.drain_events();
     assert_eq!(list().len(), 3);
     assert!(p.drain_events().contains(&ProfileEvent::ProfileIndexMismatch));
+}
+
+/// E-3: the crate's delete of a profile holding a keystore needs the unbacked confirm (the SDK passes it after its own count
+/// of the seeds' backups): without it `ConfirmationMissing`, the profile untouched and open. Control: with it, it deletes;
+/// a profile without a keystore deletes without it.
+#[test]
+fn e3_delete_of_a_keystore_needs_the_unbacked_confirm() {
+    let _k = kdf_lock();
+    let (p, o, _, dir) = protected(&tmp(), None);
+    o.core().put_if(SDK, "keystore", None, br#"{"rev":1}"#).unwrap();
+    assert_eq!(code(p.delete(&o, b"default", None)), "ConfirmationMissing");
+    assert!(o.core().get(SDK, "keystore").unwrap().is_some(), "still open");
+    p.delete(&o, b"default", Some(ConfirmDeleteUnbacked {})).unwrap();
+    assert!(!dir.exists());
+    let plain = p.create("Plain").unwrap();
+    p.delete(&p.open(&plain.id, None).unwrap(), b"Plain", None).unwrap();
+}
+
+/// E-3: the crate's import preview marks `sdk.state`'s operations a chain fact has not ended `imported` (spec §10.1; an app
+/// without the SDK imports through it), the ended ones kept; a state of no such form is `ProfileImportOpen`. Control: the
+/// keystore passes as it is.
+#[test]
+fn e3_import_marks_open_operations() {
+    let _k = kdf_lock();
+    let p = Profiles::new(cfg(&tmp(), None)).unwrap();
+    let file = |state: &[u8]| {
+        let label = br#"{"name":"Bob","hidden":false}"#;
+        let items = [("keystore", &br#"{"rev":1}"#[..]), ("sdk.state", state)];
+        let pl = Profiles::test_payload(label, b"{}", &items).unwrap();
+        p.test_export(&pl, XPASS, TEST, &[7; 16], &[9; 7]).unwrap()
+    };
+    let state = br#"{"rev":2,"ops":[{"op":"a","state":"signed"},{"op":"b","state":"landed"}]}"#;
+    let r = p
+        .import_preview(ImportSource::Bytes(&file(state)), XPASS)
+        .unwrap();
+    assert_eq!(r.item("keystore"), Some(&br#"{"rev":1}"#[..]), "control");
+    let st: serde_json::Value = serde_json::from_slice(r.item("sdk.state").unwrap()).unwrap();
+    assert_eq!(st["ops"][0]["state"], "imported");
+    assert_eq!(st["ops"][1]["state"], "landed");
+    let bad = br#"{"rev":2,"ops":[{"op":"a"}]}"#;
+    assert_eq!(
+        code(p.import_preview(ImportSource::Bytes(&file(bad)), XPASS)),
+        "ProfileImportOpen"
+    );
+}
+
+/// E-5: an instance configured as the CLI's (`write_last` off) never writes the index's `last`. Control: an app's writes it.
+#[test]
+fn e5_cli_never_writes_last() {
+    for write_last in [true, false] {
+        let root = tmp();
+        let mut c = cfg(&root, None);
+        c.write_last = write_last;
+        let p = Profiles::new(c).unwrap();
+        let id = p.list().unwrap()[0].id.clone();
+        p.open(&id, None).unwrap().lock();
+        let ix = index_text(&root);
+        assert_eq!(ix.contains(&format!(r#""last":"{id}""#)), write_last, "{ix}");
+    }
+}
+
+/// A-11 / F-3: an open profile's name is cleared at lock (a hidden profile's name is a secret input). Control: it is there
+/// while open.
+#[test]
+fn a11_name_cleared_at_lock() {
+    let p = Profiles::new(cfg(&tmp(), None)).unwrap();
+    let o = p.open(&p.list().unwrap()[0].id, None).unwrap();
+    assert_eq!(o.info().name, "default", "control");
+    o.lock();
+    assert!(o.info().name.is_empty());
+}
+
+/// B-3: with the crate's default features (`mlock`), an open profile's arena is locked in RAM. Control: it holds chunks.
+#[cfg(target_os = "linux")]
+#[test]
+fn b3_profile_arena_locked() {
+    let _k = kdf_lock();
+    let (_p, o, ..) = protected(&tmp(), None);
+    let m = o.keys().unwrap().memory_protection();
+    assert!(m.chunks > 0, "control");
+    assert_eq!(m.locked, m.chunks);
 }

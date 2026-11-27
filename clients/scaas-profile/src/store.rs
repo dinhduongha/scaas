@@ -127,21 +127,33 @@ impl Manifest {
         self.items.len() + self.tombstones.len()
     }
 
-    /// The canonical plaintext of part `part`'s manifest; each list sorted by the name's UTF-8 bytes.
-    pub fn json(&self, part: &str) -> Result<Vec<u8>, Error> {
+    /// The canonical plaintext of part `part`'s manifest; each list sorted by the name's UTF-8 bytes. In a wiped buffer
+    /// reserved at its largest form (every name escaped), so no reallocation leaves a copy of the names (review A-11).
+    // ponytail: the list's name copies (`String` clones for serde) are freed unwiped
+    pub fn json(&self, part: &str) -> Result<Zeroizing<Vec<u8>>, Error> {
         if self.len() > PART_MAX {
             return Err(Error::ProfilePartFull);
         }
         let list = |m: &BTreeMap<String, u64>| m.iter().map(|(n, r)| (n.clone(), *r)).collect();
-        serde_json::to_vec(&ManifestJson {
-            format: MANIFEST_FORMAT.into(),
-            v: 1,
-            part: part.into(),
-            rev: self.rev,
-            items: list(&self.items),
-            tombstones: list(&self.tombstones),
-        })
-        .map_err(|_| Error::Argument)
+        let names: usize = [&self.items, &self.tombstones]
+            .iter()
+            .flat_map(|m| m.keys())
+            .map(|n| 6 * n.len() + 32)
+            .sum();
+        let mut out = Zeroizing::new(Vec::with_capacity(128 + part.len() + names));
+        serde_json::to_writer(
+            &mut *out,
+            &ManifestJson {
+                format: MANIFEST_FORMAT.into(),
+                v: 1,
+                part: part.into(),
+                rev: self.rev,
+                items: list(&self.items),
+                tombstones: list(&self.tombstones),
+            },
+        )
+        .map_err(|_| Error::Argument)?;
+        Ok(out)
     }
 
     /// The opened plaintext of part `part`'s manifest item at stored rev `rev`: anything else is `VaultFormat`.
@@ -664,7 +676,7 @@ impl Core {
             }
         }
         for (part, m) in parts {
-            let pt = Zeroizing::new(m.json(part.name())?);
+            let pt = m.json(part.name())?;
             put(PROFILE, &manifest_name(part), m.rev, &pt)?;
         }
         Ok(())
@@ -781,7 +793,7 @@ impl Core {
             let (mut m, at) = self.read_manifest(g, keys, part)?;
             change(&mut m);
             m.rev = at.unwrap_or(0).checked_add(1).ok_or(Error::Argument)?;
-            let pt = Zeroizing::new(m.json(part.name())?);
+            let pt = m.json(part.name())?;
             let sealed = keys.seal_item(PROFILE, &name, m.rev, &pt).map_err(ua)?;
             let bytes = item_json(m.rev, &sealed)?;
             #[cfg(feature = "test-hooks")]

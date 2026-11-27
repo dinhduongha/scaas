@@ -74,9 +74,9 @@ pub struct ConfirmDeleteProfile {
     pub name: Arc<SecretBytes>,
 }
 
-/// The second marker of `delete`, for a profile holding a seed whose backup is `pending`.
-#[derive(Debug, Clone, Copy)]
-pub struct ConfirmDeleteUnbacked {}
+/// The second marker of `delete`, for a profile holding a seed whose backup is `pending` (the crate's: the store refuses a
+/// delete of a profile holding a keystore without it, review E-3).
+pub use scaas_profile::ConfirmDeleteUnbacked;
 
 /// What a delete loses (spec §10): the seeds of the profile's keystore and how many have no backup (`backup: pending`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -503,7 +503,13 @@ impl UserProfile {
             s.close().await;
         }
         let (p, open) = (self.profiles.clone(), self.open.clone());
-        run(move || confirm.name.with(|n| p.delete(&open, n))).await
+        // the backups checked above: the store's own refusal of a profile holding a keystore is passed
+        run(move || {
+            confirm
+                .name
+                .with(|n| p.delete(&open, n, Some(ConfirmDeleteUnbacked {})))
+        })
+        .await
     }
 
     /// The profile's settings (spec §5): none stored, the defaults.
