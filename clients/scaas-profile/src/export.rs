@@ -19,7 +19,7 @@
 //!   `build.lock`, with the settings the review's filter keeps, and commits as a create (the journal, one rename, the row; none
 //!   for a hidden profile, whose duplicate search runs first).
 use crate::envelope::{self, Envelope, Kdf, KdfParams, Label, State, B64};
-use crate::file::{self, lock_file, read_bounded, MAX_BYTES};
+use crate::file::{self, lock_file, read_bounded, rev_of, MAX_BYTES};
 use crate::hidden::{seal_label, search, taken};
 use crate::names::{check_name, new_id, random, same_name};
 use crate::profile::{
@@ -478,6 +478,10 @@ impl Profiles {
         name: Option<&[u8]>,
         kdf: Option<KdfParams>,
     ) -> Result<ProfileInfo, Error> {
+        // an item the store cannot keep (no JSON `rev`, review A-17) is refused before any KDF run
+        if review.items.iter().any(|(_, b)| rev_of(b) == u64::MAX) {
+            return Err(Error::ProfileImportOpen);
+        }
         let name = Zeroizing::new(match name {
             Some(n) => check_name(std::str::from_utf8(n).map_err(|_| Error::ProfileNameInvalid)?)?,
             None => review.name.to_string(),

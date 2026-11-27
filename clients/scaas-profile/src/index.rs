@@ -44,8 +44,8 @@ impl Index {
         serde_json::to_vec(self).map_err(|_| Error::Argument)
     }
 
-    /// The index, or `None` for anything that is not one: above its bounds, not canonical, an unknown field, a row's id not
-    /// a UUID or twice, a name not as stored.
+    /// The index, or `None` for anything that is not one: above its bounds, not canonical, an unknown field, a rev above
+    /// 2^53, a row's id not a UUID or twice, a name not as stored.
     pub fn parse(bytes: &[u8]) -> Option<Index> {
         if bytes.len() > MAX || scaas_ua::json::depth_within(bytes, 4).is_err() {
             return None;
@@ -56,6 +56,7 @@ impl Index {
         ids.dedup();
         let ok = ix.format == FORMAT
             && ix.v == 1
+            && ix.rev <= crate::file::REV_MAX
             && ix.profiles.len() <= ROWS
             && ids.len() == ix.profiles.len()
             && ix.last.as_deref().is_none_or(is_id)

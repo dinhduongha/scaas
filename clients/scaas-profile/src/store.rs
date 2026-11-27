@@ -26,7 +26,7 @@
 //!
 //! The core's codes are [`Error`]s, each the SDK's code of the same name; the SDK's face gives the store's (CLI-UPR-22).
 use crate::anchor::{Anchor, Head, Verdict};
-use crate::file::{self, lock_file, rev_of, sealed_form, MAX_BYTES, SEALED_MAX};
+use crate::file::{self, lock_file, rev_of, sealed_form, MAX_BYTES, REV_MAX, SEALED_MAX};
 use crate::{keychain_name, Error, ProfileKeychain};
 use base64::Engine;
 use scaas_ua::wallet::ProfileKeys;
@@ -149,7 +149,8 @@ impl Manifest {
             return Err(Error::VaultFormat);
         }
         let j: ManifestJson = serde_json::from_slice(pt).map_err(|_| Error::VaultFormat)?;
-        if j.format != MANIFEST_FORMAT || j.v != 1 || j.part != part || j.rev != rev {
+        if j.format != MANIFEST_FORMAT || j.v != 1 || j.part != part || j.rev != rev || rev > REV_MAX
+        {
             return Err(Error::VaultFormat);
         }
         Manifest::from_lists(rev, j.items, j.tombstones).map_err(|_| Error::VaultFormat)
@@ -774,7 +775,9 @@ impl Core {
     fn check_anchor(&self) -> Result<(), Error> {
         let g = self.cur();
         let stored = self.stored(&g)?;
-        let in_file = file::read(&self.dir.join(ANCHOR_FILE))?.map(|(_, bytes)| bytes);
+        // read bounded at the anchor's size: a larger file is an anchor that does not parse
+        let in_file = file::read_bounded(&self.dir.join(ANCHOR_FILE), crate::anchor::MAX)?
+            .map(Option::unwrap_or_default);
         let kept = match &self.keychain {
             Some((kc, name)) => Some(kc.get(name)?),
             None => None,
@@ -813,6 +816,9 @@ impl Core {
         let Some((rev, bytes)) = file::read(&self.plain_path(g, part, name)?)? else {
             return Ok(None);
         };
+        if bytes.len() > MAX_BYTES {
+            return Err(Error::VaultFormat);
+        }
         // a sealed item, or a legacy item without `migration: pending` (spec §7.1)
         if sealed_form(&bytes) || (name != "settings" && !self.migration_pending) {
             return Err(Error::ProfileFormat);

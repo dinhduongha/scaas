@@ -67,6 +67,11 @@ fn item(rev: u64, body: &str) -> Vec<u8> {
     format!(r#"{{"rev":{rev},"body":"{body}"}}"#).into_bytes()
 }
 
+/// Settings bytes for `set_passphrase` to keep (they must parse as settings, review E-4); `idle` tells copies apart.
+fn settings(rev: u64, idle: u64) -> Vec<u8> {
+    format!(r#"{{"rev":{rev},"idle_lock_s":{idle}}}"#).into_bytes()
+}
+
 fn code<T>(r: Result<T, Error>) -> &'static str {
     r.map_or_else(|e| e.code(), |_| "ok")
 }
@@ -94,7 +99,7 @@ fn fresh_with(kc: Option<Arc<Keychain>>) -> (Profiles, String, OpenProfile, Path
     let id = p.list().unwrap()[0].id.clone();
     let o = p.open(&id, None).unwrap();
     o.core()
-        .put_if(SDK, "settings", None, &item(1, "s"))
+        .put_if(SDK, "settings", None, &settings(1, 1))
         .unwrap();
     let dir = o.core().dir().to_path_buf();
     (p, id, o, dir)
@@ -107,7 +112,7 @@ fn fresh() -> (Profiles, String, OpenProfile, PathBuf) {
 /// The same, protected under `PASS` (generation 1) and holding `a` in part `sdk` and `c` in part `pqchat`.
 fn protected() -> (Profiles, String, OpenProfile, PathBuf) {
     let (p, id, o, dir) = fresh();
-    o.set_passphrase(PASS, Some(TEST), Some(&item(1, "s")))
+    o.set_passphrase(PASS, Some(TEST), Some(&settings(1, 1)))
         .unwrap();
     o.core().put_if(SDK, "a", None, &item(1, "a")).unwrap();
     o.core().put_if(PQCHAT, "c", None, &item(1, "c")).unwrap();
@@ -120,7 +125,7 @@ fn envelope(dir: &Path) -> serde_json::Value {
 
 /// Every item of [`protected`] readable.
 fn whole(o: &OpenProfile) {
-    assert_eq!(get(o, SDK, "settings"), Some(item(1, "s")));
+    assert_eq!(get(o, SDK, "settings"), Some(settings(1, 1)));
     assert_eq!(get(o, SDK, "a"), Some(item(1, "a")));
     assert_eq!(get(o, PQCHAT, "c"), Some(item(1, "c")));
 }
@@ -160,10 +165,10 @@ fn set_passphrase_seals_and_keeps() {
         "ProfilePassphraseRequired"
     );
     // the rule's positive twin: 8 characters of NFC
-    o.set_passphrase(PASS, Some(TEST), Some(&item(2, "kept")))
+    o.set_passphrase(PASS, Some(TEST), Some(&settings(2, 2)))
         .unwrap();
     assert!(o.info().protected);
-    assert_eq!(get(&o, SDK, "settings"), Some(item(2, "kept")));
+    assert_eq!(get(&o, SDK, "settings"), Some(settings(2, 2)));
     assert_eq!(gens(&dir), ["g1"]);
     assert!(!dir.join(NEXT).exists());
     let e = envelope(&dir);
@@ -183,7 +188,7 @@ fn set_passphrase_seals_and_keeps() {
     drop(o);
     assert_eq!(code(p.open(&id, Some(PASS2))), "ProfileOpen");
     let o = p.open(&id, Some(PASS)).unwrap();
-    assert_eq!(get(&o, SDK, "settings"), Some(item(2, "kept")));
+    assert_eq!(get(&o, SDK, "settings"), Some(settings(2, 2)));
     assert_eq!(get(&o, SDK, "x"), Some(item(1, "x")));
     // the settings dropped
     let (_p, _id, o, _dir) = fresh();
@@ -206,7 +211,7 @@ fn g4_crash_at_each_step() {
         let (p, id, o, dir) = fresh();
         o.reseal_hook(Box::new(move |s| s == step));
         assert_eq!(
-            code(o.set_passphrase(PASS, Some(TEST), Some(&item(1, "s")))),
+            code(o.set_passphrase(PASS, Some(TEST), Some(&settings(1, 1)))),
             "VaultIo"
         );
         drop(o);
@@ -216,7 +221,7 @@ fn g4_crash_at_each_step() {
         }
         .unwrap();
         assert_eq!(o.info().protected, new, "{step:?}");
-        assert_eq!(get(&o, SDK, "settings"), Some(item(1, "s")), "{step:?}");
+        assert_eq!(get(&o, SDK, "settings"), Some(settings(1, 1)), "{step:?}");
         assert_eq!(gens(&dir), [if new { "g1" } else { "g0" }], "{step:?}");
         assert!(!dir.join(NEXT).exists());
 

@@ -23,6 +23,7 @@ use crate::file::{self, mkdir, rev_of, MAX_BYTES};
 use crate::hidden::{seal_label, search, taken, unchanged};
 use crate::names::random_vec;
 use crate::profile::{open_code, read_envelope, remove_dir, remove_file, sync_dir, OpenProfile};
+use crate::settings::ProfileSettings;
 use crate::{keychain_name, Error, Head};
 use base64::Engine;
 use scaas_ua::wallet::ProfileKeys;
@@ -92,8 +93,9 @@ impl OpenProfile {
         kdf: Option<KdfParams>,
         keep_settings: Option<&[u8]>,
     ) -> Result<(), Error> {
+        // the settings kept must read back (review E-4): what `parse` refuses is `Argument`, before any KDF
         if let Some(b) = keep_settings {
-            if b.len() > MAX_BYTES || rev_of(b) == u64::MAX {
+            if b.len() > MAX_BYTES || rev_of(b) == u64::MAX || ProfileSettings::parse(b).is_err() {
                 return Err(Error::Argument);
             }
         }

@@ -44,7 +44,7 @@ fn endpoint(label: &str, first: bool) -> Endpoint {
     Endpoint {
         list: EndpointList::Rpc,
         label: label.into(),
-        url: format!("https://user:pw@{label}.example:8545/v1"),
+        url: format!("https://{label}.example:8545/v1"),
         first,
     }
 }

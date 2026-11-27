@@ -12,6 +12,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 pub(crate) const MAX_BYTES: usize = 16 << 20;
 /// A sealed item's bound (spec §7.2 "Size"): the base64 of the 16 MiB plain bound plus 1 KiB.
 pub(crate) const SEALED_MAX: usize = 4 * MAX_BYTES.div_ceil(3) + 1024;
+/// The largest revision a stored JSON may carry (review G-9): 2^53, exact in every JSON reader; above it the file is refused
+/// at parse, so no counter is ever followed to an overflow.
+pub(crate) const REV_MAX: u64 = 1 << 53;
 
 /// Whether `bytes` begin as a sealed item does, `{"rev":<digits>,"sealed":"` (plan pinned format 6).
 pub(crate) fn sealed_form(bytes: &[u8]) -> bool {
@@ -43,12 +46,13 @@ fn io<T>(r: std::io::Result<T>) -> Result<T, Error> {
     r.map_err(|_| Error::VaultIo)
 }
 
-/// The file `p`: its revision ([`rev_of`]) and bytes, `None` when absent.
+/// The file `p`: its revision ([`rev_of`]) and bytes, `None` when absent. Read bounded: a file above [`SEALED_MAX`], the
+/// largest the store writes, is `VaultFormat` and never read whole.
 pub(crate) fn read(p: &Path) -> Result<Option<(u64, Vec<u8>)>, Error> {
-    match std::fs::read(p) {
-        Ok(bytes) => Ok(Some((rev_of(&bytes), bytes))),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(_) => Err(Error::VaultIo),
+    match read_bounded(p, SEALED_MAX)? {
+        None => Ok(None),
+        Some(None) => Err(Error::VaultFormat),
+        Some(Some(bytes)) => Ok(Some((rev_of(&bytes), bytes))),
     }
 }
 

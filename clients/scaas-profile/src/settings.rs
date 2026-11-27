@@ -119,12 +119,44 @@ impl ProfileSettings {
         serde_json::to_vec(self).map_err(|_| Error::Argument)
     }
 
-    /// From bytes: bounded (1 MiB, depth 6), else `VaultFormat`.
+    /// From bytes: bounded (1 MiB, depth 6), the forms of [`ProfileSettings::check`]; else `VaultFormat`.
     pub fn parse(bytes: &[u8]) -> Result<ProfileSettings, Error> {
         if bytes.len() > MAX || scaas_ua::json::depth_within(bytes, 6).is_err() {
             return Err(Error::VaultFormat);
         }
-        serde_json::from_slice(bytes).map_err(|_| Error::VaultFormat)
+        let s: ProfileSettings = serde_json::from_slice(bytes).map_err(|_| Error::VaultFormat)?;
+        s.check()?;
+        Ok(s)
+    }
+
+    /// The forms beyond the JSON (review A-4 / G-7, G-6), else `VaultFormat`: each cap 1 to 78 ASCII digits (a wei amount; a
+    /// `u256` has 78); each endpoint URL `http://` or `https://`, then printable ASCII without `\`, its authority (up to the
+    /// first `/`, `?` or `#`) not empty and without userinfo (`@`): what a URL parser reads as the host is what is shown.
+    fn check(&self) -> Result<(), Error> {
+        let cap = |c: &Option<String>| {
+            c.as_deref().is_none_or(|v| {
+                (1..=78).contains(&v.len()) && v.bytes().all(|b| b.is_ascii_digit())
+            })
+        };
+        let caps = |c: &Caps| cap(&c.max_fee_per_gas) && cap(&c.max_cost);
+        let url = |u: &str| {
+            let rest = u.strip_prefix("https://").or_else(|| u.strip_prefix("http://"));
+            rest.is_some_and(|r| {
+                let auth = r.split(['/', '?', '#']).next().unwrap_or_default();
+                r.bytes().all(|b| b.is_ascii_graphic() && b != b'\\')
+                    && !auth.is_empty()
+                    && !auth.contains('@')
+            })
+        };
+        let ok = caps(&self.caps)
+            && self
+                .chains
+                .values()
+                .all(|c| caps(&c.caps) && c.endpoints.iter().all(|e| url(&e.url)));
+        match ok {
+            true => Ok(()),
+            false => Err(Error::VaultFormat),
+        }
     }
 
     /// Every string an import review shows passes the name helper (spec §10.1): the chain-profile keys, the endpoints'
@@ -338,7 +370,7 @@ pub(crate) fn from_overlay(bytes: &[u8]) -> Result<ProfileSettings, Error> {
         return Err(Error::VaultFormat);
     }
     let o: Overlay = serde_json::from_slice(bytes).map_err(|_| Error::VaultFormat)?;
-    Ok(ProfileSettings {
+    let s = ProfileSettings {
         rev: 1,
         caps: o.limits,
         credentials: o
@@ -354,7 +386,9 @@ pub(crate) fn from_overlay(bytes: &[u8]) -> Result<ProfileSettings, Error> {
             })
             .collect(),
         ..ProfileSettings::default()
-    })
+    };
+    s.check()?;
+    Ok(s)
 }
 
 impl OpenProfile {
@@ -367,7 +401,8 @@ impl OpenProfile {
     }
 
     /// Replaces the settings with `s` (its `rev` ignored: the stored one plus 1; `StoreConflict` when another write landed
-    /// meanwhile). On a protected profile a change that could weaken it (spec §7.7, [`weakens`]) needs `passphrase`, typed
+    /// meanwhile); settings `parse` would refuse (above 1 MiB, a cap or a URL of no allowed form) are `Argument`, nothing
+    /// written. On a protected profile a change that could weaken it (spec §7.7, [`weakens`]) needs `passphrase`, typed
     /// (`Argument` without it), checked against the `pass` wrap (`ProfileOpen`); a change that only strengthens needs none.
     /// An unprotected profile has no passphrase to check (its settings are plain; `set_passphrase` shows them before it seals
     /// them).
@@ -380,16 +415,19 @@ impl OpenProfile {
             Some((pt, rev)) => (ProfileSettings::parse(&pt)?, Some(rev)),
             None => (ProfileSettings::default(), None),
         };
+        let new = ProfileSettings {
+            rev: prev.unwrap_or(0).checked_add(1).ok_or(Error::Argument)?,
+            ..s.clone()
+        };
+        // never written in a form `parse` refuses (review E-4): the settings would be unreadable after
+        let bytes = new.json()?;
+        ProfileSettings::parse(&bytes).map_err(|_| Error::Argument)?;
         if self.core.protected() && weakens(&old, s) {
             let pass = passphrase.ok_or(Error::Argument)?;
             let id = self.info().id;
             let (env, _) = read_envelope(self.core.dir(), &id)?.ok_or(Error::ProfileFormat)?;
             self.check_pass(&env, pass)?;
         }
-        let new = ProfileSettings {
-            rev: prev.unwrap_or(0).checked_add(1).ok_or(Error::Argument)?,
-            ..s.clone()
-        };
-        self.core.put_if(ProfilePart::Sdk, ITEM, prev, &new.json()?)
+        self.core.put_if(ProfilePart::Sdk, ITEM, prev, &bytes)
     }
 }

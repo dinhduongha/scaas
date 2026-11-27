@@ -11,9 +11,10 @@
     clippy::indexing_slicing
 )]
 
+use scaas_profile::settings::{ChainSettings, Endpoint, EndpointList};
 use scaas_profile::{
     keychain_name, uuid7, Envelope, Error, ImportSource, KdfParams, OpenProfile, ProfileEvent,
-    ProfileKeychain, Profiles, ProfilesConfig,
+    ProfileKeychain, ProfilePart, ProfileSettings, Profiles, ProfilesConfig,
 };
 use scaas_ua::wallet::ProfileKeys;
 use std::collections::HashMap;
@@ -26,6 +27,7 @@ const PASS: &[u8] = b"correct horse battery staple";
 const PASS2: &[u8] = b"another passphrase, longer";
 const XPASS: &[u8] = b"export passphrase, typed twice";
 const TEST: KdfParams = KdfParams { m_kib: 8192, t: 1 };
+const SDK: ProfilePart = ProfilePart::Sdk;
 
 static KDF: Mutex<()> = Mutex::new(());
 
@@ -308,4 +310,146 @@ fn f5_search_before_the_store_write_lock() {
     assert!(ProfileKeys::kdf_runs() - before >= 5, "the wrap check and the search ran");
     drop(w);
     p.hide(&o, PASS).unwrap();
+}
+
+fn item(rev: u64, body: &str) -> Vec<u8> {
+    format!(r#"{{"rev":{rev},"body":"{body}"}}"#).into_bytes()
+}
+
+/// `f` grown to 1 TiB, sparse (no block written): a read of it whole fails its allocation.
+fn sparse(f: &Path) {
+    let h = std::fs::OpenOptions::new().write(true).open(f).unwrap();
+    h.set_len(1 << 40).unwrap();
+}
+
+/// G-4 / A-10: files are read bounded before any bound is checked: a sparse 1 TiB item is `VaultFormat` and a sparse 1 TiB
+/// `profile.head` a rollback (an anchor is at most 2,560 bytes); read whole, each fails its allocation (`VaultIo`). Control:
+/// the item reads before.
+#[test]
+fn g4_files_read_bounded() {
+    let _k = kdf_lock();
+    let (p, o, id, dir) = protected(&tmp(), None);
+    o.core().put_if(SDK, "a", None, &item(1, "a")).unwrap();
+    assert!(o.core().get(SDK, "a").unwrap().is_some(), "control");
+    sparse(&dir.join("g1").join(o.keys().unwrap().item_file("sdk", "a").unwrap()));
+    assert_eq!(code(o.core().get(SDK, "a")), "VaultFormat");
+    o.lock();
+    sparse(&dir.join("profile.head"));
+    assert_eq!(code(p.open(&id, Some(PASS))), "ProfileRollback");
+}
+
+/// G-9: revisions above 2^53 are refused at parse: the index's (not an index: rebuilt, its rev small again) and an
+/// envelope's (`ProfileFormat`). Control: an envelope at 2^53 opens.
+#[test]
+fn g9_revs_above_2_pow_53_refused() {
+    let root = tmp();
+    let p = Profiles::new(cfg(&root, None)).unwrap();
+    let id = p.list().unwrap()[0].id.clone();
+    let ix = index_text(&root);
+    let rev = serde_json::from_str::<serde_json::Value>(&ix).unwrap()["rev"].clone();
+    let planted = ix.replacen(&format!(r#""rev":{rev},"#), r#""rev":9007199254740993,"#, 1);
+    std::fs::write(root.join("profiles.json"), planted).unwrap();
+    assert_eq!(p.list().unwrap().len(), 1);
+    assert!(!index_text(&root).contains("9007199254740993"), "rebuilt");
+    let dir = root.join("p").join(&id);
+    edit_envelope(&dir, |e| e.rev = 1 << 53);
+    p.open(&id, None).unwrap().lock();
+    edit_envelope(&dir, |e| e.rev = (1 << 53) + 1);
+    assert_eq!(code(p.open(&id, None)), "ProfileFormat");
+}
+
+/// A-4 / G-7, G-6: settings refuse at parse (`VaultFormat`) a cap that is not 1 to 78 ASCII digits, global or per chain,
+/// and an endpoint URL that is not plain `http(s)://` ASCII, or that holds a `\` or userinfo. Control: digits at the bound
+/// and plain URLs with a port, a path, a query and an `@` in the path parse.
+#[test]
+fn a4_g6_settings_strings_bounded() {
+    let parse = |s: &str| code(ProfileSettings::parse(s.as_bytes()));
+    let cap = |v: &str| format!(r#"{{"caps":{{"max_cost":"{v}"}}}}"#);
+    let chain_cap = |v: &str| format!(r#"{{"chains":{{"c":{{"caps":{{"max_fee_per_gas":"{v}"}}}}}}}}"#);
+    let url = |u: &str| {
+        format!(r#"{{"chains":{{"c":{{"endpoints":[{{"list":"rpc","label":"l","url":"{u}"}}]}}}}}}"#)
+    };
+    for ok in ["1", "0", &"9".repeat(78)] {
+        assert_eq!(parse(&cap(ok)), "ok", "{ok}");
+        assert_eq!(parse(&chain_cap(ok)), "ok", "{ok}");
+    }
+    for ok in [
+        "https://rpc.example:8545/v1?x=1",
+        "http://127.0.0.1:8545",
+        "https://rpc.example/p@th",
+    ] {
+        assert_eq!(parse(&url(ok)), "ok", "{ok}");
+    }
+    for bad in ["", "12a", "-1", " 1", &"9".repeat(79), "\u{202e}1"] {
+        assert_eq!(parse(&cap(bad)), "VaultFormat", "{bad:?}");
+        assert_eq!(parse(&chain_cap(bad)), "VaultFormat", "{bad:?}");
+    }
+    for bad in [
+        r"https://evil.example\\@good.example/",
+        "https://user:pw@rpc.example/",
+        "https://user@rpc.example",
+        "ftp://rpc.example/",
+        "javascript:alert(1)",
+        "https://rpc example/",
+        "https://rpc.\u{0435}xample/",
+        "https://",
+    ] {
+        assert_eq!(parse(&url(bad)), "VaultFormat", "{bad:?}");
+    }
+}
+
+/// E-4 / A-14: `set_settings` refuses (`Argument`) settings its own `parse` refuses (here above 1 MiB) before writing, and
+/// `set_passphrase` refuses `keep_settings` that do not parse; the stored settings stay readable. Control: small settings
+/// write and read back.
+#[test]
+fn e4_settings_written_only_when_readable() {
+    let _k = kdf_lock();
+    let p = Profiles::new(cfg(&tmp(), None)).unwrap();
+    let o = p.open(&p.list().unwrap()[0].id, None).unwrap();
+    let s = ProfileSettings {
+        idle_lock_s: Some(60),
+        ..ProfileSettings::default()
+    };
+    o.set_settings(&s, None).unwrap();
+    let mut big = s.clone();
+    big.chains.insert(
+        "c".into(),
+        ChainSettings {
+            endpoints: vec![Endpoint {
+                list: EndpointList::Rpc,
+                label: "a".repeat(1 << 20),
+                url: "https://rpc.example".into(),
+                first: false,
+            }],
+            ..ChainSettings::default()
+        },
+    );
+    assert_eq!(code(o.set_settings(&big, None)), "Argument");
+    assert_eq!(o.settings().unwrap().idle_lock_s, Some(60));
+    let keep = br#"{"rev":1,"unknown":true}"#;
+    assert_eq!(code(o.set_passphrase(PASS, Some(TEST), Some(keep))), "Argument");
+    assert!(!o.info().protected);
+}
+
+/// A-17: an item without a JSON `rev` is refused by `import` before any KDF run, as `ProfileImportOpen` (the preview's
+/// check waits on the vector rows, whose fillers carry none). Control: the same file with a `rev` imports.
+#[test]
+fn a17_item_without_rev_refused_before_the_kdf() {
+    let _k = kdf_lock();
+    let p = Profiles::new(cfg(&tmp(), None)).unwrap();
+    let file = |ks: &[u8]| {
+        let label = br#"{"name":"Bob","hidden":false}"#;
+        let pl = Profiles::test_payload(label, b"{}", &[("keystore", ks)]).unwrap();
+        p.test_export(&pl, XPASS, TEST, &[7; 16], &[9; 7]).unwrap()
+    };
+    let r = p
+        .import_preview(ImportSource::Bytes(&file(b"no json rev")), XPASS)
+        .unwrap();
+    let before = ProfileKeys::kdf_runs();
+    assert_eq!(code(p.import(&r, &[], PASS, None, Some(TEST))), "ProfileImportOpen");
+    assert_eq!(ProfileKeys::kdf_runs(), before, "before any KDF");
+    let r = p
+        .import_preview(ImportSource::Bytes(&file(br#"{"rev":1}"#)), XPASS)
+        .unwrap();
+    p.import(&r, &[], PASS, None, Some(TEST)).unwrap();
 }

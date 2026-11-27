@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 /// The anchor's largest form (a keychain item, spec §11).
-const MAX: usize = 2560;
+pub(crate) const MAX: usize = 2560;
 
 /// A file's revision and the first 16 bytes of SHA-256 of its bytes, hex.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

@@ -149,7 +149,7 @@ impl Envelope {
     }
 
     /// The envelope of directory `id`: bounded, canonical, `format` `scaas.profile` (else `ProfileFormat`), `v` 1 (else
-    /// `ProfileVersion`), its `id` the directory's, a valid name hint, and the fields its state allows (spec §7.1): an
+    /// `ProfileVersion`), its `id` the directory's, `rev` at most 2^53, a valid name hint, and the fields its state allows (spec §7.1): an
     /// unprotected one has `gen` 0, a name and no key field; a protected one `gen` above 0, `kdf` within the general bounds,
     /// `pass` and `label`. Else `ProfileFormat`.
     pub fn parse(bytes: &[u8], id: &str) -> Result<Envelope, Error> {
@@ -163,7 +163,7 @@ impl Envelope {
         if e.v != 1 {
             return Err(Error::ProfileVersion);
         }
-        if e.json()? != bytes || e.id != id {
+        if e.json()? != bytes || e.id != id || e.rev > crate::file::REV_MAX {
             return Err(Error::ProfileFormat);
         }
         let name_ok = e
