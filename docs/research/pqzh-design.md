@@ -2,7 +2,7 @@
 
 # PQZH design study: the hash-based proof kind of PQ Zether (P6-PQZH, E-S1H)
 
-Written 2026-10-13 at the owner's request ("Giao phần thiết kế PQZH luôn"; TODO P6-PQZH, E-S1H). PQZH is the second
+Written 2026-10-13 at the owner's request to hand over the PQZH design now (TODO P6-PQZH, E-S1H). PQZH is the second
 proof system of PQ Zether next to PQZL (the lattice proof in `pqz-core`): the same statements, encryption and state,
 proved by an independent proof system that rests only on hash assumptions. This is a paper design with counting
 scripts; **nothing was built or measured for PQZH**, and **no decision is recorded here**. The prototype and its

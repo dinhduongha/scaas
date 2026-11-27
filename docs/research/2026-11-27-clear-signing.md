@@ -20,7 +20,7 @@ carry a source tag [Sn] (§9, all read 2026-11-27); SCaaS facts cite the rule or
   places [S6], because the Bybit theft of 2025-02-21 went through a tampered signing UI [S8]. MetaMask, Rabby and Blockaid run a
   remote simulation and score its risk [S9, S11]. Every one of these adds a party the user must trust: the descriptor author,
   a registry, a signing service or a simulation vendor.
-- **Recommendation:** put **one review model in the SDK**: typed rows, the steps (the "N transactions" line), the payer,
+- **Recommendation:** put **one review model in the SDK** (named `SignReview`, owner 2026-11-27): typed rows, the steps (the "N transactions" line), the payer,
   alternatives and deferred costs, and warnings with three severities and stable codes. Build it from **descriptors compiled
   into the SDK**, one per `(struct, domain kind)` of `typed_ops.json` (115 structs), keyed by the pinned typehash. Bind each
   contract to its release through the factory (`isRegisteredToken`, `versionOf`). **Refuse any descriptor fetched at run
@@ -302,7 +302,7 @@ dependency the owner would have to choose. **Proposal:** later and optional. Not
 
 ```mermaid
 flowchart LR
-  D["descriptor (in the SDK build)"] --> R["Review model"]
+  D["descriptor (in the SDK build)"] --> R["SignReview"]
   P["prepared value: decoded struct"] --> R
   Q["quote: steps, payer, gas"] --> R
   C["catalogue reads: factory, profile"] --> R
@@ -338,12 +338,12 @@ at block B, with this gas and these logs.
   anything back to them. A line computed from the holder's own decryption is `LocalOnly`. It never changes what is sent, never
   requests a simulation and never triggers an action a node can observe ([ARCH-POS-13](../decisions.md#ARCH-POS-13)).
 
-## 6. Proposal: the review model the SDK emits
+## 6. Proposal: the review model the SDK emits (`SignReview`)
 
 One serialisable record (`serde`, uniffi, FRB, the same JSON for the extension and the TUI). Field names are proposals.
 
 ```text
-Review {
+SignReview {
   v: 1,
   id,                                  // Prepared::id(): the typed digest, shown short on every device that signs
   descriptor: { typehash, revision } | null,   // null: no descriptor, raw section only + warning NO_DESCRIPTOR
@@ -406,7 +406,7 @@ Each front-end:
 - counts confirm only on a settled, fully drawn review (CLI-TUI-08);
 - keeps the raw section reachable.
 
-A vector set (proposal: `smartcontracts/vectors/review/`, one `Review` JSON per descriptor and per warning) is read by every
+A vector set (proposal: `smartcontracts/vectors/review/`, one `SignReview` JSON per descriptor and per warning) is read by every
 front-end's test, the way client vectors are read today.
 
 ### 6.1 Examples (values illustrative)
@@ -461,7 +461,7 @@ warnings  Caution SHARE_IRREVOCABLE ("they keep what they have read; removing th
 
 | Missing | Work (estimate, one engineer) |
 |---|---|
-| The `Review` model and its bindings (uniffi, FRB, JSON), next to `ReviewField`, which stays | 3–4 d |
+| The `SignReview` model and its bindings (uniffi, FRB, JSON), next to `ReviewField`, which stays | 3–4 d |
 | Descriptors for the 115 structs plus registry writes and app records; the completeness test against `typed_ops.json` | 8–12 d |
 | Typed values: token decimals and symbols from the profile, kind names, chain names, the UA book lookup | 2–3 d |
 | Catalogue provenance reads (`isRegisteredToken`, `versionOf`, `isTokenDeprecated`) on the line reader | 1–2 d |
@@ -472,7 +472,7 @@ warnings  Caution SHARE_IRREVOCABLE ("they keep what they have read; removing th
 
 The SDK side comes to about 4–6 weeks. No contract, node or vector change outside the new review vectors, no new typehash, no
 gate. The descriptors are display only and change no signed byte. Rule texts would move: CLI-APP-09's warnings to the SDK
-spec, and CLI-TUI-02 to "renders the SDK's Review".
+spec, and CLI-TUI-02 to "renders the SDK's SignReview".
 
 ## 8. Open questions for the owner
 

@@ -352,7 +352,7 @@ async fn a_hand_off_a_self_relay_and_a_native_send_land_on_the_local_network() {
         ],
     );
     assert_eq!(bal.trim_matches('"'), "3000000", "B holds both pays");
-    // 3b. A's self-relay paid by A's own key (owner 2026-11-22, "accept SourceAccount when self-paying"): the transaction's
+    // 3b. A's self-relay paid by A's own key (owner 2026-11-22, SourceAccount accepted when self-paying): the transaction's
     // source is the subject, whose simulation records a `SourceAccount` entry
     let p = w.soroban_prepare(pay(&b, "4000000", 0xC3)).await.unwrap();
     let q = w

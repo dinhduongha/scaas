@@ -174,6 +174,6 @@ escalation report was truncated after its 7th finding and the `MODERATE` report 
 not judged. §10 rescue was attacked by reading only; the tender `owed` and relay-router rows were not re-derived. The
 non-EVM mapping of §8 was checked for existence of admin powers (README §3, source greps), not designed per family.
 Zodiac Roles and ERC-7710 remain unverified names. Consent and personal-data law for a family tree, and the templates
-(`templates.md` does not exist), were out of scope. The owner's wording "cây gia phả của mình" (my instance vs my
-subtree) and the "custom contract" parenthesis (token rule, delegate, or app custody) were tested by reading both
+(`templates.md` does not exist), were out of scope. The owner's wording, a family tree of one's own (my instance vs my
+subtree), and the "custom contract" parenthesis (token rule, delegate, or app custody) were tested by reading both
 meanings, not resolved.

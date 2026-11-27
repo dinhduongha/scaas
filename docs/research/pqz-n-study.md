@@ -2,7 +2,7 @@
 
 # PQZ with a smaller ring dimension n (plan 5h Task 7c, 2026-10-21)
 
-Owner 2026-10-21: "Cân nhắc theo hướng giảm n. Tìm hiểu xem." (consider reducing n; find out). Research only: the
+Owner 2026-10-21: consider reducing n; find out. Research only: the
 approved 16k set (n = 2560, k = 40, q = 2^50 − 42,310,535, `K_MAX` 16,384) is unchanged. Full tables, logs, scripts
 and reruns: [`pqz-core/pqzl/params/n-study/results-n-study.md`](../../pqz-core/pqzl/params/n-study/results-n-study.md).
 Tags: [measured] = pinned tools (lattice-estimator 53da598, leaky-LWE-Estimator 0a9caf8, LaZer 3330e48, Sage 10.7);

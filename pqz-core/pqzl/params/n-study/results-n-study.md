@@ -1,6 +1,6 @@
 # Smaller ring dimension n for PQZ: results (plan 5h Task 7c, research)
 
-**Status:** research, 2026-10-21. Owner request 2026-10-21: "Cân nhắc theo hướng giảm n. Tìm hiểu xem." Nothing in
+**Status:** research, 2026-10-21. Owner request 2026-10-21: consider reducing n and study it. Nothing in
 production or in the approved 16k set changed; this directory only adds scripts, logs and this file. Research is not a
 decision: §7 recommends, the owner decides.
 

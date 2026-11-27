@@ -410,8 +410,8 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
 
 ### T5. SDK: thin calls (`clients/scaas-sdk`)
 
-- [ ] **The creation in one transaction (owner 2026-11-25: "khi init session TreeKEM: tối đa 16 thành viên + 16 wraps …
-      số thành viên bằng số wraps"):** the SDK's tree-session creation sends the session record **with all its wraps in the
+- [ ] **The creation in one transaction (owner 2026-11-25: a TreeKEM session is created with at most 16 members and 16 wraps,
+      as many wraps as members):** the SDK's tree-session creation sends the session record **with all its wraps in the
       same transaction**, one wrap per member key (`wraps.length == members.length`, the contract's rule), so the session is
       complete at once and no `addWraps` follows. The number of member keys is capped by the planner, per chain: the largest
       `k` with `record(k) + k × wrap` within the chain's block limit read by RPC (EIP-8037: regular + state) and regular under

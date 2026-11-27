@@ -29,7 +29,7 @@ unsupported; `MsigAuthorPlanned` in `src/session.rs`, `src/topics.rs`; tests `te
 `tests/message.rs`, `tests/stores.rs`).
 
 <a id="CLI-PQC-01"></a>**CLI-PQC-01** — **`pqchat-core` is an app core above `scaas-sdk`: it depends on the SDK and on the app's
-Matrix client, and the SDK names no chat** (owner 2026-11-17, "OK, reverse pqchat-core too"; BUILT). It depends on
+Matrix client, and the SDK names no chat** (owner 2026-11-17, the dependency reversed for pqchat-core too; BUILT). It depends on
 `scaas-sdk` with the SDK's app-core feature and the feature that carries the SDK's `PqChat` record entries (the SDK spec's App
 cores section, [`2026-11-17-scaas-sdk.md`](../superpowers/specs/2026-11-17-scaas-sdk.md), as rewritten on branch `scaas-sdk`,
 names them `app-core` and `pqchat-records`), and on nothing else that touches a key or a node: no `scaas-ua`, no `scaas-rpc` and no
@@ -68,7 +68,7 @@ scope is shown as unsupported and never acted on (UA-7 P49).
 Status: **BUILT** (the SDK's `app_core` surface and its `pqchat_*` entries; the crate's handles in `src/lib.rs`,
 `src/message.rs`; tests `tests/message.rs`, `tests/vectors.rs`, `tests/e2e.rs`, the bindings check `runs/bind_surface.py`).
 
-**Attachments are in this round** (owner 2026-11-21, "put it in" after "images, files and data embedded in a message or a vault item may be encrypted and pushed to Arweave"; O9 (b); owner 2026-11-22: two new calls and an app id for PqChat): the `file` content (UA-7 §6.4.1 with its 2026-11-21 Change, P28) is sent and read; the file is sealed under a fresh file key by the SDK's `seal_for_arweave` under PqChat's app id (`keccak256("scaas.pqchat.v1")`), framed to its power-of-two bucket inside the AEAD, its key entered into the content inside `ua-rs` by `pqchat_seal_file_message`, so no key byte reaches the crate; the signed item is returned for the app to post to Arweave (`url` = `ar://<id>`) and keep, the crate posts nothing; a reader opens the object by `pqchat_open_file`, which checks its length and `ctSha256` before any decryption and reads the key from the opened content inside `ua-rs`; a failed file is shown on the device only. BUILT (plan T10b, `src/file.rs`: `send_file`, `file_info`, `open_file`; tests `tests/stores.rs`; the form and the controller calls in CLI-PQC-02's Change of 2026-11-23 in [decisions](../decisions.md)), UNAUDITED; a `file` without an `ar://` url is not built or read in this round.
+**Attachments are in this round** (owner 2026-11-21: in this round; images, files and data embedded in a message or a vault item may be encrypted and pushed to Arweave; O9 (b); owner 2026-11-22: two new calls and an app id for PqChat): the `file` content (UA-7 §6.4.1 with its 2026-11-21 Change, P28) is sent and read; the file is sealed under a fresh file key by the SDK's `seal_for_arweave` under PqChat's app id (`keccak256("scaas.pqchat.v1")`), framed to its power-of-two bucket inside the AEAD, its key entered into the content inside `ua-rs` by `pqchat_seal_file_message`, so no key byte reaches the crate; the signed item is returned for the app to post to Arweave (`url` = `ar://<id>`) and keep, the crate posts nothing; a reader opens the object by `pqchat_open_file`, which checks its length and `ctSha256` before any decryption and reads the key from the opened content inside `ua-rs`; a failed file is shown on the device only. BUILT (plan T10b, `src/file.rs`: `send_file`, `file_info`, `open_file`; tests `tests/stores.rs`; the form and the controller calls in CLI-PQC-02's Change of 2026-11-23 in [decisions](../decisions.md)), UNAUDITED; a `file` without an `ar://` url is not built or read in this round.
 
 <a id="CLI-PQC-03"></a>**CLI-PQC-03** — **Secrets stay below the SDK: `pqchat-core` holds key handles only, and only decrypted
 plaintext leaves** (coordinator condition 1, 2026-11-17; BUILT). The epoch key `K` and the sender chains' positions are `ua-rs`
@@ -114,7 +114,7 @@ Status: **BUILT** on the crate's side (`src/matrix.rs` over `clients/pqchat-tran
 repository, held to the trait by the same conformance test.
 
 <a id="CLI-PQC-05"></a>**CLI-PQC-05** — **The Matrix store is the app's live Matrix client: one stack, one client, one login; a
-PqChat session is never a Matrix room to the user; a room and a Matrix id count only when bound** (owner 2026-11-17, chat "(b)";
+PqChat session is never a Matrix room to the user; a room and a Matrix id count only when bound** (owner 2026-11-17, option (b);
 the binding rules a controller call after Fable's review, owner may override; BUILT). `pqchat-core` attaches to the app's
 `app-matrix` client after the app's Matrix login and detaches before the app's Matrix logout; it opens no Matrix client, login or
 sync loop of its own and links no second Matrix SDK. It sends each envelope as one `net.scaas.pqchat.v1` event `{v, hint, env}`
@@ -442,8 +442,8 @@ first where a rule has none: keys whose order differs in UTF-16 and UTF-8, a con
 refusals, and a chain read far past its first counter. Every unbound field is non-zero in some row (`via`, `device`, `parents`,
 `ref`). The call-key rows wait for the call tasks (CLI-PQC-02).
 
-<a id="CLI-PQC-12"></a>**CLI-PQC-12** — **A real-crypto end-to-end run is a gate of the crate** (owner 2026-11-17, "OK, put the e2e
-into the pqchat-core plan"; BUILT locally, UNAUDITED; the SCaaS testnet run PLANNED). On a local chain that enforces EIP-7825's per-transaction cap and a local Matrix
+<a id="CLI-PQC-12"></a>**CLI-PQC-12** — **A real-crypto end-to-end run is a gate of the crate** (owner 2026-11-17, the e2e put
+into the pqchat-core plan; BUILT locally, UNAUDITED; the SCaaS testnet run PLANNED). On a local chain that enforces EIP-7825's per-transaction cap and a local Matrix
 homeserver, through `pqchat-core` over the SDK with no stand-in wrap: a 1:1 session wrapped by the hybrid KEM to registered KEM keys;
 a message sent by one member and decrypted by the other, equal byte for byte; an epoch rekey after which a removed member cannot
 read; a fresh device recovering its sessions and the latest messages from state alone, after an explicit acceptance; a replica read

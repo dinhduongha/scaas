@@ -1,6 +1,6 @@
 #!/bin/sh
-# SCaaS testnet (chain id 7622) reset with genesis gasLimit 200,000,000 (0xbebc200), owner 2026-10-22 ("Reset ngay để
-# có 200 M sớm, không cần chạy tải"). Everything else as on 2026-10-21: image scaas/nethermind-pqz:2.2.0-pqz3, the same
+# SCaaS testnet (chain id 7622) reset with genesis gasLimit 200,000,000 (0xbebc200), owner 2026-10-22 (reset now, to
+# have 200 M early; no load run needed). Everything else as on 2026-10-21: image scaas/nethermind-pqz:2.2.0-pqz3, the same
 # engine.Pqz and params (Amsterdam from timestamp 1), config.json (TargetBlockGasLimit 200 M already) and compose
 # unchanged, same ports and keys. No chain-data backup (owner 2026-10-21); the old data dir is renamed, not deleted, and
 # genesis.json gets a .bak copy. Prepared and rehearsed on throwaway chains (2026-10-22-genesis-200m-throwaway.txt).

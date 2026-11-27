@@ -9,7 +9,7 @@ that words are real chain state belongs to the layer that reads the chain (the w
 recommended and recorded Q2 as moot for `ua-rs` (2026-11-06, §7). Revised again after independent Fable and Codex reviews
 (2026-11-06 / 07, all items accepted, §9). Fix spec for owner ruling ARCH-POS-13 "Never a
 decryption oracle" (`docs/decisions.md` on branch `ua-mtx-merge`, commit `62adb3d7`; on this branch since T19, the same text; also in
-`AGENTS.md`). The owner's words: **"NO oracle!"**: absolute, no exception, no opt-in. Plan tasks: appended to
+`AGENTS.md`). The owner's ruling: **no oracle**, absolute, no exception, no opt-in. Plan tasks: appended to
 [`plans/2026-11-05-ua-rs-sign.md`](../plans/2026-11-05-ua-rs-sign.md) (section "ARCH-POS-13 rework"). Inputs: the read-only code
 audit of decrypt entry points (2026-11-06, findings F1 to F9 below) and the research note
 `docs/research/pqz-threshold-decrypt-prove.md` §12.1 / §12.5 (branch `ua-mtx-merge`). Everything here is **UNAUDITED**. Zether

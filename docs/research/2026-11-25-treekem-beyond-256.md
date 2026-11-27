@@ -2,8 +2,8 @@
 
 # PqChat TreeKEM past 256 leaves: options and what each costs
 
-Research of 2026-11-25 for the owner, who asked (paraphrased from Vietnamese): "research ways past TreeKEM's limit, for
-example each add or remove bumps a version and members fetch the new key themselves". Nothing here is built, specified or
+Research of 2026-11-25 for the owner, who asked for research on ways past TreeKEM's limit, for
+example each add or remove bumping a version and members fetching the new key themselves. Nothing here is built, specified or
 ruled. Every design below is a proposal, and all of it is **UNAUDITED** cryptographic design
 ([ARCH-POS-14](../decisions.md#ARCH-POS-14)). The rules this note works from are the TreeKEM spec
 [`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md) (cited "spec §n", its rulings R1–R16 and
@@ -475,7 +475,7 @@ Not recommended: (a3), (e), (f) for now, (h); (c2) only if (c1) falls short.
 
 ## Owner answers (2026-11-25) and the 100,000-member target
 
-Owner, 2026-11-25 (paraphrased from Vietnamese): R8 stays at 256, no move to 512; groups past it go to **a new
+Owner, 2026-11-25: R8 stays at 256, no move to 512; groups past it go to **a new
 `groupMode`**, and mode 1 changes no record; the member list leaves the session and epoch records **in the new mode
 only**, modes 0 and 1 unchanged; the target is **about 100,000 members**; nothing is built yet, the approach and its
 impact are to be described first. Every figure below is an estimate [E] scaled from the measured 256-leaf rows; none was
@@ -510,7 +510,7 @@ measured.
   pqchat-core, SDK, bindings, vectors, gas table, mutants, a Fable review and audit units: the size of the 256-leaf TreeKEM
   plan or more.
 
-**Owner, 2026-11-25 (paraphrased): "or bound it: about 5,000 on chain, 100,000 on an off-chain immutable DB".** Not
+**Owner, 2026-11-25: or bound it, about 5,000 on chain and 100,000 on an off-chain immutable DB.** Not
 ruled yet; the controller's reading [I]: one design (the new groupMode with the incremental check) and two bounds by
 **where the check runs**, not by chain kind: a contract at depth 13 (8,192 leaf positions; 5,000 people at one or two
 keys each, fewer at eight) or 14 (16,384), and the off-chain ledger service of the 2026-11-24 direction at depth 17
@@ -535,8 +535,8 @@ and keys ("never lose ciphertext") is most of it. So on Ethereum L1 a commit tak
 gas it is acceptable because commits are rare (messages cost the same at any group size). Levers, not ruled: ML-KEM-768
 node keys (about 30 % less, reopens C2), or the off-chain ledger.
 
-**Owner, 2026-11-25 (last answers):** no move to 512 ("Không cần tăng lên 512 nữa"): R8 stays 256 and mode 1 is unchanged.
-**"Build small, grow by Adds" is the client default** ("OK, làm vậy đi"): a large tree session is created with the creator
+**Owner, 2026-11-25 (last answers):** no move to 512: R8 stays 256 and mode 1 is unchanged.
+**"Build small, grow by Adds" is the client default**: a large tree session is created with the creator
 and a few members and grown by commits of at most 32 Adds, each Add with its Welcome wrap, so no large creation record
 (which stops near 192 keys anyway) and no cold commit of n − 1 ciphertexts. It lowers the typical cost only: the contract's
 bounds hold for every reachable tree (a large creation, a mass removal), so the rows near the limits are not changed by it.
@@ -544,8 +544,8 @@ An Add blanks the new leaf's path too, so after a batch of scattered Adds the ne
 blanked path until those members commit once. Larger groups: the off-chain question below.
 
 **Owner, 2026-11-25 (off-chain):** larger groups go to **a new `groupMode` for the off-chain ledger only**, depth up to
-**18** (262,144 leaf positions); **later, after the freeze, with the ledger service's spec** ("Có thể làm sau được chứ? Vì
-không đụng đến contract?" — yes: contracts already refuse modes 2-255 with `PqChatModeUnsupported`, the mode reuses mode 1's
+**18** (262,144 leaf positions); **later, after the freeze, with the ledger service's spec** (the owner asked whether it can wait, as it does
+not touch the contracts — yes: contracts already refuse modes 2-255 with `PqChatModeUnsupported`, the mode reuses mode 1's
 records and typehashes with `groupMode` = 2, the node never sees it; the work is the ledger service and the clients, depth a
 parameter). To do now: reserve the value 2 for it in decisions.md beside CTR-CHAT-25. Open for that spec: whether the
 ledger service orders commits (signed heads, an append-only log with signed checkpoints, clients comparing heads over at
@@ -560,7 +560,7 @@ Three levels, lightest first:
    anchored unseen). Leaves the service the orderer between checkpoints and says nothing about availability.
 2. **Session anchor.** At creation: `sessionId`, the genesis hash, the `groupMode` and the ledger's endpoints registered on
    chain, so no client is shown another genesis.
-3. **Membership on chain, KEM bytes off chain (the owner's example: "member lên chain, còn kem thì không").** The contract
+3. **Membership on chain, KEM bytes off chain (the owner's example: members on chain, KEM keys not).** The contract
    holds who joins and leaves, admin rights, signatures, nonces, E-3's lag, the epoch slot (order), and the hashes
    (`nodeKeyHashes`, one hash per ciphertext, the tree hash); node keys, path ciphertexts and Welcome wraps stay in the
    ledger. C7 still holds structurally (the tree hash is over `keccak256(kemPk)`), with an incremental per-node hash check
@@ -584,8 +584,8 @@ answer (committee signatures).
 
 ### The membership log and path-less Adds (owner's model, 2026-11-25; a proposal, not specified)
 
-The owner's model (paraphrased): "each add or remove is written to a log on chain: I start from list A, an add makes it
-B, then C, and so on". Mode 1 already keeps that log: the session record holds A (epoch 0), every commit records only the
+The owner's model: each add or remove is written to a log on chain; starting from list A, an add makes it
+B, then C, and so on. Mode 1 already keeps that log: the session record holds A (epoch 0), every commit records only the
 change (`TreeAdd`: UA, key id, leaf; `TreeRemove`: the leaf), `treeLeave` / `treeRemove` record who is gone, all in the order
 of `epochsOf`; a client replays it forward from the cold tree (C25 / C26) and compares the tree hash each commit signs. The
 log is cheap (an Add is about 64 B, about 0.1 M gas [E]); mode 0 instead writes the whole list into every epoch record,
@@ -630,31 +630,30 @@ each member checks that the keys it derives match the signed `nodeKeyHashes`. A 
 With a path on every removal and periodic update, a ratchet bound to the record hash and a confirmation tag, it follows
 what RFC 9420 does for Add-only commits.
 
-**Owner, 2026-11-25 (final, reversing "no 512"): "OK, vậy lên 512 đi. Và làm 'tạo nhỏ, thêm dần'."** R8 moves to 512 leaves
+**Owner, 2026-11-25 (final, reversing the no-512 answer): 512, and build small, grow by Adds.** R8 moves to 512 leaves
 (depth 9) in mode 1 (option (d)); `TREE_CHANGES_MAX` stays 32 unless the measurement puts the ML-DSA-87 record at its
 bounds over 2^24, then 24 (C10, the controller's). "Build small, grow by Adds" is to be built as the client default.
 Owner clarification the same day: "build small, grow by Adds" is not a mechanism to build but how users act — a group is
 created by one user, who pays the creation, and members are added over time; the SDK and pqchat-core (T5 / T6) only offer
 create-with-a-few and add-in-batches, perhaps with a fee estimate before sending.
 
-**Correction (owner, 2026-11-25): "Tôi chưa hề đề cập build ledger service".** No off-chain "ledger service" is decided
+**Correction (owner, 2026-11-25): the owner never mentioned building a ledger service.** No off-chain "ledger service" is decided
 or scheduled; the name was the controller's label for the owner's research direction of 2026-11-24 (an API between SCaaS
 and a backend such as immudb, Supabase, S3 or Arweave). Read every "ledger service", "after the freeze, with the ledger
 service's spec" and "the ledger" in this note as "a possible off-chain deployment, if one is ever decided". `groupMode = 2`
 and `3` are only reserved values; the questions here wait until such a build is decided.
 
-**Owner, 2026-11-25 (the off-chain shape):** "Ở Offchain mode, chỉ cần 1 API SERVICE đảm nhiệm việc đọc ghi vào
-immutabledb / supabase". If an off-chain mode is ever built, it is **one API service** that reads and writes the store
+**Owner, 2026-11-25 (the off-chain shape):** an off-chain mode needs only one API service that reads and writes
+immudb / Supabase. If an off-chain mode is ever built, it is **one API service** that reads and writes the store
 (immudb, Supabase, ...): no BFT committee, no on-chain node set, no availability certificate. That service orders commits; it
 cannot forge a record (every record is client-signed), but it can refuse or delay; clients still verify every signature and
 walk forward as on chain; immudb gives a tamper-evident log, Supabase does not. Of the Farcaster note's questions, the
 committee, the availability certificate and the node set are moot; delegated keys and "never delete accepted records" wait
 for such a build.
-**Owner, 2026-11-25 (the service's job):** "API service đó có nhiệm vụ kiểm chữ ký từ UA, thay vì JWT như truyền thống.
-Open cho đọc (như on-chain)." The API service authenticates **each record by its UA signature** (and nonce), with the
+**Owner, 2026-11-25 (the service's job):** the API service authenticates **each record by its UA signature** (and nonce), with the
 contract's own rules, instead of JWT sessions or tokens; **reads are open to anyone**, as on chain (the data are
 ciphertexts). It needs the UAs' keys: the on-chain UA registry or an off-chain one, per deployment (2026-11-24); the
 verification code is best the one already in ua-rs / scaas-node, so the off-chain rules equal the contract's.
-**Owner, 2026-11-25:** "UA cũng đăng ký như onchain" — in an off-chain mode the UA is registered **as on chain**: the
+**Owner, 2026-11-25:** in an off-chain mode the UA is registered **as on chain**: the
 same registration records, rules and key formats (signing kinds, KEM keys, versions) as `UARegistry`, checked by the API
 service and kept in the store in place of the contract.

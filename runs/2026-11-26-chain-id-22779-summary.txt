@@ -1,4 +1,4 @@
-# Chain id 22779 (SCaaS testnet) / 22777 (SCaaS mainnet), owner 2026-11-26 ("Thôi, 22777 cho mainnet, 22779 cho testnet."),
+# Chain id 22779 (SCaaS testnet) / 22777 (SCaaS mainnet), owner 2026-11-26,
 # branch chain-id-22779 from origin/dev f900e38f7. Full output in git-ignored logs; <tmp> = the scratch directory of the run.
 # genesis: pqz-core/nethermind/chain/scaas-testnet/genesis.json = the reset-5 live chainspec with chainId/networkID 0x1dc6 -> 0x58fb
 #   and extraData vanity = keccak256("scaas-testnet:22779:2026-11-26") (NET-ALL-25); genesis hash 0x9ae9048b…5b13 -> 0x9693692c4ffc3bdca7d4181dbaab179ade3fe010975f8dd0b51ff7c3dff5be86

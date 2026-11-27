@@ -38,14 +38,14 @@ the surface it needs (§5) and marks each row **per the SDK spec's App cores sec
 
 ## 1. Rulings and conditions
 
-**Owner rulings, all 2026-11-17, quoted** (recorded in CLI-PQC-30; not reopened here):
+**Owner rulings, all 2026-11-17** (recorded in CLI-PQC-30; not reopened here):
 
 | # | Ruling | Where it lands |
 |---|---|---|
-| Q-R1 | "pqchat-core cũng đảo chiều luôn" ("OK, reverse pqchat-core too"): `pqchat-core` depends on `scaas-sdk` like any app core; the SDK has no chat module | CLI-PQC-01 |
-| Q-R2 | Chat "(b)": ordinary Matrix chat in the default app build, PqChat in the `scaas` build; one matrix-rust-sdk stack, one client, one login. `pqchat-core` takes the app's live Matrix client (scaas-app's `app-matrix`) as its transport and store and sends envelopes as `net.scaas.pqchat.v1` events | CLI-PQC-05, §6 |
+| Q-R1 | The dependency is reversed for `pqchat-core` too: `pqchat-core` depends on `scaas-sdk` like any app core; the SDK has no chat module | CLI-PQC-01 |
+| Q-R2 | Chat option (b): ordinary Matrix chat in the default app build, PqChat in the `scaas` build; one matrix-rust-sdk stack, one client, one login. `pqchat-core` takes the app's live Matrix client (scaas-app's `app-matrix`) as its transport and store and sends envelopes as `net.scaas.pqchat.v1` events | CLI-PQC-05, §6 |
 | Q-R3 | In scaas-app, `pqchat-core` is the Cargo feature `pqchat` of `app-core-rust` (the app's contract, section 12) | CLI-PQC-01, §11 |
-| Q-R4 | "Ok, đưa e2e vào plan pqchat-core" ("OK, put the e2e into the pqchat-core plan"): a real-crypto client e2e | CLI-PQC-12, plan T11 |
+| Q-R4 | The e2e goes into the pqchat-core plan: a real-crypto client e2e | CLI-PQC-12, plan T11 |
 
 **Earlier owner rulings it follows** (CTR-CHAT-01 and the UA-7 spec): recovery from state alone, no events relied on
 (2026-11-10, P47); the 2-person chat first, groups correct (2026-11-10); spam filtered by clients, no on-chain consent step
@@ -507,7 +507,7 @@ controller proposal already in [ua-libraries.md](../../clients/ua-libraries.md#p
 **O9 — Attachments.** The `file` content carries its key inside the plaintext (P49), so sending one means a fresh key whose bytes
 enter the content. (a) Out of this round (as the app's contract §11.6: attachments not in its first version). (b) An SDK call that
 encrypts a file under a fresh key and returns the ciphertext and the key as `Plaintext` content. **Recommendation: (a) now, (b)**
-with the attachment task. **Owner 2026-11-21: (b), in this round** ("put it in"): the file sealed under a fresh key by an SDK
+with the attachment task. **Owner 2026-11-21: (b), in this round**: the file sealed under a fresh key by an SDK
 call, the ciphertext on Arweave (`ar://<id>`), `ctSha256` checked before opening, size padded; plan T10b, after TODO 8i's research.
 
 **O10 — The e2e homeserver.** (a) Synapse in Docker (what matrix-rust-sdk's own integration tests use). (b) A lighter server
@@ -521,8 +521,8 @@ endpoints. (b) A later `PqChat` release keeps these signatures' bytes in state, 
 (a contract change, a new catalogued release, the owner's). (c) Read them from the creating transaction's calldata (not state, and
 the transaction is found only through an event). **Recommendation: (a) now, (b) asked for the next `PqChat` release**; (c) breaks
 CTR-CHAT-14.
-**Settled (owner 2026-11-17, "chốt hai điểm": settle both points): (a) now, (b) asked for the next `PqChat` release.**
-**Decided (owner 2026-11-23, "Theo cách 2 với mặc định là SSTORE2, kèm (d - option)"; replaces "(b) asked for the next `PqChat`
+**Settled (owner 2026-11-17, both points): (a) now, (b) asked for the next `PqChat` release.**
+**Decided (owner 2026-11-23, way 2 with SSTORE2 as the default, plus (d) as an option; replaces "(b) asked for the next `PqChat`
 release"):** (b) as a setting per home instance fixed at creation, `none` or `sstore2`, the default `sstore2`
 ([CTR-CHAT-23](../../contracts/pqchat.md#CTR-CHAT-23)); the client option `require_signed_records`, verifying every control-plane
 record's kept signature on an `sstore2` home ([CLI-PQC-15](../../clients/pqchat-core.md#CLI-PQC-15)); and (d) strict majority for
@@ -533,7 +533,7 @@ rejected (a lying endpoint could report it off). Plan [`2026-11-23-pqchat-signat
 their events without Megolm, so the seed alone recovers the Matrix history; the homeserver sees the event type and the hint. (b)
 Megolm on; Matrix history then needs Matrix's own recovery key or a verified device, and only a chain store gives messages from
 state alone. **Recommendation and applied: (a)**, since the main case is a 1:1 session with Matrix as its only store.
-**Settled (owner 2026-11-17, "chốt hai điểm"): (a).** Ordinary Matrix rooms of the default build keep Megolm; only rooms
+**Settled (owner 2026-11-17): (a).** Ordinary Matrix rooms of the default build keep Megolm; only rooms
 bound to a PqChat session carry their already PQ-encrypted envelopes without it.
 
 **O13 — An optional session passphrase** (owner question 2026-11-17, after PqVault's passphrase). Whoever holds the seed opens every
@@ -541,14 +541,14 @@ epoch's key (each is wrapped to the seed's KEM key) and so the whole history, wh
 (a) Nothing more. (b) An optional per-session passphrase as in PqVault: the message keys of an epoch come from
 `HKDF(epoch key ‖ Argon2id(passphrase, salt))`, the flag and the salt inside `sealedInfo` (encrypted, so no contract change), every
 member agreeing it out of band; the seed alone then opens no message of that session. (c) Forward secrecy by deleting old keys and
-regular rekeys, which contradicts the state-only recovery the owner ruled for PqChat. **Settled (owner 2026-11-17, "Ok, theo
-đề xuất (b), ghi vào spec pqchat-core"): (b), optional, off by default, for sensitive 1:1 sessions**, as an extension of UA-7's key
+regular rekeys, which contradicts the state-only recovery the owner ruled for PqChat. **Settled (owner 2026-11-17, option
+(b), written into the pqchat-core spec): (b), optional, off by default, for sensitive 1:1 sessions**, as an extension of UA-7's key
 schedule: a new protocol version with its own vectors in clientkeys `pqchat.js` first and its own review; not in this round's
 tasks (T0–T15 build UA-7 as pinned). Rules for when it is built: the passphrase is never stored or sent; a wrong one is detected
 before any message is shown (an AEAD check on `sealedInfo`); forgetting it loses that session's history; a group session may use
 it only if every member enters the same passphrase; the UI says a PqChat session is not an out-of-band channel for it.
 
-**O14 — Several KEM keys per member (per-device keys).** **Decided (owner 2026-11-23, "Chọn M. Nó vẫn là option chứ?": (M),
+**O14 — Several KEM keys per member (per-device keys).** **Decided (owner 2026-11-23: (M),
 optional per member):** a member may sit in an epoch with several `keyId`s, `(ua, keyId)` strictly ascending, at most 8, one wrap
 each ([CTR-CHAT-24](../../contracts/pqchat.md#CTR-CHAT-24)); everything but the wraps stays per UA. This crate (BUILT on
 `pqchat-sigs`): its shapes and its plain-rekey check read members per UA (`check::distinct`), it tries each own wrap and uses
@@ -559,7 +559,7 @@ version seen per UA; with per-device keys it must become per `keyId` (each devic
 valid for the wraps that name it), and `kemKeyOf` (the highest version) no longer names the seed key once a device key is
 registered above it, so a sender picks the keys to wrap to by `kemKeyAt` per chosen version.
 
-**O15 — The group mode.** **Decided (owner 2026-11-23, "add the field now, in pqchat-sigs"):** `PqChatSession.groupMode`, the
+**O15 — The group mode.** **Decided (owner 2026-11-23: the field is added now, in `pqchat-sigs`):** `PqChatSession.groupMode`, the
 record's last field, 0 flat wraps; this release accepts 0 only ([CTR-CHAT-25](../../contracts/pqchat.md#CTR-CHAT-25)). This
 crate signs 0 (through the SDK) and refuses a read session of any other mode (`decode`); TreeKEM (1) comes with a later release.
 

@@ -2,7 +2,7 @@
 
 # NFT and multi-token kinds
 
-Research of 2026-11-24 for the owner ("Bây giờ cần là xem xét NFT (multi NFT)": now we need to look at NFTs, multi-NFT).
+Research of 2026-11-24 for the owner's request to look at NFTs (multi-NFT).
 Nothing here is built, specified or ruled, except where §8 records an owner answer of 2026-11-24. Every design
 below is a proposal. All SCaaS code named here is **UNAUDITED**
 ([ARCH-POS-14](../decisions.md#ARCH-POS-14)).
@@ -497,7 +497,7 @@ reach forward.
     a victim's router nonce on any lane.
   - The alternative is a ruling that a new generation comes with a new router and a new factory line.
 
-**Router versions (owner 2026-11-24: "each new kind carries its own child router, or register different versions?").**
+**Router versions (owner question 2026-11-24: does each new kind carry its own child router, or are different versions registered?).**
 
 | | R-a: release names its router in `deps` | R-b: router versions in the catalogue | R-c: user-supplied router |
 |---|---|---|---|
@@ -535,17 +535,16 @@ reach forward.
 
 **Owner answers (2026-11-24).** Q10: owner direction, no ruling on the options yet; they are evaluated in §7.2. Q11 and
 Q12: R-b plus opt-in user routers, ruled in [CTR-GOV-32](../contracts/token-wrappers.md#CTR-GOV-32). Q13: yes, built (the `virtual`
-keywords, no bytecode change). The verbatim answers are in §8.
+keywords, no bytecode change). The answers are in §8.
 
 ### 7.2 Registry generations and the router: G1 against G3
 
-The owner's direction (2026-11-24, Q10): "Đồng ý là mỗi thế hệ Registry đi theo 1 Router, nhưng không nhất thiết phải new
-router. Đánh giá việc này xem sao." (Agreed: each registry generation goes with a router, but not necessarily a new router.
-Evaluate it.) This section evaluates. No option is ruled. Lines are at `origin/ua-rs-sign` plus the `virtual` commit of this
+The owner's direction (2026-11-24, Q10): each registry generation goes with a router, but not necessarily a new router;
+evaluate it. This section evaluates. No option is ruled. Lines are at `origin/ua-rs-sign` plus the `virtual` commit of this
 branch. All code named is **UNAUDITED**.
 
-**Chosen: G1** (owner 2026-11-24, verbatim "G1 before the freeze"; then "việc kiểm không chỉ giới hạn ở T (token) mà ở các
-app khác", the check covers every governed app, not only tokens). Built on branch `router-g1` as
+**Chosen: G1** (owner 2026-11-24: G1 before the freeze; then: the check covers every
+governed app, not only tokens). Built on branch `router-g1` as
 [CTR-GOV-33](../contracts/token-wrappers.md#CTR-GOV-33), with the nonces keyed by `(registry, id)` (§7.2.7). The analysis below
 is kept as it was written before the ruling.
 
@@ -594,8 +593,8 @@ flowchart TB
 #### 7.2.2 Out of the running
 
 - **G1′, rejected (owner 2026-11-24).** A router that checks against "the newest generation" through a pointer the registrar
-  sets. Owner, verbatim: "Do nguy hiểm của G1', registrar có quá nhiều quyền lực, nên loại nó. Cân nhắc G1 và G3." (Because
-  G1′ is dangerous, the registrar has too much power, drop it; consider G1 and G3.) One wrong pointer would move the
+  sets. Owner: G1′ is dropped because it is dangerous, the registrar having too much power; G1 and G3 are
+  considered. One wrong pointer would move the
   governance of every token at once. The mutant `address r = GEN2` in `RouterG1Test` is G1′ in miniature: it turns
   `test_g1_gen1Instance_staysOnGen1` red, because a generation-1 token's governance would then follow the pointer and leave
   the token's own path.
@@ -816,18 +815,16 @@ a UA only a later generation knows should be able to create instances or hold fa
 - **Q13.** Should `virtual` go on `MetaTokenBase._govRouter` and `SCaaSDexAdmin._govRouter` before the freeze (expected
   bytecode-neutral), so that later ERC-20 or DEX versions can name a router?
 
-**Owner answers of 2026-11-24 to Q10–Q13** (relayed by the controller; the rulings live in [decisions.md](../decisions.md)):
+**Owner answers of 2026-11-24 to Q10–Q13** (the rulings live in [decisions.md](../decisions.md)):
 
-- **Q10 (a), owner direction, not a ruling:** "Đồng ý là mỗi thế hệ Registry đi theo 1 Router, nhưng không nhất thiết phải
-  new router. Đánh giá việc này xem sao." (Each registry generation goes with a router, but that need not be a new router.
-  Evaluate it.) Options evaluated in §7.2; no ruling on G1–G4. Then, on G1′: "Do nguy hiểm của G1', registrar có quá nhiều
-  quyền lực, nên loại nó. Cân nhắc G1 và G3." (G1′ is dangerous, the registrar has too much power: drop it; consider G1 and
-  G3.) G1′ is rejected (owner); G1 against G3 is still open.
-- **Q10, ruled (owner 2026-11-24):** "G1 before the freeze", the check covering every governed app ("việc kiểm không chỉ giới
-  hạn ở T (token) mà ở các app khác"); [CTR-GOV-33](../contracts/token-wrappers.md#CTR-GOV-33), built on branch `router-g1`.
-- **Q11 and Q12 (b), ruled:** "R-b + opt-in user routers": registrar-approved router versions in the generic catalogue are
+- **Q10 (a), owner direction, not a ruling:** each registry generation goes with a router, but that need not be a new
+  router; evaluate it. Options evaluated in §7.2; no ruling on G1–G4. Then, on G1′: G1′ is dangerous, the registrar has
+  too much power, so it is dropped; G1 and G3 are considered. G1′ is rejected (owner); G1 against G3 is still open.
+- **Q10, ruled (owner 2026-11-24):** G1 before the freeze, the check covering every governed app, not only tokens;
+  [CTR-GOV-33](../contracts/token-wrappers.md#CTR-GOV-33), built on branch `router-g1`.
+- **Q11 and Q12 (b), ruled:** R-b with opt-in user routers: registrar-approved router versions in the generic catalogue are
   the default; a user-supplied router only in a marked opt-in class. [CTR-GOV-32](../contracts/token-wrappers.md#CTR-GOV-32), SPECIFIED.
-- **Q13 (c), ruled and built:** "Yes, add" `virtual` to `MetaTokenBase._govRouter` and `SCaaSDexAdmin._govRouter` before the
+- **Q13 (c), ruled and built:** add `virtual` to `MetaTokenBase._govRouter` and `SCaaSDexAdmin._govRouter` before the
   freeze. BUILT on branch `router-gen`, with every contract's init and runtime bytecode byte-identical
   ([CTR-GOV-32](../contracts/token-wrappers.md#CTR-GOV-32)'s Change).
 

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""matrix.sh's parallel plan on a remote target (owner 2026-11-16: "many transactions per block, groups in parallel").
+"""matrix.sh's parallel plan on a remote target (owner 2026-11-16: many transactions per block, groups in parallel).
 Stdlib only (python3 -I).
   sched.py plan <group> [<group> ...]
       one line per group in run order: `<wave> <group> <keys>`, the groups of a wave run at the same time; <keys> is `none`

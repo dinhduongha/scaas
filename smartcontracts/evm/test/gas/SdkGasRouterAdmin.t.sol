@@ -133,7 +133,7 @@ contract SdkGasRouterAdminTest is SdkGasRouterBase {
             tags[i] =
                 string.concat("d", vm.toString(sh[i][0]), "p", vm.toString(sh[i][1]), "l", vm.toString(sh[i][2]), "_");
         }
-        (grWho, sgLineLoose) = (eoa, true); // P1 (owner 2026-11-19, "approved"): the worst array's slope, a line above
+        (grWho, sgLineLoose) = (eoa, true); // P1 (owner 2026-11-19): the worst array's slope, a line above
         _bothTagged("gov_router", entry, v, address(router), eoa, _adPublish, counts, tags);
         sgLineLoose = false;
         _grApply(_adPublish);

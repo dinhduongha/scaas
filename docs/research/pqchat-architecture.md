@@ -2,9 +2,9 @@
 
 # PqChat architecture: transport, ordering, metadata, security, features, calls and cost (research, 2026-11-04)
 
-**Status:** research and overview for the owner (request 2026-11-04: "UA-7 still feels vague; a decentralised or
+**Status:** research and overview for the owner (request 2026-11-04: UA-7 still felt vague; a decentralised or
 semi-decentralised application, Matrix as the semi-decentralised option; what is missing, what is extra, what must be
-added for sessions, metadata, chat features and security"; addition the same day: voice and video calls). Nothing
+added for sessions, metadata, chat features and security; addition the same day: voice and video calls). Nothing
 here is decided. The design under study is the UA-7 spec
 ([`2026-10-25-ua7-pq-e2e-sessions.md`](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md), C1 to C10, owner
 answers in its §4); the hiding of who talks to whom is in [`pqchat-unlinkability.md`](pqchat-unlinkability.md). The

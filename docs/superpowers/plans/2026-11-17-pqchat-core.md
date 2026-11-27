@@ -125,7 +125,7 @@ T5 and T10 may run beside each other; T7 and T8 too. Every other task in order.
 4. merge `origin/ua-rs-sign` into `pqchat-core-impl` and run the reconciliation checks;
 5. only then the rest of T11 over Matrix and the T11 mutants that need the hostile-envelope and reorg fixtures.
 
-**Owner answers of 2026-11-23** ("OK, as proposed"; [decisions](../../decisions.md#CLI-PQC-02), CLI-PQC-02, -04, -05, -12):
+**Owner answers of 2026-11-23** (as proposed; [decisions](../../decisions.md#CLI-PQC-02), CLI-PQC-02, -04, -05, -12):
 - T12: `send` takes the content JSON as a `SecretBytes` handle, parsed and validated inside Rust (the crate's content
   rules, P49's bounds); no send entry of the bindings takes a plain string (the bindings check holds it). Built in T12.
 - T10b: PqChat's app purpose joins the refused SCaaS purposes of the generic app signing, as PqVault's did
@@ -358,13 +358,13 @@ script (`script/DeployBase.sol` with `DEPLOY_PQCHAT`) into a test `anvil --enabl
 - [ ] Code; green. Gates: `pqc-test`, `pqc-chain`.
 - Mutants: skip the factory listing of the `ref`'s instance; skip the home check; accept a `seq` jump.
 - [ ] Commit `pqchat-core T10: public topics`.
-- **For the next `PqChat` release, after the audit** (owner 2026-11-22, "Để sau audit"): a view returning a version's `nonce`
+- **For the next `PqChat` release, after the audit** (owner 2026-11-22: after the audit): a view returning a version's `nonce`
   (`entryOf`, `versionAt` return none), so that a reader rebuilds the referenced `PqTopicEntry` / `PqTopicEdit` typed digest and
   checks a pinned `contentHash`. Until then no contract change: a pinned `contentHash` stays shown as unchecked (`HashUnchecked`).
 
 ## T11 — Real-crypto end-to-end run, local
 
-Owner 2026-11-17: "OK, put the e2e into the pqchat-core plan" (CLI-PQC-12). **Real keys, real wraps, real ciphertexts, no stand-in
+Owner 2026-11-17: the e2e goes into the pqchat-core plan (CLI-PQC-12). **Real keys, real wraps, real ciphertexts, no stand-in
 wrap**: the stand-in wraps of today's on-chain PqChat runs (`smartcontracts/evm/script/onchain/PqChat.s.sol`, `_wraps`) test the
 contract only and are not used here. **Files:** `clients/pqchat-core/tests/e2e.rs` (`#[ignore]`), `tests/e2e/harness.rs`,
 `tests/e2e/matrix.rs` (a test-only `MatrixTransport` over matrix-rust-sdk at `app-matrix`'s pinned version, a dev-dependency, which
@@ -449,7 +449,7 @@ reference crate if the SDK plan keeps that library SDK-only.
       library and generate `pqchat-core`'s public API with the SDK's surface rules; no handle type and no byte accessor of one in the
       generated surface (a grep of the generated sources); `attach_matrix` and the storage interface absent from it; decrypted
       content only through the SDK's copy calls; the library's symbols and enabled features hold no vectors-build entry (K30).
-- [x] Code; green. Gates: `bind`, `pqc-test`. (Round 2, owner 2026-11-22 "Handle SecretBytes": decrypted content and
+- [x] Code; green. Gates: `bind`, `pqc-test`. (Round 2, owner 2026-11-22, `SecretBytes` handles: decrypted content and
       `sealedInfo` plaintext only as the SDK's `SecretBytes` handles, held member by member by `runs/bind_surface.py`;
       the decisions entry of 2026-11-23.)
 - [x] Commit `pqchat-core T12: bindings check`.

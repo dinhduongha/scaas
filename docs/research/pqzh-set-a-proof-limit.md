@@ -134,7 +134,7 @@ them lets a PQZH debit fit one 2^24 transaction at set (a).
 
 ## Decision and fallbacks (owner 2026-10-22)
 
-**B shipped at t = 120** (owner 2026-10-22: "chọn B, A và C là các phương án dự phòng"; plan 5h Task 8c part 1b, branch
+**B shipped at t = 120** (owner 2026-10-22: B chosen, A and C kept as fallbacks; plan 5h Task 8c part 1b, branch
 `pqz-8c`): set (a)'s `pqz-core/params/sets/n2304-kmax4096/pqzh_set.rs` holds radices 2 / 7 / 17 / 19 / 43 / 431 and the
 preset n 45,752, k 952, **t 120** (l 831, products on H_2261). Built and measured [crate, `runs/c8b-a-sizes.jsonl`,
 equal to `ligero_params.py --set n2304-kmax4096`]: R_REG / R_DS / R_DR 207,688; R_TX / R_TX0 / R_BURN / op 7 M = 1

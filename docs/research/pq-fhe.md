@@ -2,8 +2,8 @@
 
 # Post-quantum fully homomorphic encryption (FHE) and PQZ: what it is, where it stands, what it would mean here
 
-Written 2026-10-18 at the owner's questions "do LaZer and Ligero support fully homomorphic encryption?" and "add the
-post-quantum FHE information to the research documents". Nothing here is built or measured by us. Tags:
+Written 2026-10-18 at the owner's questions whether LaZer and Ligero support fully homomorphic encryption, with a request to add the
+post-quantum FHE information to the research documents. Nothing here is built or measured by us. Tags:
 **[source]** a cited publication or vendor page (checked 2026-10-18), **[inference]** this note's reasoning,
 **[measured]** our own runs.
 
@@ -153,8 +153,8 @@ flowchart LR
   coprocessor fraud / validity proofs to be post-quantum — today's deployments use elliptic-curve signatures and
   proofs in places [inference].
 
-- **Ready-made homomorphic precompiles (owner question 2026-10-19: "build add / sub / mul / div now, as a precompile
-  for whoever needs it?"): not built.**
+- **Ready-made homomorphic precompiles (owner question 2026-10-19: build add / sub / mul / div now, as a precompile
+  for whoever needs it?): not built.**
   - *Add / sub* already exist where PQZ needs them: `pqzRollOver` computes `acc' = acc + Σ cts` in Solidity
     (pq-zero-knowledge.md §7.6: 64-bit lanes, one `mod q` per lane). Its cost is calldata, ≈ 0.52 M gas per
     16,512-byte ciphertext, not the additions, so a precompile would save almost nothing. Subtraction on `acc` is

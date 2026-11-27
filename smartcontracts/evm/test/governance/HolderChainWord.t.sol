@@ -13,8 +13,8 @@ import {regArgs} from "../helpers/Catalogue.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
 
-/// Round 3zb + 3zc (spec 2026-11-13-burner-wrap-caps.md §3.9, §3.10, §6 "O6"; CTR-GOV-28 Change, owner 2026-11-13 "(2), gộp
-/// vào round 3zb + 3zc."): every direct entry of a role holder carries the chain word, the 24 of §3.9 on every kind that has
+/// Round 3zb + 3zc (spec 2026-11-13-burner-wrap-caps.md §3.9, §3.10, §6 "O6"; CTR-GOV-28 Change, owner 2026-11-13: option (2),
+/// merged into round 3zb + 3zc): every direct entry of a role holder carries the chain word, the 24 of §3.9 on every kind that has
 /// them and the DEX. On a bare clone of each release (the test plays the factory; features and holders written into the
 /// governance namespace, as `AdminChainWord.t.sol`), per entry:
 /// - a stranger is refused exactly as before, whatever word it passes (the caller's check is first; the word changes no

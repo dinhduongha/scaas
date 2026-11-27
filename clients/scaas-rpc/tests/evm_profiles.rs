@@ -346,7 +346,7 @@ async fn a_pinned_read_is_refused_where_pinned_reads_are_not_trusted() {
     }
 }
 
-/// Owner 2026-11-23 ("Sticky endpoint"): on a profile without pinned reads, a read of several calls goes to one endpoint at
+/// Owner 2026-11-23 (sticky endpoint): on a profile without pinned reads, a read of several calls goes to one endpoint at
 /// its latest block (each call names `latest`, never a hash), the head read before and after; a moved head retries the whole
 /// read, at most `STICKY_TRIES` times, then `HeadMoving`. A read feeding a decryption stays refused. Twins: a steady head
 /// answers at once; a head that moves once answers on the retry.

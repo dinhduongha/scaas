@@ -1,6 +1,6 @@
 # 3zh-core gas calibration of the n2304-kmax4096 rows (2026-11-15)
 
-Owner 2026-11-15 ("Calibration: ok", before 3zh-core group 2 and reset 5). UNAUDITED.
+Owner 2026-11-15 (calibration approved, before 3zh-core group 2 and reset 5). UNAUDITED.
 
 - Tree: 3zh-core `2fe8f49e0` (library `libpqz_ffi.so` sha256 `f397d9c1…0f31`, the reviewed one of that commit), image
   `scaas/nethermind-pqz:2.2.0-pqz10-calib` (`sha256:bde6afa1…eb57`); the 26 rows of

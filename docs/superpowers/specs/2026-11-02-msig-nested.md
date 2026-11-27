@@ -4,17 +4,16 @@
 rule in its own round (owner 2026-11-03). The normative rule is [CTR-UA-38](../../contracts/accounts.md#CTR-UA-38); this file keeps the design, the measurements and why. Rows N0, N2, N5,
 N14 and N15 are **owner rulings**. Every row marked **controller call** is the controller's; the owner may override it. §12 lists what the spec review changed.
 
-**Owner's rule, 2026-11-02, verbatim:** "1 MSIG có thể có 1 hoặc nhiều members là các msig khác (dĩ nhiên có thể có chữ ký thường). Khi kiểm
-tra chữ ký, chỉ đi 2 level thôi." An `msig` may have one or more members that are other `msig`s, beside ordinary signing members.
+**Owner's rule, 2026-11-02:** an `msig` may have one or more members that are other `msig`s, beside ordinary signing members.
 Verification goes two levels only. It supersedes [CTR-UA-09](../../contracts/accounts.md#CTR-UA-09)'s "nesting is one level" for `msig`
 members.
 
-**Owner's ruling, 2026-11-02, relayed by the coordinator:** a MuSig2 or FROST kind as an `msig` member is right as the code has it
+**Owner's ruling, 2026-11-02:** a MuSig2 or FROST kind as an `msig` member is right as the code has it
 (`UAKinds._singleSigning`, `isMember`); the docs are what is wrong. Row N14 and §11.
 
-**Owner's rulings, 2026-11-02, relayed by the coordinator:** N2 accepted: `members` replaces `MemberSig.keyData`, and CTR-UA-33's wording changes at landing. N5 accepted: a native signer listed in two inner `msig`s of one outer signs once, and that one signature serves both slots of that record, bound to that outer and that record.
+**Owner's rulings, 2026-11-02:** N2 accepted: `members` replaces `MemberSig.keyData`, and CTR-UA-33's wording changes at landing. N5 accepted: a native signer listed in two inner `msig`s of one outer signs once, and that one signature serves both slots of that record, bound to that outer and that record.
 
-**Owner's ruling, 2026-11-03, relayed by the coordinator:** an acceptance is stored, so a nested `pop` copies to another registry with no new signature. Row N15 and §4.
+**Owner's ruling, 2026-11-03:** an acceptance is stored, so a nested `pop` copies to another registry with no new signature. Row N15 and §4.
 
 **Owner's rulings, 2026-11-03, later the same day:** an acceptance keeps `keccak256` of its signature, not the bytes, which go in an event; an `msig`'s `pop` likewise:
 `keccak256(pop)` (what `popOf` returns, 32 bytes) and one hash per slot, each member able to check its own signature (`memberSigHashOf`), the bytes in one

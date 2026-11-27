@@ -605,7 +605,7 @@ immutable: see the administration bullet below.
 | 8 | `ALLOWLIST` | none, parameters | regulated implementations, not the confidential kinds | a receiver must hold `requiredFlags` in a `ComplianceRegistry` ([CTR-AS-07](asset-suite.md#CTR-AS-07)) |
 | 9 | `DENYLIST` | none, parameters | regulated implementations | a receiver must hold none of `deniedFlags` in that registry ([CTR-AS-07](asset-suite.md#CTR-AS-07)) |
 | 17 | `RESCUABLE` | none, `rescueTo` | all token kinds | anyone's `rescue(asset)` moves what the token does not owe to the immutable `rescueTo` ([CTR-GOV-06](../decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto)); set at creation, always locked; `rescueTo` only with it, 0 there the constant dev address, a `RescueVault` ([CTR-GOV-25](../decisions.md#CTR-GOV-25)) |
-| 21 | `MODERATE` | contract | regulated implementations; re-scoped by the owner 2026-11-05 ("other hierarchical moderation", TBD), no body | — |
+| 21 | `MODERATE` | contract | regulated implementations; re-scoped by the owner 2026-11-05 to other hierarchical moderation, TBD, no body | — |
 | 22 | `OPERATOR_TRANSFER` | any (an EOA, a single-key UA, an `msig`, a contract); each holder's grant `WHOLE` or `LIMITED` | regulated kinds 8–13 only; a plain kind refuses it (`FeatureInvalidForKind`); SPECIFIED, entry in plan T32 | `operatorTransfer(from, to, amount, ref, chainUid_)`: moves public units with no record, the CTR-GOV-08 refusals ([CTR-GOV-20](../decisions.md#ctr-gov-20--operator_transfer-bit-22-any-holder-the-regulated-kinds), [CTR-GOV-13](../decisions.md#ctr-gov-13--moderate-only-on-public-balances)) |
 | 24 | `PQZ_PROOF` | any holder (`roles.issuer` on a plain PQZ kind takes this bit alone) | the PQZ kinds 4, 5, 12, 13 | `setProofStore(uint8 next, bytes32 chainUid_)`: the token's proof storage mode NONE / LOG, from the next debit; disabling the bit freezes the mode ([CTR-PQZ-35](pq-zero-knowledge.md#CTR-PQZ-35), [CTR-GOV-22](../decisions.md#CTR-GOV-22); BUILT, group 3h T61; the chain word: BUILT, build 3zb + 3zc) |
 | 30 | `BURNER` | any (an EOA, a single-key UA, an `msig`, a contract); `roles.burner` the seat at creation; each grant `WHOLE` or `LIMITED`, scalar = the amount burnt | the Normal kinds 0, 2, 4, 8, 10, 12; a wrapped kind refuses it (`FeatureInvalidForKind`, `roles.burner` `NoSuchRole(30)`) | only a holder `burn`s, its own balance, within its grant; exclusive with bit 2 at creation (`FeatureConflict(30, 2)`), never enabled later, disableable one-way (every burn stops). BUILT, build 3zb + 3zc ([CTR-GOV-29](../decisions.md#CTR-GOV-29)) |
@@ -789,7 +789,7 @@ implementation itself, so what a release depends on is fixed in its code by cons
 - **Deployment.** `deployTokenImplementation(kind, version, envVersion, initcode, implArgs, chainUid_)` /
   `deployDexImplementation(version, envVersion, initcode, implArgs, chainUid_)` (the word [chain-bound](#factory)) name the env explicitly: it must be published for
   that kind or the DEX (`EnvUnknown(domain, envVersion)`). Interim rule, controller proposal 2026-10-20 (owner may
-  override; the owner declined "bind the kind's latest env"): the final binding rule belongs to a later
+  override; the owner declined binding the kind's latest env): the final binding rule belongs to a later
   governance-matrix spec. The factory checks each `libs[i].codehash` against `libCodeHashes[i]`
   (`LibraryCodeHashMismatch`; the list is the registrar's, checked by code hash, not compared with the init code's link
   references — owner 2026-10-20), `CREATE2`s the init code with its chain-neutral arguments (no env in them, so the
@@ -914,7 +914,7 @@ chains T74; `test/v2/ChainNeutral.t.sol`, `ChainNeutralFactory.t.sol`, `test/gov
 - One `IOpenFactory` and one `IFactoryToken` (the v1 and v2 interfaces are in `legacy/`).
 
 <a id="CTR-GOV-32"></a>**CTR-GOV-32** — **Router versions: registrar-approved catalogue rows by default; user routers only in a
-marked opt-in class** (owner 2026-11-24, "R-b + opt-in user routers"). **SPECIFIED** (nothing in `src/` but the two
+marked opt-in class** (owner 2026-11-24, option R-b with opt-in user routers). **SPECIFIED** (nothing in `src/` but the two
 `virtual` `_govRouter` hooks below; the path is shown on
 today's factory by `test/governance/RouterPerRelease.t.sol`, UNAUDITED).
 - **The router of a governed contract** is the one its `_govRouter()` returns: the chain's router (`ChainEnv.govRouter`, set
@@ -940,7 +940,7 @@ today's factory by `test/governance/RouterPerRelease.t.sol`, UNAUDITED).
   router follows each target's env registry, [CTR-GOV-33](#CTR-GOV-33) (G1).
 
 <a id="CTR-GOV-33"></a>**CTR-GOV-33** — **G1: one router for every registry generation; a derived signer is checked on the
-registry of the op's target, its nonce keyed by that registry** (owner 2026-11-24, "G1 before the freeze"; the check covers
+registry of the op's target, its nonce keyed by that registry** (owner 2026-11-24, G1 built before the freeze; the check covers
 every governed contract, not only tokens). **BUILT** (`GovernanceRouterBase`; `test/governance/RouterPerRelease.t.sol`
 `RouterRegistryLineTest`, `RouterG1Test`), UNAUDITED.
 - **Which registry.** For an op `mtx<Op>(e, target, …)` of a derived signer (not in the native space) the router uses

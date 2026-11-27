@@ -1,9 +1,9 @@
 # pqz-core directory layout — proposal (2026-10-15)
 
-**Status: controller proposal, not applied; the owner decides.** Owner 2026-10-15: "pqz-core's folder organisation isn't
-good." This file describes today's tree, what is wrong with it, a proposed tree, every path reference the move would
-change, a history-preserving `git mv` plan (nothing deleted — owner rule "backup, not delete"; experiment code stays
-in the repository — owner rule "keep experiment code"), risks and an order. It is docs only: no file was moved. Four
+**Status: controller proposal, not applied; the owner decides.** Owner 2026-10-15: pqz-core's folder organisation is
+not good. This file describes today's tree, what is wrong with it, a proposed tree, every path reference the move would
+change, a history-preserving `git mv` plan (nothing deleted — owner rule: backup, not delete; experiment code stays
+in the repository — owner rule: keep experiment code), risks and an order. It is docs only: no file was moved. Four
 other branches edit pqz-core now (`p6e-a5`, `pqz-artifact2`, `p6-anon-s`, `p6f`), so the move waits until they merge.
 The rewritten front door is [pqz-core/README.md](../../../pqz-core/README.md); its last section "Old README → new
 locations" below shows that nothing of the previous README was lost.

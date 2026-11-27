@@ -25,7 +25,7 @@ docs_check check; test_docs_check | 8db6f2e6c + docs | 0 | 0 errors (7 page-leng
 mutants (2026-11-16-pqz3k-handle-mutants.txt) | 8db6f2e6c | 0 | 19 killed, 0 survived
 # the steps default/vectors/verify-only/wallet-mlock/n2048 (and the mutants) ran before a comment-only edit of wallet/mod.rs and an unused-import removal in tests/pqz3k.rs (aligned with ua-rs-sign d36c12749); the later steps ran on the committed code
 
-# the review of a8927561e fixed (owner 2026-11-16 "ok, as proposed"): code tree = 9b71bb80c; the same steps again
+# the review of a8927561e fixed (owner 2026-11-16): code tree = 9b71bb80c; the same steps again
 ua-rs default clippy | 9b71bb80c | 0 | clean
 ua-rs vectors clippy | 9b71bb80c | 0 | clean
 ua-rs verify-only clippy | 9b71bb80c | 0 | clean

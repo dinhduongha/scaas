@@ -2,15 +2,15 @@
 
 # Traceability and provenance on SCaaS
 
-Research of 2026-11-24 for the owner ("Truy xuất nguồn gốc": traceability). It is a companion to
+Research of 2026-11-24 for the owner's request on traceability. It is a companion to
 [2026-11-24-nft-multi-token.md](2026-11-24-nft-multi-token.md), the NFT note. Nothing here is built, specified or ruled.
 Every design below is a proposal. All SCaaS code named here is **UNAUDITED**
 ([ARCH-POS-14](../decisions.md#ARCH-POS-14)).
 
 The owner added two hints:
-- "ERP có thể dùng mô hình MRP của Odoo để quản lý sản xuất": the ERP can follow an MRP model such as Odoo's to manage
+- The ERP can follow an MRP model such as Odoo's to manage
   production (§8).
-- "Có thể phục vụ nhiều công ty khác nhau chạy Odoo OpenSource": the service can serve many companies, each running
+- The service can serve many companies, each running
   open-source Odoo (§7).
 
 The main text is generic. One ERP appears only in the marked example subsections, as in

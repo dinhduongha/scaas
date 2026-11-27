@@ -134,7 +134,7 @@ It costs a second prover, verifier / precompile, audit, vector set and WASM modu
 
 **Token kinds.** `IOpenFactory.TokenKind` reserves four PQZ kinds today (`NORMAL_PQZ`, `WRAPPED_PQZ`,
 `NORMAL_ZETHER_PQZ`, `WRAPPED_ZETHER_PQZ`, values 4–7, `KindReserved`). Two proof systems give either eight kinds
-(`*_PQZL` / `*_PQZH`) or four kinds plus the proof system as an `initialize` parameter; the owner's "two kinds" means
+(`*_PQZL` / `*_PQZH`) or four kinds plus the proof system as an `initialize` parameter; the owner's two kinds mean
 only PQZL and PQZH, i.e. the second: four kinds plus the proof system as a configuration value (owner 2026-10-13).
 To write into the PQZ spec with the spike's numbers.
 

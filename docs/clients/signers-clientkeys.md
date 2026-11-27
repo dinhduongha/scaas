@@ -488,7 +488,7 @@ fields and vault texts authenticated by an index MAC computed in clientkeys and 
 (vault v2, owner 2026-11-19, scaas-sdk T13b ruling 3).
 
 <a id="CLI-SGN-11"></a>**CLI-SGN-11** — **A non-custodial seed wallet lives on the client, and one subject account holds
-several keys (passkey + seed).** Owner decision ("both passkeys and seed words"). A 24-word BIP-39 mnemonic (256 bits;
+several keys (passkey + seed).** Owner decision: both passkeys and seed words. A 24-word BIP-39 mnemonic (256 bits;
 import accepts 12–24 valid words, checksum checked) is generated or imported **on the device**; the mnemonic and keys
 **never** leave it and are never sent to an ERP or a relayer. It is shown **once**, with a mandatory confirmation
 (re-enter 3 random words; `SeedBackup` states `fresh → revealed → challenged → verified → taken`) before use. After use,
@@ -1219,7 +1219,7 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
 10. Accept.
 
 - **Key handle** (owner 2026-11-14, the Change of this rule in `decisions.md`; Fable review of the round P1-1; in the wallet's
-  store owner 2026-11-16, T21 O5 (b), "ok, as proposed"; design [2026-11-16-pqz3k-handle-store.md](../superpowers/specs/2026-11-16-pqz3k-handle-store.md)).
+  store owner 2026-11-16, T21 O5 (b) as proposed; design [2026-11-16-pqz3k-handle-store.md](../superpowers/specs/2026-11-16-pqz3k-handle-store.md)).
   Status: **BUILT**, **UNAUDITED**; no binding in this repository proves through it yet (the matrix's wallet simulator
   `smartcontracts/evm/script/pqz/wallet` decrypts its `T` through it). "No bare class-2 decrypt" is enforced here, in the
   clients, not in pqz-ffi. `clientkeys` `pqzKeyHandle` and `ua-rs` `pqz3k::PqzKeyHandle` (feature `pqz`), one per key with the
@@ -1244,7 +1244,7 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
     5–7 and `v_a`; `ua-rs` runs pqz-ffi `opening::check_recipient` itself on the blob's bytes, its own `pk` and opening KEM key
     and the auditor's keys as given (no caller code sees the opening KEM seed). The result is an **acceptance** bound to the
     handle, the token, the index and `h(i)` (slot and blob bytes), or a skip.
-  - **The debit** (the review of the handle, owner 2026-11-16 "ok, as proposed", decision (a): in `ua-rs` no caller code sees the PQZ seed in a
+  - **The debit** (the review of the handle, owner 2026-11-16, decision (a): in `ua-rs` no caller code sees the PQZ seed in a
     release build). One entry per debit, the own part and the window together (`T = own (u_f, v_f) + Σ pending[p_last, p) +
     Trivial(shieldIn)`, [CTR-PQZ-33](../contracts/pq-zero-knowledge.md#CTR-PQZ-33)): `{ token, lastDebit, own: { pu, pvf, ownTag }
     | none, window: [{ token, index, slot, code, accepted }], shieldIn }`, refused in this order: revoked (`KeyRevoked`, first

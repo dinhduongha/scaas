@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# SCaaS testnet (chain id 7622) reset 5 (owner 2026-11-16 "Ok, reset 5 before PR #18"): reset 4's procedure (reset4.sh, the
+# SCaaS testnet (chain id 7622) reset 5 (owner 2026-11-16: reset 5 before PR #18): reset 4's procedure (reset4.sh, the
 # T-20 drill left out) with a new image and chainspec: image scaas/nethermind-pqz:2.2.0-pqz11 (build-image.sh on the reset5
 # tree, the reviewed library pins of SelfTest.cs); chainspec = the live genesis.json through patch-chainspec.py
 # --testnet-reset --rescue-vault-alloc (NET-EVM-14) with the calibrated chain/engine-pqz.json (26 rows, 2026-11-15, the

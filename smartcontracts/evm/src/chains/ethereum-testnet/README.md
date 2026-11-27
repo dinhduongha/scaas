@@ -22,7 +22,7 @@ Profile [`profile.json`](profile.json) (`draft`, SDK plan T40), from the probes 
 - **Explorer:** Etherscan v2, `sepolia.etherscan.io`; verification (NET-EVM-12) with the API key named by `VERIFY_API_KEY_ENV`; the key
   itself never enters the repo.
 - **RPC:** from the environment, passed to `smartcontracts/scripts/deploy.sh evm <rpc>`; no URL or key committed.
-- **Code size** (owner 2026-11-22, decisions CLI-SDK-32 (3): "look at optimising the code to reduce the code size"): at Amsterdam
+- **Code size** (owner 2026-11-22, decisions CLI-SDK-32 (3): a study of optimising the code to reduce its size): at Amsterdam
   Sepolia creates a 65,536 B runtime and refuses 65,537 B, accepts 131,072 B of init code and refuses 131,073 B (measured
   2026-11-22). The size study [`docs/research/2026-11-22-evm-size-64k.md`](../../../../../docs/research/2026-11-22-evm-size-64k.md) found no contract in `src/` above
   those caps: the kinds are releases plus body modules since T66b (`WrappedPqzToken` a 27,437 B release), the largest runtime

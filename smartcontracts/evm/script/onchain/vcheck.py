@@ -452,7 +452,7 @@ def scan(chain, genesis, head):
 
 
 def set_books(books, ds):
-    """Deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): DEPLOY_SET `all` (verify.sh's default)
+    """Deploy sets (owner 2026-11-16: option 2, one chain, two deploy sets): DEPLOY_SET `all` (verify.sh's default)
     reads every set of the chain's book (`sets.<label>`) and each set's releases book (`releases_json`) beside the books;
     a label reads that set only (its entries, its releases book); an unknown label DEPLOY_SET_UNKNOWN, a label the book
     lacks DEPLOY_SET_MISSING. A book without sets is read as it is (DEPLOY_SET `all` only)."""

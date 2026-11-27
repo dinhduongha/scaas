@@ -8,9 +8,9 @@
 - **§7** (alternatives to storing the bundle) is superseded by the sender-memo rule: commit-reveal stores the commitment plus a 17 + 40·M byte memo (a flags byte records the auditor choice), and the sender recovers from seed + storage alone; tokens choose `disclosureMode ∈ {BUNDLE, COMPACT}` at creation.
 - **R6** (data availability of `TransferBundles` logs for receiver and auditor under commit-reveal) is still open.
 
-Written 2026-10-11 for the owner: "With Zether, can the sender, the receiver and the auditor reveal part or all of a
-transaction, or every transaction of the token? This matters; it needs a document and a careful review. Give a table
-plus conditions." A follow-up asked whether there is an alternative to storing the 256-byte bundle, for example a
+Written 2026-10-11 for the owner's question: with Zether, can the sender, the receiver and the auditor reveal part or all of a
+transaction, or every transaction of the token? It matters, so it needs a document and a careful review, with a table
+plus conditions. A follow-up asked whether there is an alternative to storing the 256-byte bundle, for example a
 per-transaction secret that can be recomputed later (§7). Review only: nothing here changes a rule. SCaaS facts cite
 rule ids of [contracts/zether.md](../contracts/zether.md) and [contracts/pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md), and
 code as `file:line` on `main` at `d85fc8b` (paths under `smartcontracts/evm/` unless stated). **[inference]** marks a
@@ -424,7 +424,7 @@ The bookkeeping inference of §4.5 applies to PQZ unchanged [inference].
 |---|---|---|---|
 | **Solana Token-2022 confidential transfers** | Optional global auditor ElGamal key on the mint. When set, every confidential transfer encrypts the amount for sender, recipient **and** auditor, and the proof checks all three. | The confidential-transfer authority can rotate or clear the key with `UpdateMint`; rotation applies to future transfers only. **No sender opt-out.** Contrast: SCaaS has an immutable key with a sender opt-out. | [solana.com confidential transfer](https://solana.com/docs/tokens/extensions/confidential-transfer) (read 2026-10-11) |
 | **Zcash** (Sapling/Orchard, unified keys) | Per-account full viewing key (incoming and outgoing) and incoming viewing key (incoming only). No protocol auditor. | Everything past and future for that account; ZIP 316 does not discuss revocation, and the keys are deterministic, so they are not revocable [inference]. Payment disclosure ZIP 311 is a draft [unverified]. | [ZIP 316](https://zips.z.cash/zip-0316), [ZIP 311](https://zips.z.cash/zip-0311) |
-| **Monero** | Per-transaction secret key: `get_tx_key`/`check_tx_key`, the analog of `SENDER_S` and of the owner's "per-transaction secret". Message-bound `get_tx_proof`, the analog of `SENDER_CP`/`RECEIVER_X`. **`get_reserve_proof`, a balance proof**, which SCaaS lacks. View key for incoming outputs. | Wallet-held; whether the tx key is always stored is not stated on the RPC page [unverified]. | [Monero wallet RPC](https://docs.getmonero.org/rpc-library/wallet-rpc/) |
+| **Monero** | Per-transaction secret key: `get_tx_key`/`check_tx_key`, the analog of `SENDER_S` and of the owner's per-transaction secret. Message-bound `get_tx_proof`, the analog of `SENDER_CP`/`RECEIVER_X`. **`get_reserve_proof`, a balance proof**, which SCaaS lacks. View key for incoming outputs. | Wallet-held; whether the tx key is always stored is not stated on the RPC page [unverified]. | [Monero wallet RPC](https://docs.getmonero.org/rpc-library/wallet-rpc/) |
 | **Aztec** | Per-account incoming viewing key decrypts received notes. Newer docs mark the outgoing viewing and tagging keys "reserved". No protocol-level auditor; apps build their own. | Per account [unverified for the current version] | [Aztec keys](https://docs.aztec.network/developers/docs/concepts/accounts/keys) |
 
 **Lessons [inference]:**

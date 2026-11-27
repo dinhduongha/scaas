@@ -346,7 +346,7 @@ where
     .await?)
 }
 
-/// One logical read on `pool` (ARCH-POS-15; owner 2026-11-23, "Sticky endpoint"): pinned to one block by one endpoint
+/// One logical read on `pool` (ARCH-POS-15; owner 2026-11-23, sticky endpoint): pinned to one block by one endpoint
 /// ([`EvmPool::read_at_block`]) where the chain's pinned reads are trusted; else, at the latest block, the sticky read
 /// ([`EvmPool::read_sticky`]: one endpoint whose head did not move, a read feeding a decryption refused); another block
 /// choice there is `PinnedReadsUntrusted`.

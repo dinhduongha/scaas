@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# SCaaS testnet (chain id 7622) reset 2, owner 2026-11-10 ("reset 2: chỉ làm đến bước 2"): reset 1's procedure
+# SCaaS testnet (chain id 7622) reset 2, owner 2026-11-10 (reset 2: up to step 2 only): reset 1's procedure
 # (pqz-core/nethermind/runs/2026-11-04-testnet-reset1.sh) without its chainspec and image changes: genesis.json,
 # docker-compose.yml, config.json, config.rpc.json, keystores and .env stay as reset 1 left them (sha256 before and
 # after), the image stays scaas/nethermind-pqz:2.2.0-pqz7. No chain-data backup (owner 2026-10-31): the data dirs of

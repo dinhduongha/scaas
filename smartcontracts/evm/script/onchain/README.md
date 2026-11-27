@@ -46,7 +46,7 @@ files changed, compilation skipped" or the step fails (owner 2026-11-10). A remo
 (wei, default 1 gwei), max fee `ONCHAIN_MAXFEE` (wei, default 2 x the base fee + the tip); forge's own estimate (1 wei on
 a quiet chain) stranded a batch once the base fee rose. A local target keeps forge's gas fee.
 
-Groups in parallel on a remote target (owner 2026-11-16, "many transactions per block, groups in parallel"; NET-EVM-12's
+Groups in parallel on a remote target (owner 2026-11-16: many transactions per block, groups in parallel; NET-EVM-12's
 Change): `sched.py plan` puts the groups in waves, a group after the ones it needs (`pqzwallet` after `pqzkeys`, `pqoff`
 after `pq`: both write e2e's `deployments/<key>-pqz.json`; `views` alone after the groups whose books it reads; `verify`
 last), and a list that names a group before one it needs is refused (`GROUP_ORDER`). The groups of a wave run at the same

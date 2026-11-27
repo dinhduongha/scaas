@@ -116,7 +116,7 @@ Status: **BUILT** (`test/pqvault/PqVaultEpochs.t.sol`, `PqVaultBatch.t.sol`).
 <a id="CTR-PQV-06"></a>**CTR-PQV-06** — **A vault is epoch 0 with at least one member; a personal vault is a one-member
 vault whose random epoch key is wrapped once to its own UA KEM key, by the same path as a shared vault, and no
 seed-derived vault key exists; epochs, wraps in chunks, the home-instance slot, admins, leave and remove follow PqChat**
-(owner 2026-11-17, V1 and ruling "(a)").
+(owner 2026-11-17, V1 and ruling (a)).
 
 - `createVault(PqVaultCreate, Wrap[], UASig)`, `rekeyVault(PqVaultEpoch, Wrap[], UASig)`, `addVaultWraps(epochId, first,
   Wrap[])` (unsigned), `leaveVault(PqVaultLeave, UASig)`, `removeVaultMembers(PqVaultRemove, UASig)`: the checks of
@@ -125,7 +125,7 @@ seed-derived vault key exists; epochs, wraps in chunks, the home-instance slot, 
   `addVaultWraps` is `PqVaultShape`, as `addWraps`: Change 2026-11-25, A-15), and who may rekey
   as [CTR-PQV-13](#CTR-PQV-13) states.
 - Sharing a vault is a `rekeyVault` to the new members with a wrap per member.
-- **Exits apply at the head (Change 2026-11-24, E-3 of the TreeKEM code review; owner 2026-11-24: "Yes, both modes", one rule for the group
+- **Exits apply at the head (Change 2026-11-24, E-3 of the TreeKEM code review; owner 2026-11-24: in both modes, one rule for the group
   code; BUILT on branch `review-fix-contract`):** `removeVaultMembers` and `leaveVault` take
   [CTR-CHAT-20](pqchat.md#CTR-CHAT-20)'s and [CTR-CHAT-10](pqchat.md#CTR-CHAT-10)'s change with `PqVault*` errors: at
   home the epoch named is the head or an ancestor of it within `EXIT_LAG_MAX` = 16 epochs (`PqVaultExitLag` beyond),
@@ -246,7 +246,7 @@ Status: **BUILT** (`test/pqvault/PqVaultModes.t.sol`).
 
 <a id="CTR-PQV-16"></a>**CTR-PQV-16** — **PqVault supports both paths an app has: a vault is portable (path A, the
 registry's open app namespace, replicas allowed) or chain-bound (path B, the registry's `requireAuthorized`, one instance,
-no replica), chosen at its creation** (owner 2026-11-17, N1: "support both A and B";
+no replica), chosen at its creation** (owner 2026-11-17, N1: both A and B supported;
 [CTR-UA-45](accounts.md#CTR-UA-45)). Everything else is shared: ids, scopes, storage, epochs, wraps, roles, items,
 versions, batches, views, events, errors and the key schedule.
 

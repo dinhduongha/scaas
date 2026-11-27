@@ -277,7 +277,7 @@ def _records(out, n):
 
 
 def table(a):
-    if a.set:  # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): the set these runs targeted
+    if a.set:  # deploy sets (owner 2026-11-16: option 2, one chain, two deploy sets): the set these runs targeted
         sys.path.insert(0, os.path.join(EVM, "script"))
         import deploybook
 

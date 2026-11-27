@@ -20,8 +20,8 @@ size gate; `scaas-node` e2e (Rust, anvil) as the deploy check.
 
 **Spec:** `docs/contracts/token-wrappers.md` CTR-TOK-03, -21, -24, -25, §6, §12 "Factory"; `docs/contracts/README.md`
 CTR-GEN-05, CTR-GEN-06; `docs/networks/evm.md` NET-EVM-05; `docs/history/specs/2026-10-08-token-tree-design.md` §7–§8;
-TODO.md §00 (P1, MT-1, MT-4, P1d follow-ups). Owner 2026-10-11: "không cần xóa line v1-v2, đưa vào backup" (do not delete
-the v1/v2 lines; put them in the backup) and size is optimised later.
+TODO.md §00 (P1, MT-1, MT-4, P1d follow-ups). Owner 2026-10-11: the v1/v2 lines are not deleted;
+they go to the backup, and size is optimised later.
 
 ## Global Constraints
 

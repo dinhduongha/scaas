@@ -44,7 +44,7 @@ flow fixtures in its tests, with no dependency on scaas-app: [CLI-TUI-19](../dec
 The TUI links `scaas-sdk` as a crate and is its own one Rust library ([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12)). It holds no
 cryptography, transport, signer or byte format: everything it shows comes from an SDK call or event, everything it does is one. Its
 build enables none of the SDK features `native-networks`, `raw-native`, `opaque-calls`, and at start it refuses to run when
-`Sdk::features()` reports any of them. It is not the CLI `scaas` ([CLI-SDK-17](scaas-sdk.md#CLI-SDK-17)): the CLI runs one call per
+`Sdk::features()` reports any of them. It is not the CLI `scaas` ([CLI-SDK-17](scaas-cli.md#CLI-SDK-17)): the CLI runs one call per
 command for scripts and tests; the TUI is a session that follows events. Both use one data directory under the keystore's lock; the
 TUI re-reads its activity list when that screen gains focus, since another process may change the SDK's state.
 

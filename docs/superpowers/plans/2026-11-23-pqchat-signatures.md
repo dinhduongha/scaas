@@ -6,7 +6,7 @@
 **Status (2026-11-23):** S1–S5 BUILT on branch `pqchat-sigs` (made from `origin/ua-rs-sign` at `5c64f15ba`); the code started
 at once (auto-run mandate); gate rows in `smartcontracts/evm/runs/2026-11-23-pqchat-sigs-summary.txt`. **UNAUDITED.**
 
-**Owner ruling (2026-11-23, owner: yes):** "Theo cách 2 với mặc định là SSTORE2, kèm (d - option)": the pqchat-core spec §13 O11 is
+**Owner ruling (2026-11-23, owner: yes):** way 2 with SSTORE2 as the default, plus (d) as an option: the pqchat-core spec §13 O11 is
 settled by (b) in this form, replacing "(b) asked for the next `PqChat` release":
 
 1. Every `PqChat` home instance has an **immutable signature-storage setting**, fixed when it is created, with the modes `none` and

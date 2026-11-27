@@ -1,6 +1,6 @@
 # One rustfmt config for every crate of this repository: rustfmt looks for rustfmt.toml in the crate's directory and
-# every parent. Width: rustfmt's default max_width 100 (owner rulings 2026-11-17: "Dùng độ rộng mặc định 100" and "Chỉ cho
-# rust thôi": 100 for Rust only, every other language keeps 120), so no max_width line. rust-toolchain.toml pins the
+# every parent. Width: rustfmt's default max_width 100 (owner rulings 2026-11-17: the default
+# width 100, for Rust only; every other language keeps 120), so no max_width line. rust-toolchain.toml pins the
 # rustfmt version. Comment text is never rewritten (wrap_comments and normalize_comments stay at their default, off).
 # Excluded files (legacy/, generated, vendored) are left out by the file lists of the format runs: rustfmt's `ignore` is
 # unstable.

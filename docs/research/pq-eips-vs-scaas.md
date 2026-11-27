@@ -2,7 +2,7 @@
 
 # Post-quantum EIP drafts and SCaaS
 
-Written 2026-10-11 for the owner ("the PQ EIP drafts now on the table: should SCaaS move its design toward them?").
+Written 2026-10-11 for the owner's question: the PQ EIP drafts now on the table; should SCaaS move its design toward them?
 Consider-only: nothing here changes a rule. SCaaS facts cite rule ids of the component docs; outside facts cite §9.
 Fork status comes from the forkcast EIP data (`ethereum/forkcast`, `src/data/eips/<n>.json`), read on 2026-10-11.
 **[unverified]** marks a claim that rests on secondary reporting or memory and was not confirmed against a primary

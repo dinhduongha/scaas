@@ -814,7 +814,7 @@ async fn edit_and_redact_from_another_ua_ignored() {
     assert_eq!(w.net.writes(), 0);
 }
 
-/// Decrypted content leaves only as the SDK's `SecretBytes` handles (owner 2026-11-22, "Handle SecretBytes"): a received
+/// Decrypted content leaves only as the SDK's `SecretBytes` handles (owner 2026-11-22): a received
 /// message's content, a shown message's (its newest own edit's when edited), each reaction's; their bytes the canonical JSON;
 /// one reaction per UA and value.
 #[tokio::test(flavor = "multi_thread")]

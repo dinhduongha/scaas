@@ -260,7 +260,7 @@ rs=-releases.json
 [ "$tgt" != scaas-testnet ] || rs=-t66b-releases.json
 DEPLOY_JSON=$(python3 -I script/deploybook.py path "$CHAIN" "$G" 2>&1) || fail "$DEPLOY_JSON"
 RELEASES_JSON=$(python3 -I script/deploybook.py path "$CHAIN" "$G" "$rs" 2>&1) || fail "$RELEASES_JSON"
-# deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): a book with sets is read as the set DEPLOY_SET
+# deploy sets (owner 2026-11-16: option 2, one chain, two deploy sets): a book with sets is read as the set DEPLOY_SET
 # names, default its default set (mldsa-off, the forge matrix's): another set's entries and releases book from the book
 # (deploybook.py set-book); an unknown label, or a label the book lacks, stops the target by name
 MSET=
@@ -519,7 +519,7 @@ group() {
     [ "$res" = "not run" ] || [ "$tgt" = local ] || [ "$g" = verify ] || verify "$g"
     echo "$res" >"$T/res-$g"
 }
-# owner 2026-11-16 ("many transactions per block, groups in parallel"): a remote target runs the groups in waves
+# owner 2026-11-16 (many transactions per block, groups in parallel): a remote target runs the groups in waves
 # (script/onchain/sched.py plan: a group after the groups it needs, views alone after the others), the groups of a wave at
 # the same time, each with its OWN key set (ONCHAIN_K1..K3, PRIVATE_KEY = K1: indexes of SCAAS_TESTNET_MNEMONIC_FILE fixed by
 # the group's name, topped up to its group's budget (sched.py FUND) from its index 0 in one batch; rescue and wraplimits keep the target's
