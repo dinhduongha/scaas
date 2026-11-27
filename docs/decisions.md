@@ -6475,6 +6475,30 @@ Change (2026-11-27, the path-less round's P6 / P7 gaps; controller calls under t
 **Source.** owner 2026-11-23 (relayed by the controller with plan T2's brief); clientkeys `src/treekem.js`.
 Change (2026-11-25, the path-less [delta spec](superpowers/specs/2026-11-25-treekem-pathless-add.md); controller call; owner: no; status: SPECIFIED): the labels `next`, `add-joiner`, `confirm`, `add-nonce`.
 
+### CTR-CHAT-29 — `PqChat` topics: every entry and every edit keeps its block time in the slot it already has
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: contracts/pqchat.md#CTR-CHAT-29 · superseded-by: —
+
+**Rule.** Owner 2026-11-27 (G1 of the public-topics UI research, §8): `postEntry` stores `postedAt = uint64(block.timestamp)` in the free 64 bits of the entry's slot (`record | depth << 160 | postedAt << 192`) and `editEntry` stores `editedAt` beside each version's pointer (`record | editedAt << 160`), no new slot; `entryOf` returns `postedAt` and the latest edit's `editedAt` (0 before one), `versionAt` the original's `postedAt` and that version's `editedAt` (0 for version 1). Records, typehashes and vectors unchanged. Controller calls: the field names and their place at the end of `EntryView` and of `versionAt`'s return.
+**Why.** A client ranks by time ("Hot", "Active") and shows when an entry and an edit landed from state alone; the slots had the room, so the cost is a few hundred regular gas and no state gas.
+**Cost if wrong.** A new `PqChat` release; the layout pin moves inside existing slots; the time is the block's as the chain reports it.
+**Source.** owner 2026-11-27 (pre-tag order: G1, G2, G5 before the reset); research `2026-11-27-public-topics-ui.md` §1, §8, §9. Status: BUILT on branch `pqchat-g125` (EVM), UNAUDITED.
+
+### CTR-CHAT-30 — `PqChat` topics: `entryRows(ids, viewer)` returns a feed's rows in one call, without the bodies
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: contracts/pqchat.md#CTR-CHAT-30 · superseded-by: —
+
+**Rule.** Owner 2026-11-27 (G2): a view `entryRows(bytes32[] entryIds, bytes32 viewer)` returns per id, in order, `entryOf`'s fields without `body`, plus the latest version's `bodyLength`, `up`, `down`, the viewer's vote value and the direct reply count; `body` stays in `entryOf` and `versionAt`. Controller calls: at most `ENTRY_ROWS_MAX` = 64 ids (`pqchat-core`'s page size), refused above it with `PqTopicRows(count)` (the brief asked for a refusal; the older list views clamp); an id not here is `PqTopicUnknown(id)`, as `entryOf`; the vote's `seq` is not in the row (`voteOf` before a vote).
+**Why.** A feed page of 16 posts cost about 65 calls and a Top window of 256 about 308; with the rows about 2 and 8.
+**Cost if wrong.** A view only: bytecode in `PqChatTopics` and a stub in `PqChat`; no state.
+**Source.** owner 2026-11-27; research §8, §9. Status: BUILT on branch `pqchat-g125` (EVM), UNAUDITED.
+
+### CTR-CHAT-31 — `PqChat` topics: the views return each version's nonce
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: contracts/pqchat.md#CTR-CHAT-31 · superseded-by: —
+
+**Rule.** Owner 2026-11-27 (G5): `entryOf` and `entryRows` return the latest version's `nonce`, `versionAt` that version's, so the typed digest of any version, the `contentHash` a `ref` may pin (CTR-CHAT-16), is rebuilt from state.
+**Why.** Without the nonce a pinned `contentHash` could not be checked (`pqchat-core` reported `HashUnchecked`).
+**Cost if wrong.** A view only.
+**Source.** owner 2026-11-27; research §1, §8. It replaces the owner's Change of 2026-11-22 under CLI-PQC-08 that left the nonce view for the release after the audit: the view is in this release, before the 8b-6 reset. Status: BUILT on branch `pqchat-g125` (EVM; `pqchat-core` decodes it), UNAUDITED; the digest check in `pqchat-core`'s `resolve_ref` is not built yet (`HashUnchecked` stays).
+
 ### CTR-PQV-01 — PqVault: PqChat's group rules with at least one member plus a topics-style item model
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-01 · superseded-by: —
 
@@ -13023,7 +13047,7 @@ Change (controller, 2026-11-22, pqchat-core T9 on `pqchat-core-impl`; owner: no,
 
 Change (controller, 2026-11-22, pqchat-core T10 on `pqchat-core-impl`; owner: no, owner may override; status: BUILT, UNAUDITED): public topics (`src/topics.rs`), five calls. (1) Rights are the contract's: the crate builds a topic update, a writer record and a vote at the stored `seq + 1` and an edit at `versionCount + 1`, all read from the instance's state, and checks no right of its own; a write the contract refuses (a stranger's or a revoked writer's post, a reply to a closed topic, another UA's edit) is refused by the SDK's quote (`Revert`) and nothing is sent. Topics are created with `openReplies` true (D19) and this instance as their home; a write by an `msig` is `MsigAuthorPlanned` before any read (CLI-PQC-02). (2) A `ref` is shown unresolved until `resolve_ref` reads its chain: its `chainUid` must be a chain the app serves (`ChainNotServed`), that chain's factory must list `pqchat` (`infoOf`, trusted; `Unlisted`), the entry and its topic must read there (`Unreadable`), and the topic's `homeChain` and `homeChatContract` must be the ref's chain and instance (`OtherHome`, Fable P3-4). (3) A pinned `contentHash` stays unverified (`HashUnchecked`): no view returns a version's `nonce` (`entryOf`, `versionAt`), so the typed digest of the referenced `PqTopicEntry` or `PqTopicEdit` cannot be rebuilt from state; an owner question (a view or a later release returning it). (4) Every list is paged from state, at most 64 ids per read; an answer holding more ids than asked is refused. (5) `byAuthor`, `topicsByAdmin`, `versionAt` and `writersOf` join `READS` as plain reads (they choose no key, recipient or epoch; spec §5 R1).
 
-Change (owner 2026-11-22, on T10's call (3), relayed by the coordinator; owner: yes; status: SPECIFIED, noted in the plan's T10 for the next `PqChat` release): **the `contentHash` nonce view waits until after the audit.** No contract change now: a pinned `contentHash` stays shown as unchecked (`HashUnchecked`); a view that returns a version's `nonce`, so that a reader can rebuild the referenced record's typed digest, is noted for the next `PqChat` release, after the audit. Why: the owner's ruling. Cost: a reader cannot check a pinned `contentHash` until that release.
+Change (owner 2026-11-22, on T10's call (3), relayed by the coordinator; owner: yes; status: SUPERSEDED by the owner's G5 of 2026-11-27, [CTR-CHAT-31](#ctr-chat-31--pqchat-topics-the-views-return-each-versions-nonce), BUILT on branch `pqchat-g125`): **the `contentHash` nonce view waits until after the audit.** No contract change now: a pinned `contentHash` stays shown as unchecked (`HashUnchecked`); a view that returns a version's `nonce`, so that a reader can rebuild the referenced record's typed digest, is noted for the next `PqChat` release, after the audit. Why: the owner's ruling. Cost: a reader cannot check a pinned `contentHash` until that release.
 **Source.** Owner 2026-11-22, relayed by the coordinator: after the audit.
 
 ### CLI-PQC-09 — Recovery from contract state alone; the local store is a cache with no secret and no source of truth
