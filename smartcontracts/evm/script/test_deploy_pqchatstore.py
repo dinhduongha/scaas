@@ -467,6 +467,17 @@ def abi_encoding():
     assert two[64 * 4 :] == "1".rjust(64, "0") + "01".ljust(64, "0") + "0" * 64
 
 
+def the_ipqchat_id_is_the_forge_pin():
+    """The path-less review's A-2: the id the deploy probes as one PqChatStore must not answer is IPqChat's, the forge pin
+    of PqChatTreeViews.t.sol (a stale literal would pass the negative probe); the control: another id is not the pin."""
+    import re
+
+    t = open(os.path.join(HERE, "..", "test", "pqchat", "PqChatTreeViews.t.sol")).read()
+    pins = re.findall(r"type\(IPqChat\)\.interfaceId, bytes4\(0x([0-9a-f]{8})\)", t)
+    assert pins == [d.IPQCHAT_ID], (pins, d.IPQCHAT_ID)
+    assert "7b7acc12" not in pins
+
+
 TESTS = [
     release_pins_the_create2_address,
     salt_is_zero,
@@ -485,6 +496,7 @@ TESTS = [
     book_entry_under_the_chain_key,
     probes_write_and_read,
     abi_encoding,
+    the_ipqchat_id_is_the_forge_pin,
 ]
 
 

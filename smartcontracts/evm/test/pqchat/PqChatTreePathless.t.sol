@@ -121,6 +121,20 @@ contract PqChatTreePathlessTest is PqChatTreeModel {
         assertTrue(_keyAt(k.sid, 1) != 0, "A's other node kept");
     }
 
+    /// The path-less review's A-3: the slot `_targetsHash` reads holds a path commit's staged targets hash (the positive
+    /// control of row 1's "no targets hash for ctCount 0"): the record alone of a path commit stores one, a path-less one none.
+    function test_r1_theTargetsHashSlot() public {
+        _open(); // the vectors in this call's memory
+        M memory m = _s(_l3(A, B, C), _list(A), 0);
+        (Step memory p,) = _build(m, 0, _chs(_add(3, D, 1)), _list(A));
+        _commitAlone(vchat, p);
+        assertTrue(_targetsHash(p.epochId) != 0, "a path commit's targets hash in the slot");
+        M memory k = _s(_l3(A, B, C), _list(A), 0);
+        (Step memory q,) = _buildPl(k, 0, _chs(_add(3, D, 1)), _list(A));
+        _commitAlone(vchat, q);
+        assertEq(_targetsHash(q.epochId), 0, "none for a path-less record");
+    }
+
     /// Row 20: the first commit after creation is path-less (parent epoch 0).
     function test_r20_firstCommitPathless() public {
         _open(); // the vectors in this call's memory

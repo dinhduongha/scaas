@@ -36,6 +36,20 @@ MUTANTS = [
     ("_walkPath on the path-less shape", [(G, "        if (!d.pathless) _walkPath(t, d, w);", "        _walkPath(t, d, w);")], FG, "[FAIL"),
     ("the Add's blanking stopped below the root", [(G, "            if (w.st[x] == 0) w.st[x] = 1;", "            if (w.st[x] == 0 && x != root) w.st[x] = 1;")], FG, "[FAIL"),
     ("mode 0 accepting a bound or tag", [(C, MODE, MODE.replace("s.groupMode == 0 ? s.pathRefreshBound != 0 || s.confirmTag != 0 :", "s.groupMode == 0 ? false :"))], FG, "[FAIL"),
+    # the path-less review's A-3: the targets hash written for a record with no list
+    ("a targets hash for ctCount 0", [(T, "        if (c.ctCount != 0) _staged(eid).targetsHash = keccak256(_pack4(w.targets));", "        _staged(eid).targetsHash = keccak256(_pack4(w.targets));")], FG, "test_r1_theTargetsHashSlot"),
+    # the path-less review's A-1: the spec's two missing rows (delta §13 "Contract mutants")
+    ("equality replaced by _keepsAdmins (a gone head admin dropped)", [(G, """        bool same = d.removes.length == 0 && d.admins.length == h.length;
+        for (uint256 i; same && i < h.length; ++i) {
+            same = d.admins[i] == h[i];
+        }""", """        bool same = d.removes.length == 0;
+        uint256 j;
+        for (uint256 i; same && i < h.length; ++i) {
+            if (j < d.admins.length && d.admins[j] == h[i]) ++j;
+            else same = t.gone[h[i]].kind != 0;
+        }
+        same = same && j == d.admins.length;""")], FG, "test_r5_"),
+    ("the counter moved at acceptance", [(T, "        Walk memory w = _treeCheck(reg, c.sessionId, _delta(m), false);\n", "        Walk memory w = _treeCheck(reg, c.sessionId, _delta(m), false);\n        if (m.pathless) _tree(c.sessionId).sincePath += uint32(m.adds.length);\n"), (G, SET, SET.replace("t.sincePath + uint32(d.adds.length)", "t.sincePath"))], FG, "[FAIL"),
     ("the cap at 511", [(C, MODE, MODE.replace("TREE_LEAVES_MAX - 2", "TREE_LEAVES_MAX - 1"))], FG, "test_r8_"),
 ]
 
