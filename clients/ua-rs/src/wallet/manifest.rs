@@ -838,7 +838,7 @@ impl Wallet {
     /// `secret` as import `n` of `network` (`None`: the next free number, picked under the store's write lock, so two imports at
     /// once get two numbers): already held with the same bytes, a no-op; listed (a manifest vault opened first) and not held,
     /// installed; another network or other bytes under the same `n`: `Argument`; `locked`: also marked key-locked, in the
-    /// same write. Returns `n`.
+    /// same write; not `locked` for an import the manifest marks key-locked: `Argument`, nothing held. Returns `n`.
     fn import_at(
         &self,
         network: Network,
@@ -864,6 +864,10 @@ impl Wallet {
                 .iter()
                 .any(|i| i.n == e.n && i.network != e.network)
             {
+                return Err(Error::Argument);
+            }
+            // a key-locked import opens by its own passphrase only, never from its plain vault (CLI-UPR-24, review B-1)
+            if !locked && m.key_locked.contains(&e) {
                 return Err(Error::Argument);
             }
             match a.secret(KeyId::Import(e.n)) {
@@ -952,9 +956,10 @@ impl Wallet {
     }
 
     /// Opens a vault of [`Wallet::seal_label_vault`] into this wallet: `manifest` replaces the manifest (while unlocked only
-    /// if this wallet's seed derives its first entry's UA and it names each held import under that import's network, else
+    /// if this wallet's seed derives its first entry's UA, it names each held import under that import's network and it
+    /// keeps each held import's key-lock mark, else
     /// `WalletMismatch` and the manifest stays as it was; locked, the next unlock checks it), `native-import:…`
-    /// installs that key, `native-import-locked:…` installs it marked key-locked (its own passphrase only: the vault has no
+    /// installs that key (`Argument` for a key the manifest marks key-locked), `native-import-locked:…` installs it marked key-locked (its own passphrase only: the vault has no
     /// PRF envelope), `pqz-held:…` installs that PQZ key only if its `seed32` gives a key of the label's `pqzKeyHash`
     /// (`Argument` otherwise, nothing held; `KindUnavailable` on a build without `pqz`). `Argument` for another label (the
     /// seed vault opens with [`Wallet::open_vault`]); errors of the vault as [`Wallet::open_vault`].

@@ -420,14 +420,20 @@ pub(crate) struct Handle {
 
 #[cfg(feature = "wallet")]
 /// Whether `old` and `new` give every secret the arena holds outside the derivations the same entry: none left out, none
-/// listed under another entry (T21 L29, L74).
+/// listed under another entry (T21 L29, L74); and `new` keeps the key-lock mark of every held import `old` marks (an older
+/// manifest would put the key back into the backup and the link; CLI-UPR-24, review B-4).
 fn keeps_held(a: &Arena, old: &Manifest, new: &Manifest) -> bool {
     fn same<E: PartialEq>(a: &Arena, old: &[E], new: &[E], id: impl Fn(&E) -> KeyId) -> bool {
         let held = |e: &&E| a.secret(id(e)).is_some();
         old.iter().filter(held).all(|e| new.contains(e))
             && new.iter().filter(held).all(|e| old.contains(e))
     }
-    let imports = same(a, &old.imports, &new.imports, |e| KeyId::Import(e.n));
+    let imports = same(a, &old.imports, &new.imports, |e| KeyId::Import(e.n))
+        && old
+            .key_locked
+            .iter()
+            .filter(|e| a.secret(KeyId::Import(e.n)).is_some())
+            .all(|e| new.key_locked.contains(e));
     #[cfg(feature = "pqz")]
     let imports = imports
         && same(a, &old.pqz_held, &new.pqz_held, |p| {
@@ -498,7 +504,8 @@ impl SecretStore {
     /// `WalletMismatch` if the open seed does not derive the UA of `m`'s first entry (as [`SecretStore::open`]), or if the
     /// entries of the secrets the arena holds outside the derivations (imports, rebuilt PQZ keys) differ between `m` and the
     /// current manifest, in either direction: `m` lists a held key under another entry (CLI-SGN-11: the held key keeps its
-    /// network), or leaves a held key out (it would drop out of every later backup; T21 L74). Locked, `m` is kept and
+    /// network), or leaves a held key out (it would drop out of every later backup; T21 L74), or drops a held import's
+    /// key-lock mark (CLI-UPR-24). Locked, `m` is kept and
     /// [`SecretStore::open`] checks it at the next unlock.
     pub(crate) fn set_manifest(&self, m: Manifest) -> Result<()> {
         let mut g = self.write();

@@ -1376,6 +1376,89 @@ fn key_lock_skipped_by_reseal_and_retained_open() {
     );
 }
 
+/// Review B-1 (CLI-UPR-24): a key locked after a plain seal. Once the manifest marks import 1 key-locked, its old plain
+/// vault `native-import:evm:1` opens by no unlock of the seed: the seed's passphrase, its PRF secret, the retained PRF key
+/// each `Argument`, nothing held; the wallet that holds the key refuses it too. The positive twin: the same vault on a
+/// wallet whose manifest (sealed before the lock) does not mark the key opens by each.
+#[test]
+fn key_lock_refuses_the_old_plain_vault() {
+    let w = wallet("twelve_words");
+    w.ua_key(0x0102, 0, 0).unwrap();
+    w.import_native_key(Network::Evm, &[3; 32]).unwrap();
+    w.import_native_key(Network::Evm, &[4; 32]).unwrap();
+    let plain = w
+        .seal_label_vault("native-import:evm:1", PASS_SEED, Some(&prf()))
+        .unwrap();
+    let before = w.seal_label_vault("manifest", PASS_SEED, None).unwrap();
+    w.seal_label_vault(LOCKED, KEY_PASS, None).unwrap();
+    let after = w.seal_label_vault("manifest", PASS_SEED, None).unwrap();
+    assert_eq!(
+        code(w.open_label_vault(&plain, Unlock::VaultPassphrase(PASS_SEED))),
+        "Argument",
+        "the wallet that holds the locked key"
+    );
+    for (m, want) in [(&after, "Argument"), (&before, "ok")] {
+        for how in ["passphrase", "prf", "retained"] {
+            let o = wallet("twelve_words");
+            o.open_label_vault(m, Unlock::VaultPassphrase(PASS_SEED))
+                .unwrap();
+            let r = match how {
+                "passphrase" => o.open_label_vault(&plain, Unlock::VaultPassphrase(PASS_SEED)),
+                "prf" => o.open_label_vault(&plain, Unlock::Prf(&OUT)),
+                _ => {
+                    o.retain_prf_key(&OUT).unwrap();
+                    o.open_label_vault_retained(&plain)
+                }
+            };
+            assert_eq!(code(r), want, "{how}");
+            assert_eq!(
+                o.imported_key(Network::Evm, 1).is_ok(),
+                want == "ok",
+                "{how}: held"
+            );
+        }
+    }
+}
+
+/// Review B-4 (CLI-UPR-24): a manifest vault sealed before the key lock, opened again in a session that holds the locked key
+/// (the sealing wallet; a wallet that opened the key by its own passphrase), is `WalletMismatch` and the mark stays (else the
+/// backup and the link would carry the key). Positive twins: the manifest as it stands opens; a wallet that does not hold
+/// the key takes the older manifest (nothing held to keep).
+#[test]
+fn key_lock_mark_kept_against_an_older_manifest() {
+    let w = wallet("twelve_words");
+    w.ua_key(0x0102, 0, 0).unwrap();
+    w.import_native_key(Network::Evm, &[3; 32]).unwrap();
+    w.import_native_key(Network::Evm, &[4; 32]).unwrap();
+    let before = w.seal_label_vault("manifest", PASS_SEED, None).unwrap();
+    let v = w.seal_label_vault(LOCKED, KEY_PASS, None).unwrap();
+    let m = w.manifest();
+    let now = w.seal_label_vault("manifest", PASS_SEED, None).unwrap();
+    let o = wallet("twelve_words");
+    o.open_label_vault(&now, Unlock::VaultPassphrase(PASS_SEED))
+        .unwrap();
+    o.open_label_vault(&v, Unlock::VaultPassphrase(KEY_PASS))
+        .unwrap();
+    for (who, x) in [("sealer", &w), ("opened by its passphrase", &o)] {
+        assert_eq!(
+            code(x.open_label_vault(&before, Unlock::VaultPassphrase(PASS_SEED))),
+            "WalletMismatch",
+            "{who}"
+        );
+        assert_eq!(x.manifest(), m, "{who}");
+        assert_eq!(x.backup_left_out(), 1, "{who}");
+        assert_eq!(
+            code(x.open_label_vault(&now, Unlock::VaultPassphrase(PASS_SEED))),
+            "ok",
+            "{who}: the positive twin"
+        );
+    }
+    let n = wallet("twelve_words");
+    n.open_label_vault(&before, Unlock::VaultPassphrase(PASS_SEED))
+        .unwrap();
+    assert!(n.manifest().key_locked.is_empty(), "the positive twin");
+}
+
 /// The backup and the device link leave a key-locked key out (held or not, its imported UA too) and `backup_left_out` says
 /// how many; the positive twin: the same key as a plain import travels in both.
 #[test]
