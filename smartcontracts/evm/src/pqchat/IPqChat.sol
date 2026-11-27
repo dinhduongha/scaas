@@ -167,6 +167,27 @@ interface IPqChat is IPqGroupTree {
         uint64 nonce;
     }
 
+    /// @notice `entryRows` (CTR-CHAT-30): an entry's `EntryView` without `body`, the latest version's `bodyLength`, the counts
+    ///         `up` and `down`, the viewer's `vote` (`voteOf`'s value) and the direct `replies` count (`replies`' length).
+    struct EntryRow {
+        bytes32 topicId;
+        bytes32 author;
+        bytes32 parentId;
+        uint32 depth;
+        EntryRef ref;
+        string mediaType;
+        bytes32 sigHash;
+        uint32 versionCount;
+        uint64 postedAt;
+        uint64 editedAt;
+        uint64 nonce;
+        uint256 bodyLength;
+        uint128 up;
+        uint128 down;
+        int8 vote;
+        uint256 replies;
+    }
+
     // CTR-CHAT-27 (spec 2026-11-23-pqchat-treekem §6): a tree epoch's changes are `IPqGroupTree.TreeAdd` (a key added to
     // leaf `leaf`, `via` as in `MemberKey`) and `IPqGroupTree.TreeRemove`, inherited (A-6): the records below name them
     // `TreeAdd`, `TreeRemove`; outside this interface they are `IPqGroupTree`'s.
@@ -350,6 +371,8 @@ interface IPqChat is IPqGroupTree {
     error PqTopicVoteValue(int8 value);
     error PqTopicShape();
     error PqTopicUnknown(bytes32 id);
+    /// @notice CTR-CHAT-30: `entryRows` asked for more than `ENTRY_ROWS_MAX` ids.
+    error PqTopicRows(uint256 count);
 
     // ------------------------------------------------------------------ the instance (D22, topics spec §11)
 
@@ -490,6 +513,11 @@ interface IPqChat is IPqGroupTree {
             uint64 postedAt,
             uint64 editedAt
         );
+    /// @notice CTR-CHAT-30: one row per id, in order, each as `entryOf` without the body (`PqTopicUnknown` for an id not
+    ///         here), the viewer's vote as `voteOf(id, viewer)`'s value; at most `ENTRY_ROWS_MAX` ids (`PqTopicRows`).
+    function entryRows(bytes32[] calldata entryIds, bytes32 viewer) external view returns (EntryRow[] memory rows);
+    /// @notice The largest `entryRows` batch: 64 ids.
+    function ENTRY_ROWS_MAX() external view returns (uint256);
     function writerOf(bytes32 topicId, bytes32 ua) external view returns (bool granted, uint64 seq);
     function scoreOf(bytes32 entryId) external view returns (uint128 up, uint128 down);
     function voteOf(bytes32 entryId, bytes32 ua) external view returns (int8 value, uint64 seq);

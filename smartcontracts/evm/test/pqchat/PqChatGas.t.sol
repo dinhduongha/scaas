@@ -94,9 +94,11 @@ contract PqChatGasTest is PqTopicsBase {
     // B; regular 2,295,734 -> 2,324,861; state 50,949,000 -> 51,606,900 (+430 x 1,530); asked x 1.05 56,628,349 of 60 M.
     // CTR-CHAT-29, CTR-CHAT-31 (owner 2026-11-27, G1 and G5: `versionAt`'s stub returns six values): 33,354 -> 33,470 B;
     // regular 2,324,861 -> 2,331,103; state 51,606,900 -> 51,784,380 (+116 x 1,530); asked x 1.05 56,821,257 of 60 M.
-    uint256 internal constant RUNTIME = 33_470;
-    uint256 internal constant RELEASE_REGULAR = 2_331_103;
-    uint256 internal constant RELEASE_STATE = 51_784_380;
+    // CTR-CHAT-30 (owner 2026-11-27, G2: the `entryRows` stub and `ENTRY_ROWS_MAX`): 33,470 -> 34,029 B; regular 2,331,103
+    // -> 2,368,552; state 51,784,380 -> 52,639,650 (+559 x 1,530); asked x 1.05 57,758,612 of 60 M.
+    uint256 internal constant RUNTIME = 34_029;
+    uint256 internal constant RELEASE_REGULAR = 2_368_552;
+    uint256 internal constant RELEASE_STATE = 52_639_650;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice:
     // 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
@@ -108,9 +110,11 @@ contract PqChatGasTest is PqTopicsBase {
     // 1,101,523 -> 1,099,442; state 25,350,570 -> 25,287,840 (-41 x 1,530)
     // CTR-CHAT-29, CTR-CHAT-31 (G1 and G5: the times stored and read, the nonce in `entryOf` and `versionAt`): 16,408 ->
     // 16,800 B; regular 1,099,442 -> 1,124,408; state 25,287,840 -> 25,887,600 (+392 x 1,530); asked x 1.05 28,362,608
-    uint256 internal constant MODULE_RUNTIME = 16_800;
-    uint256 internal constant MODULE_REGULAR = 1_124_408;
-    uint256 internal constant MODULE_STATE = 25_887_600;
+    // CTR-CHAT-30 (G2: `entryRows`, its row reader and bound): 16,800 -> 18,523 B; regular 1,124,408 -> 1,236,756; state
+    // 25,887,600 -> 28,523,790 (+1,723 x 1,530); asked x 1.05 31,248,573
+    uint256 internal constant MODULE_RUNTIME = 18_523;
+    uint256 internal constant MODULE_REGULAR = 1_236_756;
+    uint256 internal constant MODULE_STATE = 28_523_790;
     // A-11 (the code review of 2026-11-24): the tree's three modules, first pins (2026-11-25), each under 60 M asked
     // The path-less delta P4 (C24, C41-C44), old -> new: PqChatTree 32,812 -> 33,711 B,
     // regular 2,166,743 -> 2,224,997, state 50,385,960 -> 51,761,430 (+899 x 1,530); PqChatTreeViews 9,640 -> 9,761 B,

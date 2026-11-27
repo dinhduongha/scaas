@@ -6,6 +6,7 @@ import {PqChatTypes} from "./PqChatTypes.sol";
 import {PqChatCore} from "./PqChatCore.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
+import {SSTORE2} from "../common/SSTORE2.sol";
 
 /// @title `PqChatTopics`: the body module of `PqChat` (CTR-TOK-30; plan 3c 3C-D2: the release passed the 33,594 B line at
 ///        34,223 B): the public topics and votes (topics spec, D18-D22), each entry with `IPqChat`'s signature. `PqChat`
@@ -18,6 +19,9 @@ contract PqChatTopics is PqChatCore {
 
     /// @notice The largest topic `name`, in bytes, of `createTopic` and `updateTopic` (owner 2026-11-10: 128 -> 512).
     uint256 internal constant NAME_MAX = 512;
+
+    /// @notice CTR-CHAT-30: the largest `entryRows` batch, as `PqChat.ENTRY_ROWS_MAX`.
+    uint256 internal constant ENTRY_ROWS_MAX = 64;
 
     constructor(address factory_) {
         FACTORY = factory_;
@@ -193,6 +197,57 @@ contract PqChatTopics is PqChatCore {
         Version storage ver = vs[version - 2];
         (IPqChat.PqTopicEdit memory d, bytes32 dh) = abi.decode(_get(ver.record), (IPqChat.PqTopicEdit, bytes32));
         return (d.mediaType, d.body, dh, d.nonce, postedAt, ver.editedAt);
+    }
+
+    /// @notice CTR-CHAT-30: the rows of `entryIds` for `viewer`, each read from the head blob's fixed words and the slots,
+    ///         never the body: at most `ENTRY_ROWS_MAX` ids (`PqTopicRows`), an unknown id `PqTopicUnknown`.
+    function entryRows(bytes32[] calldata entryIds, bytes32 viewer)
+        external
+        view
+        returns (IPqChat.EntryRow[] memory rows)
+    {
+        if (entryIds.length > ENTRY_ROWS_MAX) revert IPqChat.PqTopicRows(entryIds.length);
+        rows = new IPqChat.EntryRow[](entryIds.length);
+        for (uint256 i; i < rows.length; ++i) {
+            rows[i] = _row(entryIds[i], viewer);
+        }
+    }
+
+    /// @dev A stored version is `abi.encode(record, sigHash)`: the record at 64, `sigHash` at 32. In a `PqTopicEntry` the
+    ///      nonce is at 128, the place at 64-319, the `mediaType` and `body` offsets at 320 and 352; in a `PqTopicEdit` the
+    ///      nonce at 128, the offsets at 192 and 224. Every word read lies in the head blob (`mediaType` <= 64 B).
+    function _row(bytes32 id, bytes32 viewer) internal view returns (IPqChat.EntryRow memory w) {
+        S storage s = _s();
+        Entry storage en = s.entries[id];
+        address o = en.record;
+        if (o == address(0)) revert IPqChat.PqTopicUnknown(id);
+        (w.topicId, w.author, w.parentId) = (_word(o, 64), _word(o, 96), _word(o, 160));
+        w.ref = IPqChat.EntryRef(_word(o, 192), address(uint160(uint256(_word(o, 224)))), _word(o, 256), _word(o, 288));
+        (w.depth, w.postedAt) = (en.depth, en.postedAt);
+        _latest(w, o, s.versions[id]);
+        Score storage sc = s.scores[id];
+        (w.up, w.down) = (sc.up, sc.down);
+        (w.vote, w.replies) = (s.votes[id][viewer].value, s.replies[id].length);
+    }
+
+    /// @dev The latest version's fields of a row: the original `o` before an edit, else the last edit.
+    function _latest(IPqChat.EntryRow memory w, address o, Version[] storage vs) internal view {
+        uint256 n = vs.length;
+        w.versionCount = uint32(n) + 1;
+        (address l, uint256 mt, uint256 bd) = (o, 320, 352);
+        if (n != 0) {
+            Version storage last = vs[n - 1];
+            (l, mt, bd, w.editedAt) = (last.record, 192, 224, last.editedAt);
+        }
+        (w.sigHash, w.nonce) = (_word(l, 32), uint64(uint256(_word(l, 128))));
+        uint256 m = 64 + uint256(_word(l, mt));
+        w.mediaType = string(_bytesAt(l, m + 32, uint256(_word(l, m))));
+        w.bodyLength = uint256(_word(l, 64 + uint256(_word(l, bd))));
+    }
+
+    /// @dev The `len` bytes at `off` of a record's first piece (`_word`'s reading, any length).
+    function _bytesAt(address head, uint256 off, uint256 len) internal view returns (bytes memory) {
+        return SSTORE2.read(head, (SSTORE2.read(head, 0, 1)[0] != 0 ? 21 : 1) + off, len);
     }
 
     function writerOf(bytes32 topicId, bytes32 ua) external view returns (bool granted, uint64 seq) {

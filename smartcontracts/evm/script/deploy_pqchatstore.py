@@ -475,8 +475,9 @@ def cases():
     # type(IPqChat).interfaceId (its selectors XORed, forge's artifact; CTR-CHAT-23 2026-11-23: a46bb0a4 -> 250cdb4a;
     # CTR-CHAT-25, `groupMode` in `PqChatSession`: -> 869305e0; the tree entries and views of CTR-CHAT-26 / -27, 67
     # selectors, checked 2026-11-25 against out/IPqChat.sol's methodIdentifiers on the re-review's G note: -> 7b7acc12;
-    # the TreeKEM path-less delta, `createSession` and `commit` with the new records: -> 8412b2f1)
-    ipqchat_id = "8412b2f1"
+    # the TreeKEM path-less delta, `createSession` and `commit` with the new records: -> 8412b2f1; CTR-CHAT-30's
+    # `entryRows` and `ENTRY_ROWS_MAX`: -> e9e2068a)
+    ipqchat_id = "e9e2068a"
 
     def h32(b):
         return b.ljust(32, b"\0")

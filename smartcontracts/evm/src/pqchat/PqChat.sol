@@ -37,6 +37,8 @@ contract PqChat is IPqChat, PqChatCore {
     uint256 public constant EPOCHS_RANGE_MAX = 128;
     /// @inheritdoc IPqChat
     uint256 public constant REMOVE_MAX = 16;
+    /// @notice CTR-CHAT-30: the largest `entryRows` batch (`PqChatTopics.ENTRY_ROWS_MAX`, which enforces it).
+    uint256 public constant ENTRY_ROWS_MAX = 64;
 
     address public immutable FACTORY;
     uint64 internal immutable VERSION;
@@ -525,6 +527,10 @@ contract PqChat is IPqChat, PqChatCore {
         view
         returns (string memory, bytes memory, bytes32, uint64, uint64, uint64)
     {
+        _forwardView();
+    }
+
+    function entryRows(bytes32[] calldata, bytes32) external view returns (EntryRow[] memory) {
         _forwardView();
     }
 

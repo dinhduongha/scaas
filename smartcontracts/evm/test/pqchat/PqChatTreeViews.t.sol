@@ -349,7 +349,8 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
     function test_interfaceIdsArePinned() public view {
         assertEq(type(IPqChatTreeViews).interfaceId, bytes4(0xec42e734), "IPqChatTreeViews (new)");
         // the path-less delta (C41-C43, `createSession` and `commit` take the new records): 0x7b7acc12 -> 0x8412b2f1
-        assertEq(type(IPqChat).interfaceId, bytes4(0x8412b2f1), "IPqChat (unchanged by the views)");
+        // CTR-CHAT-30 (owner 2026-11-27, G2: `entryRows` and `ENTRY_ROWS_MAX`): 0x8412b2f1 -> 0xe9e2068a
+        assertEq(type(IPqChat).interfaceId, bytes4(0xe9e2068a), "IPqChat (unchanged by the views)");
         assertTrue(chat.supportsInterface(type(IPqChatTreeViews).interfaceId));
         assertTrue(chat.supportsInterface(type(IPqChat).interfaceId));
     }
