@@ -172,7 +172,8 @@ layer alone. Zether is not PQZ.
 5. Disclosure is not an oracle: `envelope.rs` and `ZetherDisclosure.sol` reveal only what the holder chose; handing `s` over
    opens every leg (CTR-ZTH-37 accepted).
 6. Zether is not PQZ: no rule, key or code path shared by mistake; say if one is.
-7. Constant time and zeroize of `s`, nonces and blinding factors in the prover and `ua-rs`.
+7. Constant time and zeroize of `s`, nonces and blinding factors in the prover and `ua-rs` (the ladder `scaas_ct::secret_mul`
+   itself is unit `crypto-signatures`'; here, that the prover routes every secret multiplication through it).
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `T/docs/research/security-review-record.md` (index of every review, and what no review covered)

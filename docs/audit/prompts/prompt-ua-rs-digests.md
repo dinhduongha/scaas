@@ -121,7 +121,7 @@ uses (owner 2026-11-05).
 ua-rs digests against the contracts: EIP-712 typed data, every op of the wallet op table, ERC-7739, the PQZ and Zether facades (digests, key custody, ABI; not the proof systems).
 
 **Scope (paths under `T/`):**
-- `clients/ua-rs/src/wallet/eip712.rs`, `src/{pay,regulated,factory,admin,wraplimit,pqzfee,pqz3k,algorand,near,mldsa_cache}.rs`, `src/facade/` (`pqz.rs`, `pqz/proven.rs`, `pqz_path.rs`, `pqz_backup.rs`, `zether.rs`, `decoys.rs`)
+- `clients/ua-rs/src/wallet/eip712.rs`, `src/{pay,regulated,factory,admin,wraplimit,pqzfee,pqz3k,algorand,near,mldsa_cache}.rs`, `src/facade/` (`pqz.rs`, `pqz/proven.rs`, `pqz_path.rs`, `pqz_backup.rs`, `pqz_pack.rs` (the PQZ stored form, read only; added 2026-11-28), `zether.rs`, `decoys.rs`)
 - `src/wallet/{pqchat,pqchat_keys,pqchat_file,pqvault}.rs` (added 2026-11-26, as no layer unit held them: the PqChat and
   PqVault record digests and their signing, equal to the contracts' typehashes and `T/smartcontracts/vectors/{pqchat,pqvault}/`;
   the exit records' review lines with the lag, F-4); the TreeKEM records of `src/wallet/tree.rs` (`PqChatCommit`,

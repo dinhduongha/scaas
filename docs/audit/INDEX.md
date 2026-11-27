@@ -68,6 +68,8 @@ as not covered ([plan](README.md#pending-landing)). The crypto and cross-cutting
 | Path-less Adds and F-1, clientkeys and rows | `clients/clientkeys/src/treekem.js`, `smartcontracts/vectors/pqchat/` (`pathless-faults`) | `dev` | 22 `clientkeys-vectors` | BUILT, UNAUDITED |
 | PqChat G1 / G2 / G5 (CTR-CHAT-29, -30, -31) | `smartcontracts/evm/src/pqchat/{PqChatTopics,PqChatCore,IPqChat}.sol` | `dev` | 9 `evm-pqchat` | BUILT, UNAUDITED |
 | The app-core key handles (no layer unit held them) | `clients/ua-rs/src/wallet/appkey.rs` | `dev` | 15 `ua-rs-custody` | BUILT, UNAUDITED |
+| The constant-time secret multiplication (no unit held it) | `clients/scaas-ct/` | `dev` | 25 `crypto-signatures` | BUILT, UNAUDITED |
+| Files no prompt named | `clients/ua-rs/src/wallet/{soroban_tx,app_refusals}.rs`; `src/facade/pqz_pack.rs` | `dev` | 14 `ua-rs-sign`; 16 `ua-rs-digests` | BUILT, UNAUDITED |
 | pqchat-core sign-after-confirm, relayed topic writes, window sorts, pinned `contentHash` (CLI-PQC-18, -21) | `clients/pqchat-core/src/{confirm,session,topics,tree,net,matrix,error}.rs` | `pqchat-core-confirm` | 21 `app-cores` | pending landing |
 | The SDK's relay of a signed app record | `clients/scaas-sdk/src/{app_core,pqchat_records}.rs` `AppCore::relay_app_call` | `pqchat-core-confirm` | 19 `scaas-sdk` | pending landing |
 | The node's door A for the six topic records (the gateway rule of that branch) | `scaas-node/src/{gateway,guard}.rs` | `pqchat-core-confirm` | 18 `scaas-node` | pending landing |
@@ -228,5 +230,10 @@ is cut from the run copy if the branch did not land in the tag ([plan](README.md
 - `crypto-pqchat-tree` (29): the client tree layers and path-less / F-1 read vertically (9). `crypto-kem-seal` (27): the
   profile seals, pending landing. `cross-layer` (30): the new seams and the no-fallback sweep of every contract (h). `adversarial` (31): the
   new roles (g).
+- Gaps closed: `clients/scaas-ct/` (used by `ua-rs` for MuSig2 / FROST on bn254, BLS and the pairing kinds, and by
+  `zether-prover`) in `crypto-signatures` (25), which already reads `ua-rs`'s secret arithmetic for those kinds and leads
+  constant time for signing (invariant 6); `crypto-zether` reads the prover's use only. `wallet/soroban_tx.rs` and
+  `wallet/app_refusals.rs` in `ua-rs-sign` (14) beside `tx.rs` and `uasig.rs`; `facade/pqz_pack.rs` in `ua-rs-digests` (16)
+  with the rest of `src/facade/`.
 - `bindings-cli-ci` (24): the new crates in CI, the test-feature check, the CLI's topic calls (i). `pqz-verifier-deploy`
   (23): the linked library's deploy, pending landing (l).

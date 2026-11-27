@@ -254,7 +254,9 @@ o. **PENDING LANDING (`pqchat-core-confirm`): door A takes the six signed `PqCha
    `gateway.rs` and `guard.rs`: only `createTopic`, `updateTopic`, `setTopicWriter`, `postEntry`, `editEntry`, `voteEntry`,
    each with its `UASig` and `validUntil`, on a target the chain's `token_factory` lists as class 3 with a release
    (`CALL_TARGET_REFUSED` otherwise); every other `PqChat` write stays a job of a namespace with the grant; the intake (the
-   operator's switch `params.relay_pqchat_topics`, `PQCHAT_TOPICS_NOT_RELAYED`; the hourly bucket per signing key
+   operator's switch `params.relay_pqchat_topics`, `PQCHAT_TOPICS_NOT_RELAYED`, whose default follows NODE-GW-01 (c):
+   the node operator's deployment profile, `private` (fee 0 kept) or `public` (fee 0 refused without a sponsor policy), not
+   a chain kind, so every chain gets the same rule and the operator picks the profile; the hourly bucket per signing key
    `PQCHAT_TOPICS_RATE`; a repeat in the hour answered `queued` without a second queueing) bounded in memory; the allow-list
    equal to the contract's both ways (`typed.rs`, `selector_audit.json`); the bytes sent are the signed record rebuilt from
    named fields, nothing else.
