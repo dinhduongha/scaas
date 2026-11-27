@@ -574,7 +574,8 @@ async fn item_versions() {
     let (a, seed) = core().await;
     let it = doc("items");
     let items = it["items"].as_array().unwrap();
-    assert_eq!(items.len(), 15);
+    // 15 + the item layer's 4 rows (CLI-PQV-16 H1-H3: card, identity, a hidden note, custom fields with history)
+    assert_eq!(items.len(), 19);
     let ids = |x: &Value| {
         [
             unhex(&x["vaultId"]),
