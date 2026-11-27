@@ -631,21 +631,28 @@ call per command.
 
 ## 12. User profiles
 
-Status: **SPECIFIED**, nothing built; the design is the [user-profiles spec](../superpowers/specs/2026-11-27-user-profiles.md)
+Status: **BUILT** in part, wave 1 ([plan](../superpowers/plans/2026-11-27-user-profiles.md) UP1 to UP11, KH; branch
+`user-profiles` at `f9a599996`): the byte formats and their vectors, `ua-rs`'s `ProfileKeys` and `ExportKey` (feature
+`key-handles`), the key-lock label in `ua-rs` and clientkeys, the crate `scaas-profile` and the SDK's `user_profile` (`UserProfiles`,
+`UserProfile`, `Sdk::close`); each rule below names what of it is built. **SPECIFIED** (wave 2): platform unlock, the CLI, TUI and
+app surfaces, the pqchat-core and pqvault-core store adapters, the SDK's key-lock calls, the browser store, the bindings of the
+surface, the chain-profile rename, the Matrix client closed at lock. The design is the [user-profiles spec](../superpowers/specs/2026-11-27-user-profiles.md)
 (a frame; the owner's rulings on its open points, 2026-11-27, in its §16; Fable's review of the same day applied, its §19). A **user profile** ("Profile" on screen, `UserProfile` / `user_profile` in code) is one local
 identity with its own keystore, app-core state and settings; a **chain profile** (`ChainProfile`, §10) is a chain's pinned data.
 UNAUDITED.
 
 <a id="CLI-UPR-01"></a>**CLI-UPR-01** — **"Profile" on screen, `UserProfile` in code; a chain's pinned data is a "chain profile"**
-(owner 2026-11-27; SPECIFIED). The per-chain profile of §10, the CLI's and the TUI's profile files and their default, caps and
+(owner 2026-11-27; BUILT: the names `UserProfile` / `user_profile`, the SDK module and the crate `scaas-profile`; SPECIFIED: the
+chain-profile rename, wave 2). The per-chain profile of §10, the CLI's and the TUI's profile files and their default, caps and
 features are called chain profiles (`ChainProfile`) in docs and code. The rename touches no on-chain byte and is a later task,
 listed in the spec §15, the stable code `ProfileMismatch` becoming `ChainProfileMismatch` with it (owner 2026-11-27); it lands
 before the CLI's `--profile` flag.
 
 <a id="CLI-UPR-02"></a>**CLI-UPR-02** — **User profiles live in the SDK layer and every client uses them** (owner 2026-11-27;
-SPECIFIED): scaas-app desktop and mobile, `scaas-tui` and the CLI `scaas` open, lock and switch profiles through one SDK surface
+BUILT: the one surface, `scaas-profile` and the SDK's `user_profile`, plan UP5 to UP10, `scaas-profile` `tests/*.rs` and the SDK's
+`tests/user_profile.rs`; SPECIFIED: its use by the CLI, `scaas-tui` and scaas-app, and its bindings, wave 2): scaas-app desktop and mobile, `scaas-tui` and the CLI `scaas` open, lock and switch profiles through one SDK surface
 (spec §11), with no profile logic of their own. **Change (owner 2026-11-27, decisions CLI-UPR-02's Change of that date;
-SPECIFIED):** the store lives in `scaas-profile`, used by the SDK and by scaas-app's default build: a crate of its own over `ua-rs`
+BUILT, `74b860488` and plan UP6 to UP10):** the store lives in `scaas-profile`, used by the SDK and by scaas-app's default build: a crate of its own over `ua-rs`
 only (the profile root, the index, the envelope, the instance lock, the sealed store with its journal, generations, manifests and
 anchor, hidden profiles, delete, migration, export and import, the storage of settings), with its own error codes named as the
 SDK's. The SDK depends on it and adds what needs the SDK: an `Sdk` opened on a profile, `Sdk::close()` at lock and switch, the
@@ -653,38 +660,51 @@ chain-profile meaning of the settings, the store keys handed to app cores, and t
 store's codes to `StoreError` and `SdkError`.
 
 <a id="CLI-UPR-03"></a>**CLI-UPR-03** — **A machine holds many profiles, each its own data directory** (owner 2026-11-27;
-SPECIFIED): its encrypted store (many seeds, many native secret keys, hidden sets: the keystore of §3 unchanged), its chat and vault
+BUILT: one directory `p/<id>/` per profile with its keystore, `sdk.state`, settings and the parts `pqchat` and `pqvault`,
+`scaas-profile` `tests/profiles.rs`, `tests/settings.rs`; SPECIFIED: the pqchat-core and pqvault-core store adapters, wave 2): its encrypted store (many seeds, many native secret keys, hidden sets: the keystore of §3 unchanged), its chat and vault
 state, and its own settings, its chain-profile settings included. The release chain profiles stay the build's (CLI-TUI-11); a
 profile only selects and overlays them under CLI-TUI-06.
 
 <a id="CLI-UPR-04"></a>**CLI-UPR-04** — **Each profile is protected separately; opening one unlocks nothing of another** (owner
-2026-11-27; SPECIFIED): its own passphrase and KDF parameters, an optional biometric unlock, opt-in (the pattern of PqVault's
+2026-11-27; BUILT: each profile's own data key, passphrase wrap and KDF parameters, `ua-rs` `ProfileKeys` (`tests/profile.rs`),
+`scaas-profile` `tests/profiles.rs`, `tests/reseal.rs`; SPECIFIED: the biometric unlock, wave 2): its own passphrase and KDF parameters, an optional biometric unlock, opt-in (the pattern of PqVault's
 O7 (b)). Each seed keeps its own vault passphrase inside (CLI-SDK-03).
 
 <a id="CLI-UPR-05"></a>**CLI-UPR-05** — **A first run with no profile creates "default"; its passphrase is asked when its first
-secret is created** (owner 2026-11-27; SPECIFIED).
+secret is created** (owner 2026-11-27; BUILT: `scaas-profile` `first_run_default`, the SDK's `passphrase_required_before_any_work`
+(every secret-creating call refused until `set_passphrase`); SPECIFIED: the clients' prompt, wave 2).
 
 <a id="CLI-UPR-06"></a>**CLI-UPR-06** — **A profile is open in at most one instance; instances meet only over the network** (owner
-2026-11-27; SPECIFIED). A lock file in the profile's directory; a second instance opening the same profile is refused with
+2026-11-27; BUILT: the instance lock, `scaas-profile` `tests/lock.rs`; SPECIFIED: the two-instance PqChat end-to-end test, wave 2). A lock file in the profile's directory; a second instance opening the same profile is refused with
 `ProfileInUse`. Instances with different profiles work together only over PqChat, Matrix and the node, with no local side channel,
 so two-person chat is tested on one machine.
 
 <a id="CLI-UPR-07"></a>**CLI-UPR-07** — **Switching locks the current profile, forgetting its secrets exactly as a seed lock does
-(CLI-SDK-06), then opens the other** (owner 2026-11-27; SPECIFIED), on desktop and mobile.
+(CLI-SDK-06), then opens the other** (owner 2026-11-27; BUILT: the lock, `UserProfile::lock` (`lock_all`, `Sdk::close`, the arena wiped, the
+instance lock released), the SDK's `g11_sdk_twice_and_locked`, `g11_no_request_after_lock`,
+`g11_lock_revokes_hidden_set_of_a_locked_seed`; SPECIFIED: the clients' switch and the Matrix client closed at lock, wave 2), on
+desktop and mobile.
 
 <a id="CLI-UPR-08"></a>**CLI-UPR-08** — **The profile list shows the user-given names only; a profile may be hidden from it and is
-then opened only by typing its name** (owner 2026-11-27; SPECIFIED), as a hidden set opens only by its passphrase.
+then opened only by typing its name** (owner 2026-11-27; BUILT: `list`, `open_hidden`, `scaas-profile` `tests/hidden.rs`, the
+SDK's `hidden_calls_route`; SPECIFIED: the clients' pickers and prompts, wave 2), as a hidden set opens only by its passphrase.
 
-<a id="CLI-UPR-09"></a>**CLI-UPR-09** — **A profile's id is a UUIDv7** (owner 2026-11-27; SPECIFIED). Its timestamp gives each
+<a id="CLI-UPR-09"></a>**CLI-UPR-09** — **A profile's id is a UUIDv7** (owner 2026-11-27; BUILT: `vectors/profile/ids.json` read by clientkeys and `scaas-profile`
+`ids_rows`). Its timestamp gives each
 profile's creation time, hidden ones included, to anyone who can list the profile root (spec §4, §14).
 
 <a id="CLI-UPR-10"></a>**CLI-UPR-10** — **The id is stable, names the profile's directory, and never leaves the device** (controller
-call; SPECIFIED). The name is a label only; a rename keeps the id; an envelope whose id differs from its directory is refused. The
+call; BUILT: `scaas-profile` `envelope_rows` (an envelope under another id is `ProfileFormat`), `export_refusals_and_payload`
+(no id in an export)). The name is a label only; a rename keeps the id; an envelope whose id differs from its directory is refused. The
 id is never on chain, in a job, a request, a message, a log, an error, an event, a backup or an export, and is not derived from any
 seed, key or name; it reaches the client only to name keychain items, and `UserProfileInfo`'s `Debug` redacts it.
 
 <a id="CLI-UPR-11"></a>**CLI-UPR-11** — **One profile root, a directory on every platform; the index is a cache of the envelopes'
-public names; a one-time move from the CLI's data directory into "default"** (controller call; SPECIFIED). Profiles sit in `p/<id>/`
+public names; a one-time move from the CLI's data directory into "default"** (controller call; BUILT: `scaas-profile`
+`g12_root_modes_and_symlink`, `g10_rebuild_lists_every_visible`, `tests/lifecycle.rs` `migration_moves_into_default`,
+`g4_crash_at_each_migration_step`, `legacy_beside_profiles_reported`, the sources given as `ProfilesConfig.legacy` and
+`legacy_overlay`; migration's step (3) at `set_passphrase`'s commit, a controller call pending owner confirmation (decisions);
+SPECIFIED: the CLI computing the source paths, wave 2). Profiles sit in `p/<id>/`
 under a root the SDK tightens to `0700` only when it holds profiles or was made by the SDK (another wider directory refused, a
 symlinked root refused); on mobile the root is the app's private directory and the app supplies only keychain items. A visible
 profile's name is a public field of its envelope, so a rebuilt index (never a first run while profiles exist) lists every visible
@@ -694,7 +714,10 @@ names, their `.lock` files and FileStore's crash-left temporaries (removed at op
 lock, only when no profile directory exists; legacy items beside existing profiles are reported.
 
 <a id="CLI-UPR-12"></a>**CLI-UPR-12** — **A profile's items are sealed under its own random data key, wrapped by Argon2id of its
-passphrase; every state refuses what does not belong to it** (controller call; SPECIFIED). An envelope with per-profile parameters
+passphrase; every state refuses what does not belong to it** (controller call; BUILT: `vectors/profile/envelope.json`, `ua-rs`
+`tests/profile.rs`, `scaas-profile` `g3_state_flipped_and_marker`, `g3_unprotected_refuses_sealed`, `name_hint`,
+`set_passphrase_seals_and_keeps`; hide and a hidden rename take the passphrase ([CLI-UPR-13](#CLI-UPR-13)); SPECIFIED: the biometric
+wrap's use (its associated-data row built) and the clients' announcement, wave 2). An envelope with per-profile parameters
 (default 64 MiB / 3 / 4); the wraps' associated data the canonical object of exactly its public fields format, version, id, state,
 generation and parameters with their salt, after `ua-rs`'s `seal_key` prefix; the visible name a clear hint outside it, checked
 against the sealed label after unlock (`ProfileIndexMismatch`, the hint rewritten from the label), so rename, hide and show need no
@@ -709,7 +732,8 @@ seed's vault passphrase are two entries.
 
 <a id="CLI-UPR-13"></a>**CLI-UPR-13** — **At most 16 hidden profiles, created without ever being listed, never two with one name and
 passphrase, found by a bounded search over the envelopes with no early stop and one error; hidden from the list, not deniable on
-disk** (controller call; SPECIFIED). `create_hidden`, a hidden import and `hide()` refuse at the cap (`ProfileHiddenLimit`); every
+disk** (controller call; BUILT: `scaas-profile` `tests/hidden.rs`, `hidden_import`; `hide` and a hidden `rename` take the typed passphrase
+for the duplicate search, a controller call in decisions). `create_hidden`, a hidden import and `hide()` refuse at the cap (`ProfileHiddenLimit`); every
 path that makes a profile hidden or changes a hidden one's name or passphrase runs the duplicate check; the search takes the
 envelopes without a public name and the unusable directories (not the index), at most 32 (`ProfileSearchTooLarge`), runs max(count,
 4) KDFs at each envelope's own parameters, compares names by one helper (NFKC, then lower case), and opens only a single match;
@@ -717,14 +741,17 @@ envelopes without a public name and the unusable directories (not the index), at
 is offered.
 
 <a id="CLI-UPR-14"></a>**CLI-UPR-14** — **The instance lock is a non-blocking OS advisory lock held for the open profile's life**
-(controller call; SPECIFIED). `try_lock` before the envelope is read, released by the OS at any process end, nothing written into
+(controller call; BUILT: `scaas-profile` `tests/lock.rs`, `search_locks_only_the_match`; SPECIFIED: the CLI's side, wave 2; Web Locks
+with the browser store, PLANNED). `try_lock` before the envelope is read, released by the OS at any process end, nothing written into
 it, so no stale lock exists; the hidden search reads without a lock and locks only its match; local filesystems only; Web Locks in a
 browser. When built it replaces, for a profile, the shared-directory sentence of [CLI-SDK-17](scaas-cli.md#CLI-SDK-17) and the SDK spec §6.3:
 clients share the root and the index, never an open profile. Owner 2026-11-27: a second instance is refused even when it only reads,
 and an app extension is refused while the app has the profile open.
 
 <a id="CLI-UPR-15"></a>**CLI-UPR-15** — **Create, rename, hide and delete are atomic and confirmed; a profile with a lost passphrase
-can still be deleted** (controller call; SPECIFIED). Create is journaled with its index row; delete needs the name typed, shows how
+can still be deleted** (controller call; BUILT: `scaas-profile` `tests/lifecycle.rs` (`delete_open_profile`,
+`delete_locked_visible`, `g10_crash_at_each_delete_step`, `damaged_directory_reported_never_removed`, `hidden_not_deleted_by_id`),
+`create_names_and_limit`, the SDK's `delete_through_sdk`). Create is journaled with its index row; delete needs the name typed, shows how
 many seeds lack a backup and asks a second confirmation for them, and starts by renaming the directory to a tombstone, which start-up
 finishes; a directory without an envelope is reported, never removed; a locked visible profile is deleted with the name typed and a
 confirmation that its data is lost. A whole profile exports and imports by [CLI-UPR-17](#CLI-UPR-17). Owner 2026-11-27: a hidden
@@ -732,21 +759,25 @@ profile whose passphrase is lost is neither named nor deleted by the app; the us
 unlisted directories.
 
 <a id="CLI-UPR-16"></a>**CLI-UPR-16** — **Clients open a profile by name, a hidden one only through a prompt; the CLI never follows
-the last profile an app opened** (controller call; SPECIFIED). `--profile <name>` or `--profile-name-fd` (else "default"; an unknown
+the last profile an app opened** (controller call; SPECIFIED, nothing built: the CLI's flags and commands, the apps' pickers,
+wave 2). `--profile <name>` or `--profile-name-fd` (else "default"; an unknown
 name `ProfileUnknown`) and `--profile-hidden`, the hidden name and every passphrase from the terminal without echo or one file
 descriptor per secret, never the command line or the environment; commands that need no profile open none; the CLI names the profile
 on stderr (a line that lands in CI logs, stated); `scaas profile settings` replaces `--overlay`; the apps' pickers always offer
 "Open another profile"; a hidden profile's name is never drawn; the clipboard value a client set is cleared at lock. Owner
 2026-11-27: the idle lock locks the seeds, as today, not the profile.
 
-<a id="CLI-UPR-17"></a>**CLI-UPR-17** — **A whole profile exports and imports as one sealed file** (owner 2026-11-27; SPECIFIED).
+<a id="CLI-UPR-17"></a>**CLI-UPR-17** — **A whole profile exports and imports as one sealed file** (owner 2026-11-27; BUILT:
+`vectors/profile/export.json`, `ua-rs` `ExportKey`, `scaas-profile` `tests/export.rs`, the SDK's `g9_export_import_through_sdk`).
 Inside: the profile's store items (seed vaults sealed as today), its index entry and its settings, its chain-profile settings
 included. Never inside: the OS lock, caches. Sealed under a passphrase the user types at export, with the profile envelope's
 Argon2id bounds; a typed confirm; the integrity of the whole file bound in the seal. Import makes a new profile with a new UUIDv7; a
 file never overwrites an existing profile. Vectors in clientkeys and `ua-rs` before code (spec §10, export and import).
 
 <a id="CLI-UPR-18"></a>**CLI-UPR-18** — **The export file holds no id, so an import is always a new profile; it is sealed in pinned
-chunks, bounded, verified before it is parsed, and brings no setting that could weaken the profile** (controller call; SPECIFIED).
+chunks, bounded, verified before it is parsed, and brings no setting that could weaken the profile** (controller call; BUILT: `scaas-profile` `tests/export.rs`, `tests/settings.rs` `import_filter`, the
+SDK's `g9_every_refusal_row_is_import_open`; the imported operations in flight marked `imported`; SPECIFIED: the call that follows
+one on the user's word, wave 2).
 The file holds the label (name, hidden flag), the keystore and the operation state (operations in flight followed only on the user's
 word), and the settings without credential references; never `keystore.prev`, the PqChat store, caches, locks, the envelope or
 keychain items (owner 2026-11-27 for `keystore.prev`, the PqChat store and credential references). Export needs the name typed and
@@ -758,7 +789,8 @@ mark, idle-lock and clipboard choice only on the user's confirm of each, and alw
 
 <a id="CLI-UPR-19"></a>**CLI-UPR-19** — **The sealed store: AES-256-GCM-SIV with a random nonce per seal, pinned length-framed
 associated data, HMAC file names, one manifest per part with tombstones, and an anchor over generation, manifests and envelope**
-(controller call; SPECIFIED). Associated data: domain, profile-format version, store part, item name, rev; file names HMAC-SHA-256 of
+(controller call; BUILT: `vectors/profile/items.json`, `ua-rs` `tests/profile.rs`, `scaas-profile` `tests/store.rs`; the encodings
+the spec leaves open as the plan's "Pinned formats"). Associated data: domain, profile-format version, store part, item name, rev; file names HMAC-SHA-256 of
 part and name under a key derived from `DEK_p`, no part name handed to another store; each part's manifest a sealed item of the
 reserved part `profile`, holding every item's rev and a tombstone per deleted item (a re-created item continuing above it; tombstones
 dropped at a re-seal), at most 65,536 entries (`ProfilePartFull`), written under the store write lock with `put_if`; an item below its manifest or at its tombstone is `ProfileRollback`, a listed item
@@ -768,19 +800,24 @@ key and plaintext buffer zeroized at the end of its call; `DEK_p` in a new profi
 
 <a id="CLI-UPR-20"></a>**CLI-UPR-20** — **No crash loses a profile: re-seals by a journal written as protected and a new generation,
 generations removed only when lower or journaled, root work under a briefly held root lock, deletes by tombstone** (controller call;
-SPECIFIED). Setting or changing the passphrase writes `profile.envelope.next` (protected, `gen + 1`, a new data key; the platform wrap
+BUILT: `scaas-profile` `tests/reseal.rs`, `tests/lifecycle.rs` `g10_crash_at_each_delete_step`, `g4_crash_at_each_migration_step`,
+`import_temporary_directory`, `start_cleans_up`; SPECIFIED: the platform wrap's drop, with platform unlock, wave 2). Setting or changing the passphrase writes `profile.envelope.next` (protected, `gen + 1`, a new data key; the platform wrap
 dropped), re-seals into `g<N+1>/`, then commits by one rename and writes the anchor; an uncommitted journal is rolled back at the
 profile's own open, its generation first; a lower generation is removed only when `g<gen>/` exists and the wrap has opened, else
 `ProfileDamaged`; a higher one without a journal is `ProfileDamaged`; nothing is removed before authentication; the root lock covers only short root steps, never a KDF run, a re-seal or a dialog; create and import are journaled with
 their row; start removes only the temporary directories and tombstones whose locks it can take and takes no live profile's lock.
 
 <a id="CLI-UPR-21"></a>**CLI-UPR-21** — **KDF bounds per field and per device; `p` is fixed; a cost the device cannot pay is named**
-(controller call; SPECIFIED). `m` 64 MiB to 1 GiB on desktop and to 256 MiB on mobile and in a browser, `t` 3 to 10, `p` 4; outside
+(controller call; BUILT: `ua-rs` `kdf_bound_rows`, `kdf_out_of_memory`; `scaas-profile` `g8_bounds_before_any_kdf`,
+`g8_start_during_held_kdf`; the device's maximum `ProfilesConfig.kdf_max_kib`). `m` 64 MiB to 1 GiB on desktop and to 256 MiB on mobile and in a browser, `t` 3 to 10, `p` 4; outside
 the general bounds `ProfileFormat`, above this device's maximum `ProfileKdfTooLarge`, both before any KDF runs; out of memory
 `ProfileKdfOutOfMemory`, never "wrong passphrase"; a test-only parameter set behind `test-hooks`, refused in a release build.
 
 <a id="CLI-UPR-22"></a>**CLI-UPR-22** — **The profile layer fits the SDK: its own config, its own `Sdk` closed at lock, named store
-errors, a sealed size bound and a synchronous store face for pqchat-core** (controller call; SPECIFIED). `UserProfiles` takes a root
+errors, a sealed size bound and a synchronous store face for pqchat-core** (controller call; BUILT: `ProfilesConfig`, `UserProfile::sdk`, `Sdk::close`, the
+`StoreError` codes, `rev_of`'s sealed bound, the synchronous core in `scaas-profile`, the SDK's face, the SDK's `secure_store_face`,
+`store_codes_are_the_sdks`, `g11_*`; SPECIFIED: pqchat-core's `PqChatStore` face and `StoreFault`, wave 2; the browser's core
+PLANNED; the crate is CLI-UPR-02's Change). `UserProfiles` takes a root
 directory, the app's keychain interface, an authenticator and its own heavy limiter; a profile opens and keeps its `Sdk` (a second
 call returns it), and its lock calls the new `Sdk::close` (tasks stopped, pools dropped, a closed flag) and leaves a state every later
 call meets (`ProfileLocked`); `StoreError` gains `VaultFormat`, `ProfileLocked`, `ProfilePassphraseRequired`, `ProfileRollback` and
@@ -790,13 +827,17 @@ synchronous face never waits on a future; the one helper is pqchat-core's `Items
 carrying the code; the browser needs an async core of its own (PLANNED); no new crate.
 
 <a id="CLI-UPR-23"></a>**CLI-UPR-23** — **Platform unlock on a shared OS account is an accepted risk; each seed and each imported
-secret key may carry its own passphrase, never opened by platform unlock** (owner 2026-11-27; SPECIFIED). Everyone enrolled on the
+secret key may carry its own passphrase, never opened by platform unlock** (owner 2026-11-27; SPECIFIED: platform unlock and the SDK's key-lock calls, wave 2; the key-lock
+vault label BUILT in `ua-rs` and clientkeys, [CLI-UPR-24](#CLI-UPR-24)). Everyone enrolled on the
 OS account opens a profile whose platform unlock is on. The user may lock each secret item with its own passphrase, optional per
 item: every seed (its own vault passphrase) and every imported native secret key; that passphrase is only typed, never opened by
 platform or biometric unlock.
 
 <a id="CLI-UPR-24"></a>**CLI-UPR-24** — **The key lock: an imported key under its own passphrase, opened only by typing it, untouched
-by every seed-wide operation; what a platform unlock leaves readable is stated** (controller call; SPECIFIED). `import_key` takes an
+by every seed-wide operation; what a platform unlock leaves readable is stated** (controller call; BUILT in `ua-rs` and clientkeys: the label, the `prf`
+refusal, the loops' skips, the backup and link left out, `ua-rs` `tests/wallet_vault.rs` `key_lock_*`,
+`keystore_json_key_lock_rows`, clientkeys `test/vault.test.js`, `test/keystore.test.js`; SPECIFIED: the SDK's calls (`import_key`'s
+key passphrase, `unlock_key`, `lock_key`, `lock_key_separately`, `KeyLocked`, the skips in `vault/prf.rs` and `vault/seeds.rs`), wave 2). `import_key` takes an
 optional key passphrase; such a key is the vault `native-import-locked:<network>:<n>` with a pin envelope only, opened by
 `unlock_key` alone, never by the seed's unlock of any kind, a passkey, a platform secret or the profile's unlock; every seed-wide loop
 (re-wrap, PRF enable and disable, same-DEK re-seal, retained-PRF open) skips it, and a reader refuses one that carries a `prf`
@@ -806,41 +847,47 @@ platform unlock of the profile leaves readable its settings, the keystore's publ
 Matrix stores and PqVault's cache; no seed, imported key, key-locked key, PqVault item or sealed PqChat history.
 
 <a id="CLI-UPR-25"></a>**CLI-UPR-25** — **A re-seal holds the profile's exclusive store write lock for its whole run; no write is
-lost** (controller call; SPECIFIED). Every writer of every part (the SDK, pqchat-core, pqvault-core) takes the store write lock for a
+lost** (controller call; BUILT: `scaas-profile` `writer_waits_then_busy`, `writer_through_change_waits_and_lands`; SPECIFIED: the
+pqchat-core and pqvault-core writers through their adapters, wave 2). Every writer of every part (the SDK, pqchat-core, pqvault-core) takes the store write lock for a
 write; a re-seal takes it from before its journal to its commit, so writers wait (never `StoreConflict`), at most 120 s, then
 `ProfileBusy` with nothing written, and otherwise write into the new generation; a pqchat counter never goes backwards.
 
 <a id="CLI-UPR-26"></a>**CLI-UPR-26** — **A settings change that could weaken the profile needs the profile passphrase typed**
-(controller call; SPECIFIED). Adding an endpoint, a `first` mark or a credential reference, turning the idle lock off or lengthening
+(controller call; BUILT: `scaas-profile` `weakening_rule`, `set_settings_needs_the_passphrase_to_weaken`, the SDK's
+`settings_weakening_needs_the_passphrase`). Adding an endpoint, a `first` mark or a credential reference, turning the idle lock off or lengthening
 it, and turning the clipboard opt-in on need the passphrase, checked against the envelope (a platform unlock does not count); a change
 that only strengthens, or picks the default chain profile, does not.
 
 <a id="CLI-UPR-27"></a>**CLI-UPR-27** — **An import is two calls: a preview of everything in the file, then the import of the user's
-choices** (controller call; SPECIFIED). `import_preview(source, export_passphrase)` verifies and opens the whole file, keeps the decrypted
+choices** (controller call; BUILT: `scaas-profile` `preview_then_import`, `import_temporary_directory`, the SDK's
+`g9_export_import_through_sdk`; `ImportChoices` also carries the new profile's KDF parameters). `import_preview(source, export_passphrase)` verifies and opens the whole file, keeps the decrypted
 payload in memory (at most 64 MiB; nothing plain on disk) and returns the name, the hidden flag, the counts and every setting with an item
 id, kept ones included, each string through the name helper; `import(review, choices, profile_passphrase, name)` writes the new
 profile into a temporary directory under its own lock, sealed under its key from the first byte, and commits it under the root lock
 by one rename and the row.
 
 <a id="CLI-UPR-28"></a>**CLI-UPR-28** — **The anchor is compared as the keystore's: ahead is a crash and the anchor follows; below, or
-another hash at the same revision, is a rollback** (controller call; SPECIFIED). The anchor holds the generation, each part
+another hash at the same revision, is a rollback** (controller call; BUILT: the anchor rows of
+`vectors/profile/items.json`, `scaas-profile` `anchor_follows_a_crash_refuses_a_rollback`, `keychain_anchor`, `anchor_rows`;
+SPECIFIED: the CLI and the desktop app taking turns on macOS, wave 2). The anchor holds the generation, each part
 manifest's revision and hash, and the envelope's revision (a new envelope field) and hash; a value ahead of it (a kill between a write
 and the anchor's, or a write by a client that could not reach this anchor) moves the anchor forward; a value below it, or another
 hash at the same revision, is `ProfileRollback`. Every client writes the anchor file; a client with a keychain also writes the
 keychain item, and both are compared by this rule, so the CLI and the desktop app taking turns raise no event.
 
-**The Matrix store key** (owner 2026-11-27; SPECIFIED): a sealed item of the profile that owns the Matrix client, not an OS
+**The Matrix store key** (owner 2026-11-27; BUILT: the sealed item, `matrix_store()`, `scaas-profile`
+`matrix_store_key_per_profile`; SPECIFIED: one `scaas-matrix` client per profile, closed at lock and switch, wave 2): a sealed item of the profile that owns the Matrix client, not an OS
 secret-storage item; `scaas-matrix` holds it until the profile locks: [CLI-UPR-29](../decisions.md#CLI-UPR-29). Each profile has its
 own Matrix (logins, session, store, keys, device id), one `scaas-matrix` client per open profile, closed at a switch before the
 other opens ([CLI-PQC-20](../decisions.md#CLI-PQC-20)).
 
-**Mobile backup** (owner 2026-11-27; SPECIFIED): the profile root is excluded from every cloud backup and device-to-device transfer
+**Mobile backup** (owner 2026-11-27; SPECIFIED, nothing built: app code, wave 2): the profile root is excluded from every cloud backup and device-to-device transfer
 (Android `getNoBackupFilesDir()` plus a `<cross-platform-transfer>` exclusion; iOS `isExcludedFromBackup` on the root at every start,
 Complete protection, keychain items `ThisDeviceOnly`); the export ([CLI-UPR-17](#CLI-UPR-17)) is the only way to move a profile:
 [CLI-UPR-30](../decisions.md#CLI-UPR-30).
 
 <a id="CLI-UPR-32"></a>**CLI-UPR-32** — **scaas-app's default build links `ua-rs` only with the profile-crypto features; no signing
-code is compiled into it** (owner 2026-11-27; BUILT). `scaas-profile` takes `ua-rs` without its defaults and with `user-profile` and
+code is compiled into it** (owner 2026-11-27; BUILT, plan KH, `bb00216d6`). `scaas-profile` takes `ua-rs` without its defaults and with `user-profile` and
 `json` only; `user-profile` is `key-handles` (the arena, `KeyHandle`, `KeyUsage`, `AppKeys` over an arena of its own, AEAD, HKDF,
 HMAC, Argon2id, `seal_key`, the OS RNG, `passphrase_bytes`, `Nonce`, `ProfileKeys`, `ExportKey`; [ua-libraries.md](ua-libraries.md)
 "Features"), which enables no `wallet`, `pq`, `signers`, `fam-*`, `zether` or `pqz`. What needs a seed or a UA kind (`Wallet::app_keys`,

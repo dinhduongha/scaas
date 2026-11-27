@@ -3,7 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-27):** PLANNED; wave 1 runs now, wave 2 later. Spec:
+**Status (2026-11-28):** wave 1 DONE (UP0 to UP12 and KH, branch `user-profiles`; closing gates green at `f9a599996`, UP11;
+every task's mutants killed, 61/61 across 11 runners); wave 2 PLANNED. Spec:
 [`2026-11-27-user-profiles.md`](../specs/2026-11-27-user-profiles.md) (SPECIFIED, a frame; Fable reviewed it in three rounds, every
 finding applied, spec §19). Rules: [clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12, CLI-UPR-01 to CLI-UPR-32, recorded in
 [decisions.md](../../decisions.md) §41. Owner rulings O1 to O15 and Q-UP1 to Q-UP11 (spec §1, §16) are fixed and not reopened here.
@@ -36,6 +37,17 @@ the `user_profile` surface, the two-instance PqChat e2e (§17 "end-to-end"), and
 Also in wave 2 (controller call 2026-11-27): the bindings get `UserProfile::lock` (which closes the SDK), so a Dart, Qt or C#
 front-end can lock a profile without a Rust host; if that needs `Sdk::close` bound, it leaves `tests/binding.rs`'s explicit Rust-only
 list (where UP6b registered it) at that time.
+
+**Open points for wave 2** (owner questions from wave 1; each recorded where its rule is):
+- Migration's step (3): `set_passphrase`'s commit clears `migration`, not the end of the move (UP9; decisions CLI-UPR-11's Change,
+  pending owner confirmation).
+- Two instances creating hidden profiles of one (name, passphrase) at once can both pass the duplicate search: no lock is held
+  across a KDF (UP8; decisions CLI-UPR-13's Change).
+- `ProfileBusy` and `ProfilePartFull` reach the `SecureStore` face as `StoreError::Unavailable` (`VaultIo` above it); named
+  `StoreError` codes would change CLI-UPR-22 and the bindings (UP5; decisions CLI-UPR-22's Change).
+- A call to follow an imported operation on the user's word: an import marks them `imported`, and `Op::resend` takes only signed
+  or sent operations (UP10; decisions CLI-UPR-18's Change).
+- The profile root's ownership is checked by its mode only (group or other bits refused or tightened), not by its owner (UP6).
 
 ## Global constraints (read before every task)
 
@@ -76,7 +88,7 @@ Abbreviations: `W` = the worktree root; `cap` = `"$W/scripts/capped"`; `C` = `--
 |---|---|
 | `ck` | `cd clients/clientkeys && $cap npm test` |
 | `ck-gen` | `cd clients/clientkeys && $cap node scripts/profile-vectors.mjs "$T" && diff -r "$T" ../../smartcontracts/vectors/profile` |
-| `ua-profile` | `cd clients/ua-rs && $cap cargo test C --features user-profile,test-hooks,vectors --test profile --test app_core` |
+| `ua-profile` | `cd clients/ua-rs && $cap cargo test C --features app-core,user-profile,test-hooks,vectors --test profile --test app_core` (`app_core` needs `app-core` since KH) |
 | `ua-clippy` | `cd clients/ua-rs && $cap cargo clippy C --all-targets -- -D warnings && $cap cargo clippy C --all-targets --features user-profile,test-hooks,vectors -- -D warnings` |
 | `ua-vault` | `cd clients/ua-rs && $cap cargo test C --test wallet_vault --test wallet_custody --test retained_key --test wallet_import_ua` |
 | `prof` | `cd clients/scaas-profile && $cap cargo test C && $cap cargo test C --features test-hooks && $cap cargo clippy C --all-targets -- -D warnings && $cap cargo clippy C --all-targets --features test-hooks -- -D warnings` |
@@ -170,14 +182,18 @@ These fill only what spec §7 and §10.1 leave open; everything the spec pins st
 
 ## UP0 — Baseline
 
+**Done:** with UP1's commit `d0b16db55` (the summary file; baseline rows `UP0`).
+
 **Files:** `clients/scaas-sdk/runs/2026-11-27-user-profiles-summary.txt` (new).
 
-- [ ] Fresh-worktree inputs: `scripts/vendor.sh link <dev worktree> core kat research`, then `check`; `clients/clientkeys/node_modules`
+- [x] Fresh-worktree inputs: `scripts/vendor.sh link <dev worktree> core kat research`, then `check`; `clients/clientkeys/node_modules`
       copied (`cp -a`) from the dev worktree.
-- [ ] Run `ck`, `ua-vault`, `sdk-reg`, `features`, `docs` on the untouched tree: the baseline rows.
-- [ ] Commit the summary with this plan's first execution commit (not alone).
+- [x] Run `ck`, `ua-vault`, `sdk-reg`, `features`, `docs` on the untouched tree: the baseline rows.
+- [x] Commit the summary with this plan's first execution commit (not alone).
 
 ## UP1 — clientkeys reference and vectors
+
+**Done:** `d0b16db55`, mutants `d4cd3631d` (5/5).
 
 **Files:** `clients/clientkeys/src/profile.js` (new), `clients/clientkeys/scripts/profile-vectors.mjs` (new),
 `clients/clientkeys/test/profile.test.js` (new), `smartcontracts/vectors/profile/{ids,envelope,items,export}.json` (new,
@@ -212,15 +228,17 @@ Rows (`rnd(name, n)` as `pqvault-vectors.mjs`, prefix `scaas/profile/vectors/`):
   item name other than `keystore` / `sdk.state`, `keystore` twice, `sdk.state` before `keystore`, payload > 64 MiB by length
   only): each `ProfileImportOpen` with its local reason.
 
-- [ ] Tests first (`profile.test.js`): every row recomputed from its inputs and equal; every refusal refused with its code; red
+- [x] Tests first (`profile.test.js`): every row recomputed from its inputs and equal; every refusal refused with its code; red
       before `profile.js` exists (`ERR_MODULE_NOT_FOUND`), then each function red until written.
-- [ ] Write `profile.js`, the generator; generate; read the diff.
-- [ ] Mutants (`up1`, `npm test` command): the HMAC name over the item name only (no part); the last-chunk flag ignored at import;
+- [x] Write `profile.js`, the generator; generate; read the diff.
+- [x] Mutants (`up1`, `npm test` command): the HMAC name over the item name only (no part); the last-chunk flag ignored at import;
       `rev` left out of the item AD; `name` inside the wrap's public JSON; `anchorCompare` "differs" as rollback (ahead not
       followed).
-- [ ] Gates: `ck`, `ck-gen`, `fmt` (js), `docs`. Commit `user-profiles UP1: clientkeys profile formats and vectors`.
+- [x] Gates: `ck`, `ck-gen`, `fmt` (js), `docs`. Commit `user-profiles UP1: clientkeys profile formats and vectors`.
 
 ## UP2 — `ua-rs` profile primitives
+
+**Done:** `e926da791`, `9ccb58acc` (format), mutants `ff0062bbe` (5/5); task KH (O15) `bb00216d6`, mutants `5ae04096c` (2/2).
 
 **Files:** `clients/ua-rs/src/wallet/profile.rs` (new), `clients/ua-rs/src/wallet/mod.rs` (module, error codes),
 `clients/ua-rs/src/wallet/appkey.rs` (only what `ProfileKeys` reuses: visibility, an explicit-nonce seal), `clients/ua-rs/Cargo.toml`
@@ -241,54 +259,60 @@ Calls (names may follow the code's style; the bytes are UP1's):
   forces it, and a counter counts every Argon2id run (`kdf_runs()`), dummy runs included.
 - Fixed-nonce twins under `vectors` only (as `vectors_seal`).
 
-- [ ] Tests first (`tests/profile.rs`, reading `smartcontracts/vectors/profile/*.json`): every envelope, label, item, file-name and
+- [x] Tests first (`tests/profile.rs`, reading `smartcontracts/vectors/profile/*.json`): every envelope, label, item, file-name and
       export row reproduced byte for byte; the refusals; two `seal_item` of one input differ (G2); a moved item fails (G2); the
       bounds, each field alone below and above, refused before any KDF (`kdf_runs()` unchanged, G8); the test set refused without
       `test-hooks` (a compile-time branch: the test asserts it under `cfg(not(feature = "test-hooks"))` in a second run of the
       lib tests without the feature); OOM forced → `KdfOutOfMemory`; G15: the arena holds keys while open and none after `lock()`
       (the arena's wipe test pattern, `store::vectors`), every call after `lock()` `WalletLocked`.
-- [ ] Mutants (`up2`): a fixed nonce in `seal_item`; the part left out of the item AD; `KdfOutOfMemory` mapped to `Argument`; the
+- [x] Mutants (`up2`): a fixed nonce in `seal_item`; the part left out of the item AD; `KdfOutOfMemory` mapped to `Argument`; the
       `m` lower bound not checked; `lock()` not wiping the arena.
-- [ ] Gates: `ua-profile`, `ua-clippy`, `ua-vault` (regression), `fmt` (rust), `docs`. Commit `user-profiles UP2: ua-rs profile
+- [x] Gates: `ua-profile`, `ua-clippy`, `ua-vault` (regression), `fmt` (rust), `docs`. Commit `user-profiles UP2: ua-rs profile
       arena and seals`.
 
 ## UP3 — The key-lock vault label
+
+**Done:** `8c5eea841`, mutants `4505606cf` (3/3), rows `1e8637dcc`.
 
 **Files:** `clients/ua-rs/src/wallet/{manifest.rs,vault.rs}`, `clients/ua-rs/tests/wallet_vault.rs` (rows), clientkeys
 `src/vault.js` / `src/keystore.js` (whichever reads label vaults), the keystore vector generator and its rows in
 `smartcontracts/vectors/keystore/keystore.json`.
 
-- [ ] Tests first: a `native-import-locked:<network>:<n>` label is a canonical label form (sealed with a pin envelope only; the
+- [x] Tests first: a `native-import-locked:<network>:<n>` label is a canonical label form (sealed with a pin envelope only; the
       same parse rules as `native-import:`); sealing it with a `prf` envelope is refused, and **reading** a vault of that label that
       carries a `prf` envelope is `VaultFormat` in `ua-rs` and clientkeys (a vector row both read); `reseal_label_vault` and
       `open_label_vault_retained` refuse or skip it (never open it with the seed's key); the backup payload (`scaas/backup/v1`)
       and the device link leave it out and return how many were left out; the positive twin: the same key as `native-import:`
       opens with the seed and travels in the backup.
-- [ ] Mutants (`up3`): the reader not refusing a `prf` envelope on a locked label; `reseal_label_vault` not skipping the locked
+- [x] Mutants (`up3`): the reader not refusing a `prf` envelope on a locked label; `reseal_label_vault` not skipping the locked
       label; the backup payload keeping the locked key.
-- [ ] Gates: `ua-vault`, `ua-clippy`, `ck`, the keystore generator's check, `fmt`, `docs`. Commit `user-profiles UP3: key-lock
+- [x] Gates: `ua-vault`, `ua-clippy`, `ck`, the keystore generator's check, `fmt`, `docs`. Commit `user-profiles UP3: key-lock
       vault label`.
 
 ## UP4 — SDK foundations
+
+**Done:** `40d09358e`, bindings `3b55304f8`, mutants `ea96202b7` (3/3).
 
 **Files:** `clients/scaas-sdk/src/vault/{store.rs,mod.rs}`, `src/error.rs`, `src/events.rs`, `src/lib.rs` (feature bits),
 `src/wasm/js.rs` (the store error names), `clients/scaas-sdk/Cargo.toml` (features `user-profile = ["vault", "file-store",
 "scaas-ua/user-profile"]`, `test-hooks = ["user-profile", "scaas-ua/test-hooks"]`, each with its feature bit appended),
 `scripts/check_test_features.py` (`test-hooks` a test feature), the generated bindings (by the generator only).
 
-- [ ] Tests first: `StoreError` gains `VaultFormat`, `ProfileLocked`, `ProfilePassphraseRequired`, `ProfileRollback`,
+- [x] Tests first: `StoreError` gains `VaultFormat`, `ProfileLocked`, `ProfilePassphraseRequired`, `ProfileRollback`,
       `ProfileDamaged`, each mapped by `vault::io` to the `SdkError` of the same name (a table test; `Io` still `VaultIo`);
       `SdkError` gains the codes of spec §11 (`ProfileInUse` … `KeyLocked`, appended; `OWN_CODES` test); `Event` gains
       `ProfileIndexMismatch`, `ProfileRollback`, `ProfileDamaged` (no field carries an id, name or path); `rev_of` reads a sealed
       item's outer `rev` up to the base64 of 16 MiB plus 1 KiB (a sealed item at the plain bound reads its rev; one byte above
       reads `u64::MAX`), the plain bound unchanged for plain items; `check_test_features.py` refuses `test-hooks` in a production
       graph (its positive control as the script's others).
-- [ ] Regenerate the bindings (`…-gen.sh`), read the diff (only the new variants).
-- [ ] Mutants (`up4`): `vault::io` collapsing every new code to `VaultIo`; `rev_of` keeping the 16 MiB cap for sealed items;
+- [x] Regenerate the bindings (`…-gen.sh`), read the diff (only the new variants).
+- [x] Mutants (`up4`): `vault::io` collapsing every new code to `VaultIo`; `rev_of` keeping the 16 MiB cap for sealed items;
       `test-hooks` missing from the script's test features.
-- [ ] Gates: `sdk-reg`, `sdk-clippy`, `features`, `bind-gen`, `fmt`, `docs`. Commit `user-profiles UP4: SDK store codes, features`.
+- [x] Gates: `sdk-reg`, `sdk-clippy`, `features`, `bind-gen`, `fmt`, `docs`. Commit `user-profiles UP4: SDK store codes, features`.
 
 ## UP5 — The sealed store core
+
+**Done:** `22a427755`, mutants `c13846093` (8/8); moved to `scaas-profile` `74b860488`, mutants `31fbe10fa` (8/8); runner `dbd418746`, re-run `2602c20fb` (8/8).
 
 **Files:** `clients/scaas-profile/src/{lib.rs,store.rs,anchor.rs,file.rs}`, `clients/scaas-profile/tests/store.rs` (the core's
 tests; moved from the SDK by O13, `74b860488`); in the SDK `src/user_profile/mod.rs` (the `SecureStore` face, the code mapping) and
@@ -304,7 +328,7 @@ damage rules. Open-time clean-up of `*.tmp.<pid>.<n>`; any other name in `g<N>/`
 names, part `sdk`, `settings` only (and `keystore`, `keystore.prev`, `sdk.state` only under `migration: pending`), a sealed item
 refused (`ProfileFormat`). Bounds: 65,536 entries per part (`ProfilePartFull`), the 16 MiB plain bound.
 
-- [ ] Tests first (G1, store files, G5, anchor, re-created items): no item or part name in any file name or plain byte of a
+- [x] Tests first (G1, store files, G5, anchor, re-created items): no item or part name in any file name or plain byte of a
       generation (control: the opened manifest lists them); a kill between a FileStore write and its rename leaves `*.tmp.*`,
       the next open removes it; `.lock` accepted, any other file `VaultFormat`; an old item put back `ProfileRollback`; a deleted
       item put back `ProfileRollback`; a listed item removed `ProfileDamaged`; an old manifest under the anchor `ProfileRollback`;
@@ -312,12 +336,14 @@ refused (`ProfileFormat`). Bounds: 65,536 entries per part (`ProfilePartFull`), 
       event and the anchor follows; a manifest below the anchor or another hash at its rev `ProfileRollback`; an item deleted then
       created again opens with no event; a writer blocked past the (shortened) wait is `ProfileBusy` and writes nothing; a sealed
       item that does not open is `VaultFormat` (not `VaultIo`); the anchor compare also checked against UP1's rows.
-- [ ] Mutants (`up5`): the HMAC name replaced by the item name; the manifest's rev not compared; no tombstone at delete; the
+- [x] Mutants (`up5`): the HMAC name replaced by the item name; the manifest's rev not compared; no tombstone at delete; the
       manifest written without `put_if`; "differs from the anchor" as the rule; the `.lock` / `.tmp.*` pattern refused; no clean-up
       at open; a waiting writer answered `StoreConflict`.
-- [ ] Gates: `prof`, `sdk-up`, `sdk-reg`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP5: sealed store core`.
+- [x] Gates: `prof`, `sdk-up`, `sdk-reg`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP5: sealed store core`.
 
 ## UP6 — Root, index, envelope, open and lock
+
+**Done:** UP6a `aa921c1f7`, mutants `7f42556dd` (9/9); UP6b `8fb61b159`, `7fea4c179`, mutants `217bf2396` (11/11 in the `up6` record).
 
 **Files:** `clients/scaas-profile/src/{root.rs,index.rs,envelope.rs,names.rs,profile.rs}` (new: root, index, envelope, instance
 lock, start, create, open, list, lock, the keychain marker, the KDF bounds and the per-device maximum, the Matrix store key item),
@@ -340,7 +366,7 @@ hint checked against the sealed label (`ProfileIndexMismatch`, rewrite), `last` 
 (`ProfileLocked`), the arena destroyed, the lock released. `sdk()` twice returns the same `Sdk`. UUIDv7 and `name_key` read UP1's
 rows.
 
-- [ ] Tests first: lock group (a second `open` in another process `ProfileInUse`, by a child process of the test binary; a
+- [x] Tests first: lock group (a second `open` in another process `ProfileInUse`, by a child process of the test binary; a
       SIGKILLed holder's lock taken at once; two profiles open side by side; start takes no live profile's lock); G3 (state flipped,
       plain item in a protected profile, sealed item in an unprotected one, the keychain marker rules with a test keychain); G8 (an
       out-of-bounds envelope `ProfileFormat` and an above-device one `ProfileKdfTooLarge`, before any KDF: `kdf_runs()`; a second
@@ -349,12 +375,14 @@ rows.
       `Sdk` and the store face; after lock no request leaves on the old `Sdk`; `lock` with a hidden set open on a locked seed
       revokes it; `sdk()` twice the same); G12 paths (a `0755` root holding `p/` tightened; a wider foreign directory
       `ProfileRootUnsafe`; a symlinked root refused); the UUIDv7 and `name_key` rows.
-- [ ] Mutants (`up6`): the instance lock dropped; start taking every profile's lock; the state check removed; a missing index treated
+- [x] Mutants (`up6`): the instance lock dropped; start taking every profile's lock; the state check removed; a missing index treated
       as a first run; a rebuild listing only unprotected profiles; `close` not called at lock; the root's mode not tightened; a
       symlinked root accepted; the per-device maximum not checked; a KDF under the root lock.
-- [ ] Gates: `prof`, `sdk-up`, `sdk-reg`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP6: profile root, index, open and lock`.
+- [x] Gates: `prof`, `sdk-up`, `sdk-reg`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP6: profile root, index, open and lock`.
 
 ## UP7 — Re-seal
+
+**Done:** `86e1192a8`, mutants `e29dca812` (7/7).
 
 **Files:** `clients/scaas-profile/src/{reseal.rs,profile.rs}`, `clients/scaas-profile/tests/`; in the SDK `src/user_profile/mod.rs`,
 `tests/user_profile.rs`, and the vault's secret-creating calls
@@ -368,19 +396,21 @@ one procedure under the instance lock and the store write lock for the whole run
 higher one with no journal `ProfileDamaged`, never removed); tombstones dropped at the re-seal; the plain `g0` of a migrated
 "default" removed only after the commit; crash points injected under `test-hooks` after each step.
 
-- [ ] Tests first: G4 (a crash at each step of `set_passphrase` and `change_passphrase` leaves the old or the new profile whole, the
+- [x] Tests first: G4 (a crash at each step of `set_passphrase` and `change_passphrase` leaves the old or the new profile whole, the
       next open finishes or rolls back); re-seal writes (a writer of part `sdk` through a `change_passphrase` waits, is present after
       the commit, never `StoreConflict`; held past the wait `ProfileBusy`); generations (an older envelope beside the live `g<N>/`:
       `ProfileDamaged` / `ProfileRollback`, `g<N>/` kept; an edited-upward `gen` beside the only generation: `ProfileDamaged`,
       nothing removed; a journaled `g<N+1>/` removed before its journal); G5 (after a passphrase change the old envelope with the
       old passphrase opens no item written after); tombstones gone after a re-seal; `ProfilePassphraseRequired` before any work (a
       call counter) and the positive twin after `set_passphrase`; the settings kept or dropped by `keep`.
-- [ ] Mutants (`up7`): the journal ignored at open; the envelope renamed before the generation is complete; removing every
+- [x] Mutants (`up7`): the journal ignored at open; the envelope renamed before the generation is complete; removing every
       generation other than `gen`; removing a lower generation before the wrap opens; `DEK_p` kept at a passphrase change;
       tombstones carried into the new generation; the store write lock not held during the re-seal.
-- [ ] Gates: `prof`, `sdk-up`, `sdk-reg`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP7: re-seal`.
+- [x] Gates: `prof`, `sdk-up`, `sdk-reg`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP7: re-seal`.
 
 ## UP8 — Hidden profiles
+
+**Done:** `d5da2f025`, mutants `4860f0caf` (7/7).
 
 **Files:** `clients/scaas-profile/src/{hidden.rs,profile.rs,index.rs}`, `clients/scaas-profile/tests/`; the SDK's
 `src/user_profile/mod.rs` and `tests/user_profile.rs` for the async calls over them.
@@ -390,19 +420,21 @@ higher one with no journal `ProfileDamaged`, never removed); tombstones dropped 
 after the search, re-read under it), `hide`, `show`, `rename` (no passphrase; wraps byte-identical), the duplicate search on every
 hidden path, at most 16 hidden (`ProfileHiddenLimit`), `last` never written by a hidden open, `create_hidden` writes no index byte.
 
-- [ ] Tests first: G7 (runs counted for 0, 1, 4, 5 candidates, a corrupt one costs one run; the 17th `create_hidden` and `hide()`
+- [x] Tests first: G7 (runs counted for 0, 1, 4, 5 candidates, a corrupt one costs one run; the 17th `create_hidden` and `hide()`
       `ProfileHiddenLimit`; 16 hidden plus damaged directories up to 32 candidates still open; 33 `ProfileSearchTooLarge`; duplicates
       at `create_hidden`, `hide()`, a hidden rename, a hidden passphrase change `ProfileNameTaken`; a planted row on a hidden
       profile refused, dropped, the prompt still finds it; no index byte at `create_hidden`); name hint (R3-B-1: `rename`, `hide`,
       `show` leave `pass` byte-identical; a hint changed on disk raises `ProfileIndexMismatch` and is rewritten; a planted hint on a
       hidden envelope: the open through the list refused, the hint removed, the hidden prompt finds it); the lock group's "the
       search locks only the match".
-- [ ] Mutants (`up8`): an early stop at the match; a corrupt candidate ending the search; candidates read from the index; `hide()`
+- [x] Mutants (`up8`): an early stop at the match; a corrupt candidate ending the search; candidates read from the index; `hide()`
       without the duplicate check; `last` written on a hidden open; `name` in the wraps' AD (the hint trusted over the label); the
       lock taken before the search reads.
-- [ ] Gates: `prof`, `sdk-up`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP8: hidden profiles`.
+- [x] Gates: `prof`, `sdk-up`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP8: hidden profiles`.
 
 ## UP9 — Delete, rebuild, migration
+
+**Done:** `db2c124cd`, mutants `f31e52bb6` (4/4).
 
 **Files:** `clients/scaas-profile/src/{lifecycle.rs,migrate.rs,root.rs}`, `clients/scaas-profile/tests/`; the SDK's
 `src/user_profile/mod.rs` (the vault calls refused on a migrated "default", the `backup: pending` check of `delete`) and
@@ -415,16 +447,18 @@ config input (the CLI's data directory path and its overlay path; the SDK reads 
 legacy `keystore.lock`, only when legacy items exist and `p/` holds no profile; steps 1–3 idempotent; legacy items beside existing
 profiles reported (`Event::ProfileDamaged`), never migrated.
 
-- [ ] Tests first: G10 (a crash at each delete step leaves a tombstone that start finishes; a directory without an envelope
+- [x] Tests first: G10 (a crash at each delete step leaves a tombstone that start finishes; a directory without an envelope
       reported, never removed; a locked visible profile deletes with `ConfirmDeleteUnreadable`; legacy items beside profiles
       reported); G4 (a crash at each migration step resumes into the same "default"; two processes migrating at once make one
       "default"); a migrated "default" refuses vault calls `ProfilePassphraseRequired` until `set_passphrase`, which removes the plain
       `g0` only after the commit; the migrated keystore opens with its seed afterwards (the positive control).
-- [ ] Mutants (`up9`): the clean-up removing a directory without an envelope; no root lock at migration; migration ignoring
+- [x] Mutants (`up9`): the clean-up removing a directory without an envelope; no root lock at migration; migration ignoring
       `migration: pending` on resume.
-- [ ] Gates: `prof`, `sdk-up`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP9: delete and migration`.
+- [x] Gates: `prof`, `sdk-up`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP9: delete and migration`.
 
 ## UP10 — Settings, export, import
+
+**Done:** `f17fb2947`, mutants `d2606a1ff` (6/6).
 
 **Files:** `clients/scaas-profile/src/{settings.rs,export.rs}` (the `settings` item's storage, export, `import_preview`, `import`),
 `clients/scaas-profile/tests/`; the SDK's `src/user_profile/settings.rs` (`ProfileSettings` per chain-profile key, the §7.7 rule)
@@ -440,7 +474,7 @@ id); `import(review, choices, passphrase, name)` (a new UUIDv7, protected from t
 its first byte under its `build.lock`, committed under the root lock by one rename and the row, `sdk.state`'s operations marked
 `imported`).
 
-- [ ] Tests first: settings (R2-C-3: each weakening change without the passphrase refused; a lowered cap and a stronger policy
+- [x] Tests first: settings (R2-C-3: each weakening change without the passphrase refused; a lowered cap and a stronger policy
       pass); G9 (export without the profile passphrase refused; the payload holds none of the left-out items; every refusal row of
       UP1's `export.json` read by the SDK as `ProfileImportOpen` with nothing written; 1 MiB and 1 MiB + 1 round-trip; a crafted
       file's credential reference dropped even when every endpoint is confirmed; endpoints, `first`, idle lock and clipboard
@@ -448,18 +482,22 @@ its first byte under its `build.lock`, committed under the root lock by one rena
       operations in flight not followed; above 64 MiB `ProfileExportTooLarge`; an existing file or a symlink at the export path
       refused; another instance's start during a preview leaves its temporary directory); the positive control: an unchanged file
       imports with a new id and the same seed fingerprints.
-- [ ] Mutants (`up10`): the passphrase check of `set_settings` removed; parse before verify; settings imported whole; a filter that
+- [x] Mutants (`up10`): the passphrase check of `set_settings` removed; parse before verify; settings imported whole; a filter that
       forgets credential references; start removing a temporary directory whose `build.lock` is held; a preview written to disk in
       plain form.
-- [ ] Gates: `prof`, `sdk-up`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP10: settings, export, import`.
+- [x] Gates: `prof`, `sdk-up`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP10: settings, export, import`.
 
 ## UP11 — Wave-1 closing gates
 
-- [ ] On the final tree, once: `ck`, `ck-gen`, `ua-profile`, `ua-clippy`, `ua-vault`, `prof`, `sdk-up`, `sdk-reg`, `sdk-clippy`, `features`,
+**Done:** `f9a599996` on `a37a0f188`: every step green, stale mutant rows re-run, 61/61 killed.
+
+- [x] On the final tree, once: `ck`, `ck-gen`, `ua-profile`, `ua-clippy`, `ua-vault`, `prof`, `sdk-up`, `sdk-reg`, `sdk-clippy`, `features`,
       `bind-gen`, `fmt` (rust js toml), `docs`, and every task's mutants `check`. Rows into the summary; commit it.
 
 ## UP12 — Docs
 
-- [ ] `docs/clients/scaas-sdk.md` §12: a status line per rule built in wave 1 (BUILT where code and tests exist, with the test
+**Done:** this commit, `user-profiles UP12: docs`.
+
+- [x] `docs/clients/scaas-sdk.md` §12: a status line per rule built in wave 1 (BUILT where code and tests exist, with the test
       names; SPECIFIED where wave 2 remains); `docs/decisions.md` §41's entries' statuses; the spec's status line (wave 1 built at
       `<commit>`, UNAUDITED); `smartcontracts/vectors/README.md` row for `profile/`. `docs` gate. Commit `user-profiles UP12: docs`.

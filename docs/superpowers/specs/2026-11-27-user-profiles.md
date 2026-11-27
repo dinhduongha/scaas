@@ -1,11 +1,16 @@
 # User profiles: many protected local profiles in the SDK layer: design
 
-**Status:** SPECIFIED, nothing built. A **frame**: the owner's rulings of 2026-11-27 (§1, §16) are fixed; the means are controller
+**Status:** wave 1 BUILT on branch `user-profiles` at `f9a599996` ([plan](../plans/2026-11-27-user-profiles.md) UP1 to UP11
+and KH; UNAUDITED): the byte formats and their vectors, `ua-rs`'s `ProfileKeys` and `ExportKey` (feature `key-handles`), the
+key-lock label in `ua-rs` and clientkeys, the crate `scaas-profile` and the SDK's `user_profile`. The rest SPECIFIED (wave 2):
+platform unlock, the CLI, TUI and app surfaces, the pqchat-core and pqvault-core adapters, the SDK's key-lock calls, the browser
+store, the bindings of the surface, the chain-profile rename, the Matrix client closed at lock; each rule's status in
+[clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12. A **frame**: the owner's rulings of 2026-11-27 (§1, §16) are fixed; the means are controller
 calls (`owner: no`). Fable reviewed the frame twice on 2026-11-27: at `06d9843d5` (three areas, all "approve with fixes") and again
 at `fa51e8275` (round 2: no P1, every round-1 finding fixed or partly fixed, new findings from the fixes), then a third time at
 `9f2ee89b7` (round 3: area C approve, areas A and B approve with one P1 each, no P0); every finding of the three rounds is applied as the controller's ruling of the same day (§19). No decryption-oracle path was found in either round, and no owner
 ruling was reopened. Branch `user-profiles-spec` (from `dev` `644ea61a8`), worktree `.claude/worktrees/user-profiles-spec`. Rule ids
-(SPECIFIED, defined once in [clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12, recorded in [decisions.md](../../decisions.md)
+(defined once in [clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12, recorded in [decisions.md](../../decisions.md)
 §41): CLI-UPR-01 to CLI-UPR-32. No contract, signed byte format, chain profile or node rule changes; no on-chain byte changes. The
 `ua-rs` calls and the two file formats of §7 and §10.1, and the keystore's new vault label of §7.4, are new and need vector rows in
 clientkeys and `ua-rs` before code. UNAUDITED.
@@ -681,6 +686,14 @@ impl Vault {   // the key lock (§7.4); ImportKey gains key_passphrase: Option<A
     pub async fn restore_previous(&self, confirm: ConfirmRestorePrevious) -> Result<(), SdkError>;   // PLANNED (§7.2)
 }
 ```
+
+**Built (wave 1, `f9a599996`) where it differs from the sketch:** `hide(passphrase)` and `rename(name, Option<passphrase>)` (a
+hidden profile's duplicate search; decisions CLI-UPR-13's Change); `set_passphrase`'s `keep` is `keep_settings: Option<Vec<u8>>`,
+the settings bytes the user kept; `ImportChoices { confirm, kdf }` (the confirmed item ids and the new profile's KDF parameters);
+`ProfilesConfig` adds `kdf_max_kib`, `legacy` and `legacy_overlay` (the migration's sources, computed by the caller; the SDK reads
+no environment); `ProfileUnlock` has `Passphrase` only; `ProfileKeychain` is synchronous as sketched (decisions CLI-UPR-22's
+Change); `pqchat_store`, platform unlock and the `Vault` key-lock calls are wave 2. The built API:
+`clients/scaas-sdk/src/user_profile/mod.rs` and `clients/scaas-profile/src/lib.rs`.
 
 New codes (CLI-SDK-13's naming): `ProfileInUse`, `ProfileOpen`, `ProfileUnknown` (a `--profile` name or id with no visible
 profile), `ProfileNameTaken`, `ProfileNameInvalid`, `ProfileLimit`, `ProfileHiddenLimit`, `ProfilePartFull`, `ProfileRootUnsafe`,
