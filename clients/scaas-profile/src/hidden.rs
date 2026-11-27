@@ -213,7 +213,7 @@ impl Profiles {
             m: params.m_kib.into(),
             t: params.t.into(),
             p: 4,
-            salt: B64.encode(random_vec(16)?),
+            salt: B64.encode(&random_vec(16)?[..]),
         };
         let (argon, salt) = k.check(self.kdf_max_kib)?;
         self.room(true, true)?;

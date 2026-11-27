@@ -1063,7 +1063,7 @@ impl OpenProfile {
                     _ => return Err(Error::VaultFormat),
                 }
             }
-            let key = Zeroizing::new(random_vec(32)?);
+            let key = random_vec(32)?;
             let b64 = Zeroizing::new(B64.encode(&key[..]));
             let pt = Zeroizing::new([HEAD, b64.as_bytes(), TAIL].concat());
             match self.core.put_if(ProfilePart::Sdk, MATRIX_KEY, None, &pt) {

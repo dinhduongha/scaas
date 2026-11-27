@@ -28,13 +28,13 @@ pub(crate) fn new_id() -> Result<String, Error> {
 
 /// `n` bytes of the OS RNG through `scaas-ua` (CLI-SDK-01: randomness for keys from `ua-rs`; `ProfileKeys::random_bytes`, at
 /// most 4,096); a failure is `VaultIo`.
-pub(crate) fn random_vec(n: usize) -> Result<Vec<u8>, Error> {
+pub(crate) fn random_vec(n: usize) -> Result<zeroize::Zeroizing<Vec<u8>>, Error> {
     scaas_ua::wallet::ProfileKeys::random_bytes(n).map_err(|_| Error::VaultIo)
 }
 
 /// [`random_vec`] as an array (public bytes: an id's, a tag's).
 pub(crate) fn random<const N: usize>() -> Result<[u8; N], Error> {
-    random_vec(N)?.try_into().map_err(|_| Error::VaultIo)
+    random_vec(N)?[..].try_into().map_err(|_| Error::VaultIo)
 }
 
 /// Whether `s` is a UUID in its canonical lower-case form (a profile directory's name).

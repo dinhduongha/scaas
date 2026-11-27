@@ -189,7 +189,7 @@ fn plant_protected(root: &Path, name: &str) -> String {
     let salt = ProfileKeys::random_bytes(16).unwrap();
     let kdf = format!(
         r#"{{"alg":"argon2id","v":1,"m":8192,"t":1,"p":4,"salt":"{}"}}"#,
-        b64(&salt)
+        b64(&salt[..])
     );
     let public = format!(
         r#"{{"format":"scaas.profile","v":1,"id":"{id}","state":"protected","gen":1,"kdf":{kdf}}}"#

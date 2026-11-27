@@ -168,11 +168,12 @@ impl ProfileKeys {
         Ok(())
     }
 
-    /// Non-key randomness from the OS generator, at most 4,096 bytes (`Argument` above): a profile id's random bytes, a
-    /// temporary directory's tag, the Matrix store key's bytes (the one key that leaves the arena, user-profiles spec §7.2;
-    /// CLI-SDK-01: `scaas-profile` draws its randomness here). Needs no key: an empty or locked arena's too.
-    pub fn random_bytes(n: usize) -> Result<Vec<u8>> {
-        random_bytes(n)
+    /// Randomness from the OS generator, at most 4,096 bytes (`Argument` above), in a buffer wiped on drop: a profile id's
+    /// random bytes, a temporary directory's tag, the Matrix store key's bytes (the one key that leaves the arena,
+    /// user-profiles spec §7.2; CLI-SDK-01: `scaas-profile` draws its randomness here). Needs no key: an empty or locked
+    /// arena's too.
+    pub fn random_bytes(n: usize) -> Result<Zeroizing<Vec<u8>>> {
+        random_bytes(n).map(Zeroizing::new)
     }
 
     /// One Argon2id run at `kdf` over a random input, its output dropped (a hidden search's dummy run, spec §8).

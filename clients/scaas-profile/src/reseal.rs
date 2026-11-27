@@ -145,7 +145,7 @@ impl OpenProfile {
             m: params.m_kib.into(),
             t: params.t.into(),
             p: 4,
-            salt: B64.encode(random_vec(16)?),
+            salt: B64.encode(&random_vec(16)?[..]),
         };
         let (argon, salt) = new_kdf.check(self.kdf_max_kib)?;
         // the old passphrase's check and a hidden profile's duplicate search run before the store write lock (review F-5);
