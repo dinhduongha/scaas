@@ -112,12 +112,40 @@ reads its chain values from its own `ChainEnv`, is initialised once by the facto
   factory refuses the release when its env does not pin it (`ModuleNotPinned`, [CTR-TOK-30](token-wrappers.md#CTR-TOK-30):
   every class's release is module-checked). No 1:1 entry pays for the split (§12). **The tree modules** (CTR-CHAT-26,
   owner 2026-11-23 to 2026-11-25), the same way: `PqChatTree` holds a tree session's creation, commit, pieces, Welcome
-  wraps and messages (§16); `PqChatTreeViews` the tree's read-only views, reached by the release's `fallback` (a
-  selector no entry of the release has goes there; the module writes nothing, its read-only proof a scan of its compiled
-  code, §16); `PqChatTreeMembers` the exits: a tree session's `treeLeave` and `treeRemove` (owner 2026-11-24) and mode 0's
+  wraps and messages (§16); `PqChatTreeViews` the tree's read-only views, each declared in the release's ABI and
+  forwarded to it ([CTR-CHAT-32](#CTR-CHAT-32): no `fallback`; the module writes nothing, its read-only proof a scan of its
+  compiled code, §16); `PqChatTreeMembers` the exits: a tree session's `treeLeave` and `treeRemove` (owner 2026-11-24) and mode 0's
   `leave` and `remove` (owner 2026-11-25, moved out of `PqChat` when E-3 took the release over its size line), each at
   home checked and applied at the head (C9, CTR-CHAT-10, CTR-CHAT-20; Change 2026-11-24, E-3). `modules()` lists the four,
   in that order: topics, tree, views, members.
+
+<a id="CTR-CHAT-32"></a>**CTR-CHAT-32** — **No `fallback`: every entry is in `PqChat`'s ABI; the size split is the linked
+library `PqChatRecordLib`** (owner 2026-11-27/28, [ARCH-POS-29](../decisions.md#arch-pos-29--no-fallback-routing-every-callable-entry-is-declared-in-its-contracts-abi-a-size-split-prefers-a-linked-external-library)). Status: **BUILT**
+(`test/pqchat/PqChatTreeViews.t.sol`, `PqChatRecordLib.t.sol`, `PqChat.t.sol`, `test/governance/GovDeploy.t.sol`),
+UNAUDITED.
+
+- **The views.** `PqChat` implements `IPqChatTreeViews`, so its ABI lists the 13 views with their selectors unchanged.
+  `TREE_RANGE_MAX` (256) and `TREE_LEAF_PAGE_MAX` (64) are constants here, equal to the module's. The other 11 forward by
+  `DELEGATECALL` to `PqChatTreeViews`, return and revert data verbatim.
+- **No `fallback()` and no `receive()`.** A selector `PqChat` does not declare reverts with no data, and value is refused.
+- **Why a module, not a library, for the views.** The views read the tree through `PqGroupTree`'s and `PqChatCore`'s
+  internal, overridable hooks, which a library cannot inherit.
+- **The library.** Declaring the views alone takes the release to 36,022 B, over the plain form's T-1 line. So the
+  signed-record step of `createSession`, `rekey` and `postMessage` is the external library `PqChatRecordLib`
+  (`src/pqchat/PqChatRecordLib.sol`, 4,918 B), whose address is linked into the release's code.
+  - Each of the three entries sends its own calldata unchanged, nothing appended, under the library's `sessionRecord`,
+    `epochRecord` or `messageRecord` selector, by `DELEGATECALL`.
+  - The library checks the signer's portable signature over the record's typed digest under `PURPOSE_PQCHAT`, against the
+    registry the instance's own code names (`ChainEnvCode`; the entry has read and checked that env first). It returns
+    `abi.encode(record)`, plus the message's struct hash for `postMessage`.
+  - It reads and writes no storage and emits nothing. Its runtime holds no `SLOAD`, `SSTORE`, `TLOAD`, `TSTORE`, `LOG`,
+    `ORIGIN`, `CALLER`, `CALLVALUE`, `CREATE`, `CREATE2`, `CALL`, `CALLCODE`, `DELEGATECALL` or `SELFDESTRUCT` (scanned);
+    its one call is the registry's `requirePortable`, by `STATICCALL`.
+  - Called on its own it has no env and refuses.
+  - The check order is unchanged (shapes, signature, nonce, store), and so are the stored bytes, the events and the errors.
+    A registry revert comes back verbatim.
+- **The env.** The class env pins the library first (the release's link closure), then the four modules in `modules()`
+  order. The factory checks every pin's code hash at `deployImplementation` (`LibraryCodeHashMismatch`).
 - **Instances share nothing**: each keeps its sessions, epochs, messages, stored messages and topics in its own ERC-7201
   namespace `scaas.pqchat` (no plain slot; layout pinned in `test/v2/layout/PqChat.json` and `PqChatLayout.t.sol`). A
   client and the node take as a `PqChat` only an address the chain's factory lists as class 3 with version ≠ 0
@@ -747,7 +775,8 @@ Status: **BUILT**. Errors are those of `IPqChat.sol`; "registry" means the bubbl
 | `voteEntry(v, sig)` | anyone submits; `v.voter` signs | entry known, value, `seq`, signature | `PqTopicUnknown`, `PqTopicVoteValue`, `PqTopicSeq`, registry |
 | `rescue(asset)` | anyone, unsigned | none: the whole balance of `asset` (`address(0)`: the native coin) to the constant dev address ([CTR-GOV-26](../decisions.md#CTR-GOV-26)) | `RescueAssetInvalid` (native to a designator) |
 | `owner()`, `factoryInfo()`, `supportsInterface(id)`, `chainEnv()`, `FACTORY()`, `modules()` (the four body modules) | view | — | — |
-| any other selector: `fallback`, the tree views of `IPqChatTreeViews` in `PqChatTreeViews` (§16) | view (the module writes nothing); not payable | the module's | the module's; a selector it lacks too reverts with empty data |
+| the tree views of `IPqChatTreeViews` (§16): `treeOf`, `treeLeaves`, `treeNodes`, `treeNodeKey`, `commitOf`, `pathListOf`, `pathKeys`, `pathCtAt`, `goneOf`, `goneKeyOf`, `goneOwnKeyOf`, `TREE_RANGE_MAX()`, `TREE_LEAF_PAGE_MAX()` | view, declared ([CTR-CHAT-32](#CTR-CHAT-32)); the 11 views run in `PqChatTreeViews` (it writes nothing) | the module's | the module's |
+| any other selector | no `fallback`, no `receive` ([CTR-CHAT-32](#CTR-CHAT-32)) | — | reverts with empty data; value refused |
 | `sessionOf(sessionId)` | view | a session id here | `PqChatUnknown` (also for an epoch id) |
 | `epochOf(epochId)` | view | an epoch ≥ 1 here, of a flat session (a tree epoch: `commitOf`, §16) | `PqChatUnknown` (also for a session id), `PqChatModeEntry(1)` |
 | `epochComplete(id)`, `childOf(parent)`, `wrapAt(epochId, i)`, `leftIn(epochId, ua)`, `nonceUsed(scope, nonce)` | view | — | none: false or zero when unknown |
@@ -797,7 +826,12 @@ the size gate's row `PqChat` in `smartcontracts/evm/size-baseline.json`).
 `DeployBase._module` (its gate, forge's estimate × 1.05 within 60 M) and the onchain script's `PqChat.s.sol` `_module`,
 with an explicit limit of 59 M (that script runs at × 1.3, which for a 33 KB module would ask about 73 M; the code
 review's A-11). The history of the release's size is in
-the pins' comments; before the first split it was 34,223 B and asked 58.0 M. Since the topics' G1, G2 and G5
+the pins' comments; before the first split it was 34,223 B and asked 58.0 M. Since [CTR-CHAT-32](#CTR-CHAT-32)
+(2026-11-28: no `fallback`, the 13 views declared, the linked library `PqChatRecordLib`): `PqChat` 33,605 B (2,341,506 +
+51,990,930, 57.0 M asked; regular + state 54,332,436, within a 60 M block); the library 4,918 B (348,379 + 7,708,140,
+8.5 M asked). The views declared without the library: 36,022 B. The split costs each session, rekey and message write
+one `DELEGATECALL` with its calldata: about +7 k to +8.4 k regular per 2-member row, +25 k for a 20-member
+`createSession` (the record copied once more); no state gas. Since the topics' G1, G2 and G5
 ([CTR-CHAT-29](#CTR-CHAT-29) to [CTR-CHAT-31](#CTR-CHAT-31), 2026-11-27): `PqChat` 34,029 B (2,368,552 + 52,639,650,
 57.8 M asked), `PqChatTopics` 18,523 B (1,236,756 + 28,523,790, 31.2 M asked); the topic writes' rows below moved by
 less than the ±500 pin slack, their state gas not at all (the times sit in slots already written).
@@ -876,6 +910,7 @@ Status: **BUILT** for the files below, mutants included (T91: `smartcontracts/ev
 | `PqTopics.t.sol`, `PqTopicVotes.t.sol` | the topics spec §8 tests 1–10 |
 | `PqTopicRows.t.sol` | CTR-CHAT-29 to CTR-CHAT-31: the times of an entry and its versions, each version's nonce rebuilding its typed digest, `entryRows` field by field against `entryOf` (a chained body, a 64-B media type, an edit, votes, replies, two viewers), 64 ids answered and 65 refused, an unknown id refused |
 | `PqChatLayout.t.sol` | the ERC-7201 namespace and field slots |
+| `PqChatRecordLib.t.sol` | CTR-CHAT-32: the release links `PqChatRecordLib` (its artifact's link reference, its address in the runtime); the library holds no state opcode (the scan finds `PqChat`'s SSTORE: positive control); alone it has no env and refuses |
 | `PqChatGas.t.sol` | the gas rows and the deployment figures of §12 (T90), the tests' instance at `sstore2` |
 | `PqChatDevices.t.sol` | CTR-CHAT-24: two keys of a member, one wrap each and one `sessionsOf` entry; `(ua, keyId)` order and a repeated key refused; 8 keys land, 9 refused; two keys of one UA are one member; a member's keys change in a plain rekey, adding a UA does not; leave and removal take every key of the UA |
 | `PqChatSigs.t.sol`, `PqChatSigGas.t.sol` | CTR-CHAT-23: the setting refused outside 0 and 2; a `none` instance stores no signature and its views refuse; an `sstore2` instance's blobs and views hold exactly the signed bytes; a mismatched signature refused at write in both modes; the gas rows of both modes (mutants: `runs/2026-11-23-pqchat-sigs-mutants.py`, 14 of 14 killed) |
@@ -1007,9 +1042,9 @@ scheme 1, in minimal scope (a commit with an UpdatePath, Adds and Removes, Welco
 - **The tree views (owner 2026-11-24, option A; BUILT on branch `pqchat-treekem`, UNAUDITED).** The views of the spec's §6
   (`treeOf`, `treeLeaves`, `treeNodes`, `treeNodeKey`, `commitOf`, `pathListOf`, `pathKeys`, `pathCtAt`, `goneOf`,
   `goneKeyOf`, `goneOwnKeyOf`; interface `IPqChatTreeViews`) are a third body module, `src/pqchat/PqChatTreeViews.sol`,
-  read-only: `PqChat`'s `fallback` sends it every selector `PqChat` does not have, by `DELEGATECALL` in the instance's
-  state, return and revert data verbatim. The fallback is not payable; the module has no `fallback`, so a selector it lacks
-  reverts with empty data, and its runtime holds no writing opcode (`SSTORE`, `TSTORE`, `LOG`, `CREATE`, `CREATE2`, `CALL`,
+  read-only: each view is declared in `PqChat`'s ABI and forwarded to it by `DELEGATECALL` in the instance's state, return
+  and revert data verbatim ([CTR-CHAT-32](#CTR-CHAT-32), owner 2026-11-28; before it, `PqChat`'s `fallback` did this). The
+  module has no `fallback`, and its runtime holds no writing opcode (`SSTORE`, `TSTORE`, `LOG`, `CREATE`, `CREATE2`, `CALL`,
   `CALLCODE`, `DELEGATECALL`, `SELFDESTRUCT`; scanned by `test/pqchat/PqChatTreeViews.t.sol`), so it cannot be a path to a
   write. `modules()` lists four: `PqChatTopics`, `PqChatTree`, `PqChatTreeViews`, `PqChatTreeMembers` (owner 2026-11-24).
 - **Owner rulings on the first spec's open points (2026-11-23):** the leaf is the registry KEM key, not refreshed per commit; a

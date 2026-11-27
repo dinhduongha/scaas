@@ -692,6 +692,26 @@ signature beside the Ed25519 one keeps a verifier without `ua-rs` able to check.
 release whose binaries no one can tie to a commit.
 **Source.** Owner ruling 2026-11-27: the recommendations of the owner questions of 2026-11-27 accepted as recommended, A3 (publishing entity, key custody) left open; A2 accept, A4 register once A3, A5 not now, A6 none, A7 upload our own key, A9 AMO then Chrome then Safari, A10 Ed25519 offline plus a UA PQ signature beside it; [app-distribution note](research/2026-11-27-app-distribution.md) §1.2, §3, §5, §7, §8.
 
+### ARCH-POS-29 — No `fallback()` routing: every callable entry is declared in its contract's ABI; a size split prefers a linked external library
+- old: — · status: current · owner: yes · date: 2026-11-28 · normative: decisions.md#ARCH-POS-29 · superseded-by: —
+
+**Rule.**
+- **No routing `fallback()`.** No contract routes a call by `fallback()`. Every entry a user can call is a function declared
+  in the contract's own ABI, so the contract's verified source lists it (Blockscout shows each one).
+- **A size split prefers an external library.** The library is linked and its address shows on the verified contract. A body
+  module is used only where a library does not fit (for example, code that needs the contract's internal, overridable hooks),
+  and then behind declared forwarders.
+- **What is not routing.** An empty `receive()` that only accepts the native coin (`SmartKeyAccount`, `MandateWallet`,
+  `RescueVault`; TON's `receive()` top-ups); TON's `bounced` handlers; declared forwarders into linked libraries (the
+  `UARegistry` `_lib` / `_libRaw` entries, `ZetherLayer`'s `_lib`).
+**Status.** BUILT for `PqChat` ([CTR-CHAT-32](contracts/pqchat.md#CTR-CHAT-32), branch `pqchat-no-fallback`), UNAUDITED. A
+scan of every EVM source found `PqChat.fallback()` the only routing fallback.
+**Why.** A user, a block explorer and an auditor see every entry in the ABI and every linked library's address; nothing runs
+through an entry the ABI does not name.
+**Cost if wrong.** A declared forwarder costs runtime bytes in the contract, the return encoder of each declared function
+included; a contract near its size line needs a split, which is the owner's call (`PqChat`: owner 2026-11-28).
+**Source.** Owner rulings 2026-11-27 (the three rules above) and 2026-11-27/28 (the library split of `PqChat` approved).
+
 ## 2. Node — General
 
 ### NODE-GEN-01 — Node holds no subject funds or keys
@@ -6576,6 +6596,29 @@ Change (2026-11-25, the path-less [delta spec](superpowers/specs/2026-11-25-tree
 **Why.** Without the nonce a pinned `contentHash` could not be checked (`pqchat-core` reported `HashUnchecked`).
 **Cost if wrong.** A view only.
 **Source.** owner 2026-11-27; research §1, §8. It replaces the owner's Change of 2026-11-22 under CLI-PQC-08 that left the nonce view for the release after the audit: the view is in this release, before the 8b-6 reset. Status: BUILT on branch `pqchat-g125` (EVM; `pqchat-core` decodes it), UNAUDITED; the digest check in `pqchat-core`'s `resolve_ref` is not built yet (`HashUnchecked` stays).
+
+### CTR-CHAT-32 — `PqChat` has no `fallback`: the 13 tree views are declared in its ABI; the signed-record step is the linked library `PqChatRecordLib`
+- old: — · status: current · owner: yes · date: 2026-11-28 · normative: contracts/pqchat.md#CTR-CHAT-32 · superseded-by: —
+
+**Rule.** Owner 2026-11-27/28 under ARCH-POS-29:
+- **Views and fallback.** `PqChat` implements `IPqChatTreeViews`. Its 13 views are declared in `PqChat`'s ABI and their
+  selectors are unchanged. The two caps are constants in `PqChat`; the 11 others are forwarded by `DELEGATECALL` to the
+  read-only body module `PqChatTreeViews`. `fallback()` is removed.
+- **Why a module for the views.** They read the tree through `PqGroupTree`'s and `PqChatCore`'s internal, overridable hooks,
+  which a library cannot inherit (controller call).
+- **The size split (owner: yes).** Declaring the views alone would make the release 36,022 B, over the plain form's T-1 line
+  of 35,286 B (the release transaction would ask more than 60 M). So the signed-record step of `createSession`, `rekey` and
+  `postMessage` moves into the linked external library `PqChatRecordLib`: the signer's portable signature over the record's
+  typed digest, and `abi.encode(record)`.
+- **How the library is called.** `PqChat` forwards the entry's own calldata under the library selector by `DELEGATECALL`,
+  nothing appended. The library reads the registry from the instance's own code (`ChainEnvCode`), touches no storage and
+  emits nothing. The check order is unchanged: shapes, signature, nonce, store.
+- **The env.** The class env pins the library first (the release's link closure), then the four modules.
+**Why.** ARCH-POS-29: every entry visible in the ABI, and the split in a library whose address a verified source shows.
+**Cost if wrong.** One more `DELEGATECALL` per session, rekey and message write. The library's address is in the release's
+code, so a new library means a new release.
+**Source.** Owner rulings 2026-11-27 (no fallback, the library preferred) and 2026-11-27/28 (the split approved); sizes
+measured 2026-11-28 (contracts/pqchat.md §12). Status: BUILT on branch `pqchat-no-fallback`, UNAUDITED.
 
 ### CTR-PQV-01 — PqVault: PqChat's group rules with at least one member plus a topics-style item model
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-01 · superseded-by: —
