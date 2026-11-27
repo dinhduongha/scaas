@@ -4030,9 +4030,12 @@ name = "scaas-profile"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "getrandom 0.2.17",
  "scaas-ua",
  "serde",
  "serde_json",
+ "unicode-normalization",
+ "uuid",
  "zeroize",
 ]
 

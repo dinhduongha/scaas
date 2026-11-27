@@ -30,6 +30,16 @@ impl From<Error> for SdkError {
             Error::ProfileDamaged => SdkError::ProfileDamaged,
             Error::ProfileBusy => SdkError::ProfileBusy,
             Error::ProfilePartFull => SdkError::ProfilePartFull,
+            Error::ProfileInUse => SdkError::ProfileInUse,
+            Error::ProfileOpen => SdkError::ProfileOpen,
+            Error::ProfileUnknown => SdkError::ProfileUnknown,
+            Error::ProfileNameTaken => SdkError::ProfileNameTaken,
+            Error::ProfileNameInvalid => SdkError::ProfileNameInvalid,
+            Error::ProfileLimit => SdkError::ProfileLimit,
+            Error::ProfileRootUnsafe => SdkError::ProfileRootUnsafe,
+            Error::ProfileVersion => SdkError::ProfileVersion,
+            Error::ProfileKdfTooLarge => SdkError::ProfileKdfTooLarge,
+            Error::ProfileKdfOutOfMemory => SdkError::ProfileKdfOutOfMemory,
         }
     }
 }
@@ -45,7 +55,19 @@ fn store_code(e: Error) -> StoreError {
         Error::ProfileRollback => StoreError::ProfileRollback,
         Error::ProfileDamaged => StoreError::ProfileDamaged,
         Error::ProfileBusy | Error::ProfilePartFull => StoreError::Unavailable,
-        Error::Argument | Error::VaultIo => StoreError::Io,
+        // the profile-level codes never come from a store call: `Io`
+        Error::Argument
+        | Error::VaultIo
+        | Error::ProfileInUse
+        | Error::ProfileOpen
+        | Error::ProfileUnknown
+        | Error::ProfileNameTaken
+        | Error::ProfileNameInvalid
+        | Error::ProfileLimit
+        | Error::ProfileRootUnsafe
+        | Error::ProfileVersion
+        | Error::ProfileKdfTooLarge
+        | Error::ProfileKdfOutOfMemory => StoreError::Io,
     }
 }
 

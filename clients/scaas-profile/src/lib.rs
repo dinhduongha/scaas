@@ -3,7 +3,8 @@
 //! docs/clients/scaas-sdk.md §12): the local store of many protected profiles, without the SDK (owner 2026-11-27, CLI-UPR-02's
 //! Change); the SDK (feature `user-profile`) builds on it. Every KDF, AEAD and MAC runs in `scaas-ua`'s profile arena
 //! (`ProfileKeys`); this crate holds handles, public bytes and files. Synchronous: run every call on a blocking thread. Built so
-//! far (plan UP5): the sealed store core of one open profile ([`Core`]), the manifests and the anchor. UNAUDITED.
+//! far (plan UP5, UP6): the sealed store core of one open profile ([`Core`]), the manifests and the anchor; the profile root,
+//! the index, the envelope, the instance lock, start, create, open, list and lock ([`Profiles`], [`OpenProfile`]). UNAUDITED.
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -16,11 +17,18 @@
 compile_error!("scaas-profile's feature `test-hooks` is test-only: never in a release build");
 
 pub mod anchor;
+pub mod envelope;
 mod file;
+mod index;
+pub mod names;
+mod profile;
 pub mod store;
 
 pub use anchor::{Anchor, Head, Verdict};
+pub use envelope::{Envelope, Kdf, KdfParams, State};
 pub use file::rev_of;
+pub use names::{check_name, name_key, same_name, uuid7};
+pub use profile::{MatrixStore, OpenProfile, ProfileEvent, ProfileInfo, Profiles, ProfilesConfig};
 pub use store::{Core, CoreOpen, Item, Manifest, Plain, ProfilePart, WriteGuard, PART_MAX};
 
 macro_rules! codes {
@@ -69,6 +77,26 @@ codes! {
     ProfileBusy,
     /// a part's manifest at 65,536 entries
     ProfilePartFull,
+    /// the profile's instance lock is held by another instance (spec §9)
+    ProfileInUse,
+    /// a wrong passphrase, an altered wrap, or a profile that does not open this way (a hidden one by id)
+    ProfileOpen,
+    /// no profile directory of that id
+    ProfileUnknown,
+    /// a visible name of the same `name_key` exists
+    ProfileNameTaken,
+    /// a name not 1 to 64 bytes after NFC, or holding a control or format character
+    ProfileNameInvalid,
+    /// 32 profile directories under `p/`
+    ProfileLimit,
+    /// a symlinked root, not a directory, or a wider mode on a directory that holds no profiles (spec §5)
+    ProfileRootUnsafe,
+    /// a format version this build does not read
+    ProfileVersion,
+    /// KDF parameters within the general bounds but above this device's maximum (spec §7.5)
+    ProfileKdfTooLarge,
+    /// argon2 could not allocate its memory
+    ProfileKdfOutOfMemory,
 }
 
 impl std::fmt::Display for Error {

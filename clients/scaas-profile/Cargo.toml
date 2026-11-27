@@ -27,6 +27,12 @@ serde_json = "1"
 # base64 (an encoding) for the sealed items (plan pinned format 6); zeroize the plaintexts, the pin of scaas-ua
 base64 = "0.22"
 zeroize = "=1.9.1"
+# the profile id (spec §4): UUIDv7 by `Builder::from_unix_timestamp_millis` (no feature), its 10 random bytes and the Matrix store
+# key's from the OS RNG (getrandom, the one `scaas-ua`'s `OsRng` draws from); `name_key` and the name check (NFKC / NFC), the
+# pin of scaas-ua
+uuid = { version = "=1.23.0", default-features = false }
+getrandom = "=0.2.17"
+unicode-normalization = "=0.1.26"
 
 # the Argon2id and AEAD code crawls unoptimised: dependencies at opt-level 3, as the SDK
 [profile.dev.package."*"]

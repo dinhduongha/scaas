@@ -28,7 +28,7 @@ use base64::Engine;
 use scaas_ua::wallet::ProfileKeys;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::SeqCst};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::Duration;
 use zeroize::Zeroizing;
@@ -281,6 +281,8 @@ pub struct Core {
     envelope: Mutex<Head>,
     migration_pending: bool,
     lock: Arc<WriteLock>,
+    /// set at the profile's lock: every later call is `ProfileLocked`
+    closed: AtomicBool,
     #[cfg(feature = "test-hooks")]
     hook: Mutex<Option<Box<dyn FnOnce() + Send>>>,
 }
@@ -294,13 +296,7 @@ impl Core {
             return Err(Error::ProfileFormat);
         }
         let gdir = o.dir.join(format!("g{}", o.gen));
-        let mut b = std::fs::DirBuilder::new();
-        #[cfg(unix)]
-        std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
-        match b.create(&gdir) {
-            Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => return Err(Error::VaultIo),
-            _ => {}
-        }
+        file::mkdir(&gdir)?;
         if o.keys.is_some() {
             scan(&gdir)?;
         }
@@ -317,6 +313,7 @@ impl Core {
                 free: Condvar::new(),
                 wait_ms: AtomicU64::new(WAIT.as_secs() * 1000),
             }),
+            closed: AtomicBool::new(false),
             #[cfg(feature = "test-hooks")]
             hook: Mutex::new(None),
         };
@@ -329,8 +326,21 @@ impl Core {
         &self.dir
     }
 
+    /// Closes the store for good (the profile's lock, spec §10): every later call is `ProfileLocked`.
+    pub fn close(&self) {
+        self.closed.store(true, SeqCst);
+    }
+
+    fn live(&self) -> Result<(), Error> {
+        match self.closed.load(SeqCst) {
+            true => Err(Error::ProfileLocked),
+            false => Ok(()),
+        }
+    }
+
     /// The store write lock, which every writer of every part takes: waits at most 120 s, then `ProfileBusy`.
     pub fn write_lock(&self) -> Result<WriteGuard, Error> {
+        self.live()?;
         let l = &self.lock;
         let wait = Duration::from_millis(l.wait_ms.load(SeqCst));
         let held = l.held.lock().unwrap_or_else(PoisonError::into_inner);
@@ -347,6 +357,7 @@ impl Core {
 
     /// The item `name` of `part` and the caller's revision (its JSON `rev`), `None` when absent.
     pub fn get(&self, part: ProfilePart, name: &str) -> Result<Option<Item>, Error> {
+        self.live()?;
         let Some(keys) = &self.keys else {
             return self.plain_get(part, name);
         };
@@ -446,6 +457,7 @@ impl Core {
 
     /// Part `part`'s manifest as stored (an unprotected profile has none: empty).
     pub fn manifest(&self, part: ProfilePart) -> Result<Manifest, Error> {
+        self.live()?;
         match &self.keys {
             Some(keys) => Ok(self.read_manifest(keys, part)?.0),
             None => Ok(Manifest::default()),
@@ -462,6 +474,7 @@ impl Core {
     /// The item's lock (`<its file>.lock`), held while the returned file lives (defence in depth beside the store
     /// write lock).
     pub fn lock_item(&self, part: ProfilePart, name: &str) -> Result<std::fs::File, Error> {
+        self.live()?;
         let p = match &self.keys {
             Some(keys) => self.file(keys, part.name(), name)?,
             None => self.plain_writable(part, name)?,

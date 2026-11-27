@@ -61,7 +61,7 @@ fn file_of(dir: &Path, keys: &ProfileKeys, part: &str, name: &str) -> PathBuf {
 /// The store's codes reach the SDK by name: each `scaas-profile` code is the `SdkError` of the same name (none collapsed).
 #[test]
 fn store_codes_are_the_sdks() {
-    assert_eq!(Error::ALL.len(), 11);
+    assert_eq!(Error::ALL.len(), 21);
     for e in Error::ALL {
         assert_eq!(SdkError::from(*e).code(), e.code());
     }

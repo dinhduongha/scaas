@@ -88,3 +88,45 @@ pub(crate) fn lock_file(p: &Path) -> Result<File, Error> {
     io(f.lock())?;
     Ok(f)
 }
+
+/// The file `p` when it holds at most `max` bytes: `None` when absent, `Some(None)` when larger.
+pub(crate) fn read_bounded(p: &Path, max: usize) -> Result<Option<Option<Vec<u8>>>, Error> {
+    use std::io::Read;
+    let f = match File::open(p) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err(Error::VaultIo),
+    };
+    let mut bytes = Vec::new();
+    let cap = u64::try_from(max)
+        .map_err(|_| Error::Argument)?
+        .saturating_add(1);
+    io(f.take(cap).read_to_end(&mut bytes))?;
+    Ok(Some((bytes.len() <= max).then_some(bytes)))
+}
+
+/// The directory `p` (mode `0700`), kept when it exists.
+pub(crate) fn mkdir(p: &Path) -> Result<(), Error> {
+    let mut b = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
+    match b.create(p) {
+        Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => Err(Error::VaultIo),
+        _ => Ok(()),
+    }
+}
+
+/// A non-blocking exclusive advisory lock on the file `p` (created, mode `0600`): `None` while another holds it. Nothing is
+/// written into the file.
+pub(crate) fn try_lock_file(p: &Path) -> Result<Option<File>, Error> {
+    let mut o = OpenOptions::new();
+    o.write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
+    let f = io(o.open(p))?;
+    match f.try_lock() {
+        Ok(()) => Ok(Some(f)),
+        Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+        Err(_) => Err(Error::VaultIo),
+    }
+}

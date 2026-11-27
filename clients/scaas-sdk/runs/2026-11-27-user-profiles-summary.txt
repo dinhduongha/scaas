@@ -66,3 +66,10 @@ KH | ci_changes self-test | 72a818399 + KH files | 0 | ok
 KH | fmt rust toml yaml py | 72a818399 + KH files | 0 | every part ok
 KH | docs | 72a818399 + KH files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok; paths 0; facts 0 misses (387 pending)
 KH | mutants kh (one at a time) | bb00216d6 | 0 | 2 mutants, 2 killed, 0 survived, 0 not loaded, 0 other failure
+UP6a | prof test (default; test-hooks) | 9ab7b83ea + UP6a files | 0 | default: lock 4 / 4, profiles 9 / 9, store 14 / 14; test-hooks: lock 4 / 4, profiles 15 / 15, store 16 / 16
+UP6a | prof clippy (default, test-hooks; --all-targets -D warnings) and cargo deny --offline check | 9ab7b83ea + UP6a files | 0 | 0 warnings; advisories, bans, licenses, sources ok
+UP6a | sdk-up (Cargo.lock: scaas-profile's new deps) | 9ab7b83ea + UP6a files | 0 | user_profile 2 / 2 (store_codes_are_the_sdks at 21 codes); --lib user_profile 0 (144 filtered out)
+UP6a | sdk-clippy (UPF and default, --all-targets -D warnings) | 9ab7b83ea + UP6a files | 0 | 0 warnings
+UP6a | features | 9ab7b83ea + UP6a files | 0 | check_test_features ok, every control True; feature_tree 5 / 5
+UP6a | fmt rust js toml py | 9ab7b83ea + UP6a files | 0 | every part ok
+UP6a | docs | 9ab7b83ea + UP6a files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
