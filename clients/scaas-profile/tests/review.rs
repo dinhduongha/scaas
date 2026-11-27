@@ -831,3 +831,67 @@ fn g1_two_step_old_copy_after_a_tombstone_refused() {
     p.open(&id, Some(PASS)).unwrap();
     p.open(&other, None).unwrap();
 }
+
+/// Owner 2026-11-28 (the concurrent hidden duplicate, accepted): two hidden profiles of one (name, passphrase) — made here
+/// as two instances' concurrent `create_hidden` would, each in its own root, one directory moved beside the other — are never
+/// picked silently: `open_hidden` is `ProfileHiddenAmbiguous`; `hidden_matches` lists both as opaque choices (their place
+/// and creation time, by id order; no id); `open_hidden_match` opens the chosen one, a choice that no longer holds (another
+/// place or time) `ProfileOpen`. Control: with one match `open_hidden` opens it.
+#[test]
+fn hidden_duplicates_listed_never_picked() {
+    let _k = kdf_lock();
+    let (r1, r2) = (tmp(), tmp().with_extension("second"));
+    let p = Profiles::new(cfg(&r1, None)).unwrap();
+    let first = p
+        .create_hidden(b"Twin", PASS, Some(TEST))
+        .unwrap()
+        .info()
+        .id;
+    assert_eq!(
+        p.open_hidden(b"Twin", PASS).unwrap().info().id,
+        first,
+        "control"
+    );
+    let q = Profiles::new(cfg(&r2, None)).unwrap();
+    let second = q
+        .create_hidden(b"twin", PASS, Some(TEST))
+        .unwrap()
+        .info()
+        .id;
+    drop(q);
+    std::fs::rename(r2.join("p").join(&second), r1.join("p").join(&second)).unwrap();
+    let ids = {
+        let mut v = [first, second];
+        v.sort();
+        v
+    };
+    assert_eq!(code(p.open_hidden(b"Twin", PASS)), "ProfileHiddenAmbiguous");
+    let m = p.hidden_matches(b"Twin", PASS).unwrap();
+    let ms = |id: &str| u64::from_str_radix(&id.replace('-', "")[..12], 16).unwrap();
+    assert_eq!(
+        m.iter()
+            .map(|c| (c.index, c.created_ms))
+            .collect::<Vec<_>>(),
+        [(0, ms(&ids[0])), (1, ms(&ids[1]))]
+    );
+    assert!(!format!("{m:?}").contains(&ids[0][..8]), "no id in Debug");
+    let o = p.open_hidden_match(b"Twin", PASS, m[1]).unwrap();
+    assert_eq!(o.info().id, ids[1]);
+    o.lock();
+    let mut stale = m[1];
+    stale.created_ms += 1;
+    assert_eq!(
+        code(p.open_hidden_match(b"Twin", PASS, stale)),
+        "ProfileOpen"
+    );
+    let mut gone = m[1];
+    gone.index = 2;
+    assert_eq!(
+        code(p.open_hidden_match(b"Twin", PASS, gone)),
+        "ProfileOpen"
+    );
+    assert_eq!(
+        p.open_hidden_match(b"Twin", PASS, m[0]).unwrap().info().id,
+        ids[0]
+    );
+}

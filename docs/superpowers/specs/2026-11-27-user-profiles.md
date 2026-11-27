@@ -48,6 +48,7 @@ ARCH-POS-15. Order of sources: AGENTS.md "Which source wins".
 | O17 | 2026-11-28 | A deleted id keeps a permanent tombstone marker, `p/.tombstones/<id>` (an empty file), written by a delete before its rename and by start before it finishes a tombstone, kept until the user purges the markers (`purge_tombstones` with a confirm). A profile directory under a marked id is refused at start (`Event::ProfileRollback`) and at open (`ProfileRollback`): never listed, searched or opened, its keychain items never used. It closes the two-step put-back of review G-1 (the live directory renamed to its tombstone, start removes it with its keychain items, an old copy put back). | CLI-UPR-15, CLI-UPR-20 |
 | O18 | 2026-11-28 | `set_passphrase` on a migrated "default" (`migration: pending`, a keystore moved in) shows the seeds being moved and needs the user's confirm: the SDK's `migrated_seeds()` gives their count and labels from the keystore's public fields, and `set_passphrase(…, Some(ConfirmMigratedSeeds { seeds }))` requires that count; without it, or with another count, `ConfirmationMissing`, nothing written (the crate takes `ConfirmMigratedKeystore` for the same refusal). It answers review G-3: `migration: pending` is not authenticated, so a keystore a root writer planted is never sealed unseen. | CLI-UPR-11, CLI-UPR-12 |
 | O19 | 2026-11-28 | The reverse of a strengthening counts as weakening and needs the profile passphrase: a chain profile's `strict_majority` turned off, a lowered cap raised or removed (per chain profile and global), alongside the list's turning the idle lock off or lengthening it and turning the clipboard on (§7.7); the import's filter keeps only what strengthens the defaults (review G-5, A-15). | CLI-UPR-26 |
+| O20 | 2026-11-28 | Two instances running `create_hidden` with one (name, passphrase) at once may both pass the duplicate search (no lock is held across a KDF): accepted. A hidden open never picks silently: two or more matches is **`ProfileHiddenAmbiguous`**; `hidden_matches(name, passphrase)` lists them as opaque choices (`HiddenMatch { index, created_ms }`: the place among the matches by id order and the creation time from the UUIDv7, never the id), and `open_hidden_match(name, passphrase, choice)` runs the search again and opens the choice that still holds by place and creation time, else `ProfileOpen` (§8). | CLI-UPR-13 |
 
 Standing rules applied: secrets never leave the SDK and every KDF, AEAD and MAC runs in `ua-rs` (CLI-SDK-01, CLI-SDK-02); fail closed
 with named errors; no decryption oracle (ARCH-POS-13); every RPC consumer takes a list of nodes (ARCH-POS-15); the node is open and
@@ -488,7 +489,9 @@ anyone enrolled on a shared OS account (O11), cannot plant an endpoint that deci
 - **No duplicate.** Every path that makes a profile hidden or changes a hidden profile's name or passphrase (`create_hidden`, an import
   as hidden, `hide()`, a hidden rename, a hidden passphrase change) first runs the search below with the resulting (name,
   passphrase); a match other than the profile itself is `ProfileNameTaken` (it tells nothing to someone who does not hold both). So no
-  two hidden profiles ever share a (name, passphrase).
+  two hidden profiles share a (name, passphrase), but for one race, accepted (owner O20, 2026-11-28): two instances running
+  `create_hidden` with one (name, passphrase) at once may both pass the search, since no lock is held across a KDF; step 3
+  below never picks between such twins.
 - **Opening a hidden profile** takes its name and passphrase, both typed, both secret inputs (`SecretBytes`; the name never echoed,
   never on a command line, §13). The SDK, reading without any instance lock and without the root lock:
   1. lists `p/` and takes the **candidates**: every directory named by a UUID whose envelope has no public name, plus every
@@ -501,8 +504,12 @@ anyone enrolled on a shared OS account (O11), cannot plant an endpoint that deci
      one run at the default parameters and never stops the search; dummy runs at the default parameters fill up to four; **no early
      stop**; the total work is bounded by 32 runs at this device's maximum;
   3. on exactly one match takes that directory's instance lock (`ProfileInUse` if held, which only a holder of the name and
-     passphrase can provoke), re-reads its envelope under the lock and opens it; zero matches or more than one is `ProfileOpen`, as is
-     every other failure: no such name, a wrong passphrase, no hidden profile at all.
+     passphrase can provoke), re-reads its envelope under the lock and opens it; zero matches is `ProfileOpen`, as is every other
+     failure: no such name, a wrong passphrase, no hidden profile at all. Two or more matches is **`ProfileHiddenAmbiguous`**, none
+     opened (owner O20): `hidden_matches(name, passphrase)` runs the same search and lists them as opaque choices, `HiddenMatch
+     { index, created_ms }` (each match's place in id order and its creation time from its UUIDv7; no id, so its `Debug` shows
+     none), and `open_hidden_match(name, passphrase, choice)` runs the search again and opens the match at that place whose
+     creation time is the choice's, else `ProfileOpen`. Both cost a search's runs.
 - **The name is a label, not key material** (Q-UP7): not bound into the KDF; a rename re-wraps nothing.
 - **Equal time, exactly what holds:** a failed open costs the same for zero to four candidates **when every candidate is at the
   default parameters**. A candidate at raised parameters makes every hidden open slower by its extra cost, and more than four
@@ -710,13 +717,15 @@ the settings bytes the user kept; `ImportChoices { confirm, kdf }` (the confirme
 no environment); `ProfileUnlock` has `Passphrase` only; `ProfileKeychain` is synchronous as sketched (decisions CLI-UPR-22's
 Change); `pqchat_store`, platform unlock and the `Vault` key-lock calls are wave 2. Added by the owner's rulings of
 2026-11-28 (§1 O16 to O23): `set_passphrase(…, migrated: Option<ConfirmMigratedSeeds>)` and `migrated_seeds()` (O18),
-`UserProfiles::purge_tombstones(ConfirmPurgeTombstones)` (O17). The built API:
+`UserProfiles::purge_tombstones(ConfirmPurgeTombstones)` (O17), `UserProfiles::hidden_matches` and `open_hidden_match` (O20). The
+built API:
 `clients/scaas-sdk/src/user_profile/mod.rs` and `clients/scaas-profile/src/lib.rs`.
 
 New codes (CLI-SDK-13's naming): `ProfileInUse`, `ProfileOpen`, `ProfileUnknown` (a `--profile` name or id with no visible
 profile), `ProfileNameTaken`, `ProfileNameInvalid`, `ProfileLimit`, `ProfileHiddenLimit`, `ProfilePartFull`, `ProfileRootUnsafe`,
 `ProfilePassphraseRequired`, `ProfilePassphraseWeak`, `ProfileFormat`, `ProfileVersion`, `ProfileKdfTooLarge`,
-`ProfileKdfOutOfMemory`, `ProfileSearchTooLarge`, `ProfileImportOpen`, `ProfileExportTooLarge`, `ProfileLocked`, `ProfileBusy` (a
+`ProfileKdfOutOfMemory`, `ProfileSearchTooLarge`, `ProfileImportOpen`, `ProfileExportTooLarge`, `ProfileHiddenAmbiguous` (two or
+more hidden matches, O20), `ProfileLocked`, `ProfileBusy` (a
 writer that waited 120 s on a re-seal), `KeyLocked`; events
 `ProfileIndexMismatch`, `ProfileRollback`, `ProfileDamaged`. No code, event or `Debug` carries an id, a name, a passphrase or a path.
 The `ua-rs` calls (the profile arena, the Argon2id wraps, the item seal and HMAC name, the label seal, the export chunk seal, the

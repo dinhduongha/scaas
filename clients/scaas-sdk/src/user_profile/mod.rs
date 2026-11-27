@@ -15,9 +15,9 @@ pub use scaas_profile::settings::{
 };
 pub use scaas_profile::{
     check_name, keychain_name, name_key, same_name, Anchor, ConfirmDeleteUnreadable,
-    ConfirmPurgeTombstones, ConfirmRebuildIndex, Core, CoreOpen, Error, Head, Item, KdfParams,
-    Manifest, MatrixStore, Plain, ProfileEvent, ProfileInfo as UserProfileInfo, ProfileKeychain,
-    ProfilePart, ProfileSettings, Verdict, WriteGuard, PART_MAX,
+    ConfirmPurgeTombstones, ConfirmRebuildIndex, Core, CoreOpen, Error, Head, HiddenMatch, Item,
+    KdfParams, Manifest, MatrixStore, Plain, ProfileEvent, ProfileInfo as UserProfileInfo,
+    ProfileKeychain, ProfilePart, ProfileSettings, Verdict, WriteGuard, PART_MAX,
 };
 
 use crate::error::SdkError;
@@ -251,7 +251,8 @@ impl UserProfiles {
     }
 
     /// Opens a hidden profile by its name and passphrase (spec §8): the counted search over the profile directories;
-    /// `ProfileOpen` for every failure but `ProfileInUse`, `ProfileSearchTooLarge`, `ProfileKdfOutOfMemory`.
+    /// `ProfileOpen` for every failure but `ProfileInUse`, `ProfileSearchTooLarge`, `ProfileKdfOutOfMemory` and
+    /// `ProfileHiddenAmbiguous` (two or more match: [`UserProfiles::hidden_matches`], owner 2026-11-28).
     pub async fn open_hidden(
         &self,
         name: Arc<SecretBytes>,
@@ -259,6 +260,31 @@ impl UserProfiles {
     ) -> Result<Arc<UserProfile>, SdkError> {
         let p = self.profiles.clone();
         let open = run(move || name.with2(&passphrase, |n, s| p.open_hidden(n, s))).await?;
+        Ok(self.profile(open))
+    }
+
+    /// The hidden profiles `name` and `passphrase` open, as opaque choices (owner 2026-11-28; after `open_hidden`'s
+    /// `ProfileHiddenAmbiguous`): their place and creation time, no id; none opened.
+    pub async fn hidden_matches(
+        &self,
+        name: Arc<SecretBytes>,
+        passphrase: Arc<SecretBytes>,
+    ) -> Result<Vec<HiddenMatch>, SdkError> {
+        let p = self.profiles.clone();
+        run(move || name.with2(&passphrase, |n, s| p.hidden_matches(n, s))).await
+    }
+
+    /// Opens the hidden profile `choice` names among those `name` and `passphrase` open (owner 2026-11-28): the search run
+    /// again, a choice that no longer holds `ProfileOpen`.
+    pub async fn open_hidden_match(
+        &self,
+        name: Arc<SecretBytes>,
+        passphrase: Arc<SecretBytes>,
+        choice: HiddenMatch,
+    ) -> Result<Arc<UserProfile>, SdkError> {
+        let p = self.profiles.clone();
+        let open =
+            run(move || name.with2(&passphrase, |n, s| p.open_hidden_match(n, s, choice))).await?;
         Ok(self.profile(open))
     }
 
@@ -685,6 +711,7 @@ impl From<Error> for SdkError {
             Error::ConfirmationMissing => SdkError::ConfirmationMissing,
             Error::ProfileImportOpen => SdkError::ProfileImportOpen,
             Error::ProfileExportTooLarge => SdkError::ProfileExportTooLarge,
+            Error::ProfileHiddenAmbiguous => SdkError::ProfileHiddenAmbiguous,
         }
     }
 }
@@ -718,7 +745,8 @@ fn store_code(e: Error) -> StoreError {
         | Error::ProfileSearchTooLarge
         | Error::ConfirmationMissing
         | Error::ProfileImportOpen
-        | Error::ProfileExportTooLarge => StoreError::Io,
+        | Error::ProfileExportTooLarge
+        | Error::ProfileHiddenAmbiguous => StoreError::Io,
     }
 }
 

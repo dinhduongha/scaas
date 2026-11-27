@@ -37,6 +37,7 @@ pub use anchor::{Anchor, Head, Verdict};
 pub use envelope::{Envelope, Kdf, KdfParams, State};
 pub use export::{ImportReview, ImportSource, FILE_MAX};
 pub use file::rev_of;
+pub use hidden::HiddenMatch;
 pub use lifecycle::{
     ConfirmDeleteUnbacked, ConfirmDeleteUnreadable, ConfirmPurgeTombstones, ConfirmRebuildIndex,
 };
@@ -125,6 +126,9 @@ codes! {
     ProfileImportOpen,
     /// an export's payload above 64 MiB (spec §10.1)
     ProfileExportTooLarge,
+    /// a hidden name and passphrase that open two or more hidden profiles (owner 2026-11-28): never one picked silently;
+    /// `hidden_matches` lists them, `open_hidden_match` opens the chosen one
+    ProfileHiddenAmbiguous,
 }
 
 impl std::fmt::Display for Error {

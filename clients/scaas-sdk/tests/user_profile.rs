@@ -74,7 +74,7 @@ fn file_of(dir: &Path, keys: &ProfileKeys, part: &str, name: &str) -> PathBuf {
 /// The store's codes reach the SDK by name: each `scaas-profile` code is the `SdkError` of the same name (none collapsed).
 #[test]
 fn store_codes_are_the_sdks() {
-    assert_eq!(Error::ALL.len(), 27);
+    assert_eq!(Error::ALL.len(), 28);
     for e in Error::ALL {
         assert_eq!(SdkError::from(*e).code(), e.code());
     }
@@ -1615,4 +1615,52 @@ async fn g1_purge_tombstones_through_sdk() {
         .await
         .unwrap();
     ups.open(id, None).await.unwrap();
+}
+
+/// Owner 2026-11-28 through the SDK: two hidden profiles of one (name, passphrase) (one moved in from another root, as two
+/// instances' concurrent `create_hidden` would leave them) are `ProfileHiddenAmbiguous` at `open_hidden`; `hidden_matches`
+/// lists both; `open_hidden_match` opens the chosen one.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hidden_duplicates_through_sdk() {
+    let base = tmp();
+    let root = |n: &str| base.join(n).to_string_lossy().into_owned();
+    let ups = UserProfiles::new(ProfilesConfig::new(root("a")))
+        .await
+        .unwrap();
+    let other = UserProfiles::new(ProfilesConfig::new(root("b")))
+        .await
+        .unwrap();
+    let mut ids = vec![];
+    for u in [&ups, &other] {
+        let h = u
+            .create_hidden(sec("Twin"), sec(PASS), Some(TEST_KDF))
+            .await
+            .unwrap();
+        ids.push(
+            h.core()
+                .dir()
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+        );
+        h.lock().await;
+    }
+    std::fs::rename(
+        base.join("b/p").join(&ids[1]),
+        base.join("a/p").join(&ids[1]),
+    )
+    .unwrap();
+    ids.sort();
+    assert_eq!(
+        code(ups.open_hidden(sec("Twin"), sec(PASS)).await),
+        "ProfileHiddenAmbiguous"
+    );
+    let m = ups.hidden_matches(sec("Twin"), sec(PASS)).await.unwrap();
+    assert_eq!(m.len(), 2);
+    let o = ups
+        .open_hidden_match(sec("Twin"), sec(PASS), m[1])
+        .await
+        .unwrap();
+    assert!(o.core().dir().ends_with(&ids[1]));
 }

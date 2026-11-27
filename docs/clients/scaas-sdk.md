@@ -745,7 +745,10 @@ path that makes a profile hidden or changes a hidden one's name or passphrase ru
 envelopes without a public name and the unusable directories (not the index), at most 32 (`ProfileSearchTooLarge`), runs max(count,
 4) KDFs at each envelope's own parameters, compares names by one helper (NFKC, then lower case), and opens only a single match;
 `ProfileOpen` for every failure. Owner 2026-11-27: the name is a label, not key material; nothing stronger than hidden from the list
-is offered.
+is offered. **Change (owner 2026-11-28; BUILT, `scaas-profile` `hidden_duplicates_listed_never_picked`, the SDK's
+`hidden_duplicates_through_sdk`):** two instances' concurrent `create_hidden` of one (name, passphrase) may both pass the duplicate
+check (accepted); a hidden open with two or more matches is `ProfileHiddenAmbiguous`, never a silent pick; `hidden_matches` lists
+them as opaque choices (place and creation time, no id) and `open_hidden_match` opens the chosen one after a fresh search.
 
 <a id="CLI-UPR-14"></a>**CLI-UPR-14** — **The instance lock is a non-blocking OS advisory lock held for the open profile's life**
 (controller call; BUILT: `scaas-profile` `tests/lock.rs`, `search_locks_only_the_match`; SPECIFIED: the CLI's side, wave 2; Web Locks

@@ -179,6 +179,8 @@ fn profile_codes_appended() {
         "KeyLocked",
         "ProfileRollback",
         "ProfileDamaged",
+        // owner 2026-11-28: two or more hidden matches
+        "ProfileHiddenAmbiguous",
     ];
     let at = OWN_CODES.iter().position(|c| *c == "Cancelled").unwrap();
     assert_eq!(&OWN_CODES[at + 1..], &new[..]);

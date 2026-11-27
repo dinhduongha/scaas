@@ -41,11 +41,28 @@ const DUMMY: Argon2Params = ProfileKeys::KDF_DEFAULT;
 #[cfg(feature = "test-hooks")]
 const DUMMY: Argon2Params = ProfileKeys::KDF_TEST;
 
+/// One of several hidden profiles a (name, passphrase) opens (owner 2026-11-28): an opaque choice, its place among the matches
+/// (by id, so by creation time) and its creation time from its UUIDv7 in ms; never its id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HiddenMatch {
+    pub index: u32,
+    pub created_ms: u64,
+}
+
 /// A candidate that matched: its id, its envelope's bytes as the search read them, its arena holding `DEK_p`.
 pub(crate) struct Found {
     id: String,
     bytes: Vec<u8>,
     keys: Arc<ProfileKeys>,
+}
+
+/// The choice of the match `f` at place `i`: its creation time the UUIDv7's first 48 bits.
+fn choice_of(i: usize, f: &Found) -> Result<HiddenMatch, Error> {
+    let hex: String = f.id.chars().filter(|c| *c != '-').take(12).collect();
+    Ok(HiddenMatch {
+        index: u32::try_from(i).map_err(|_| Error::ProfileOpen)?,
+        created_ms: u64::from_str_radix(&hex, 16).map_err(|_| Error::ProfileOpen)?,
+    })
 }
 
 fn lock_all(found: Vec<Found>) {
@@ -274,18 +291,65 @@ impl Profiles {
 
     /// Opens a hidden profile by its `name` and `passphrase`, both typed (spec §8): the search; on exactly one match its
     /// instance lock (`ProfileInUse`), its envelope read again under it (another than the search opened: `ProfileOpen`), the
-    /// open-time rules of spec §7.3, the store opened. Zero or several matches, and every other failure of the search,
-    /// `ProfileOpen`. Writes no index byte (never `last`).
+    /// open-time rules of spec §7.3, the store opened. Zero matches, and every other failure of the search, `ProfileOpen`;
+    /// two or more `ProfileHiddenAmbiguous` (owner 2026-11-28: never one picked silently; [`Profiles::hidden_matches`]). Writes
+    /// no index byte (never `last`).
     pub fn open_hidden(&self, name: &[u8], passphrase: &[u8]) -> Result<OpenProfile, Error> {
-        let name = std::str::from_utf8(name).map_err(|_| Error::ProfileOpen)?;
-        let mut found = search(&self.p, &self.heavy, self.kdf_max_kib, name, passphrase)?;
+        let mut found = self.matches(name, passphrase)?;
         let f = match found.len() {
             1 => found.pop().ok_or(Error::ProfileOpen)?,
-            _ => {
+            n => {
+                lock_all(found);
+                return Err(match n {
+                    0 => Error::ProfileOpen,
+                    _ => Error::ProfileHiddenAmbiguous,
+                });
+            }
+        };
+        self.open_found(&f).inspect_err(|_| f.keys.lock())
+    }
+
+    fn matches(&self, name: &[u8], passphrase: &[u8]) -> Result<Vec<Found>, Error> {
+        let name = std::str::from_utf8(name).map_err(|_| Error::ProfileOpen)?;
+        search(&self.p, &self.heavy, self.kdf_max_kib, name, passphrase)
+    }
+
+    /// The hidden profiles `name` and `passphrase` open, as opaque choices (owner 2026-11-28): the search of spec §8 (its runs
+    /// as `open_hidden`'s), every arena wiped; none opened.
+    pub fn hidden_matches(
+        &self,
+        name: &[u8],
+        passphrase: &[u8],
+    ) -> Result<Vec<HiddenMatch>, Error> {
+        let found = self.matches(name, passphrase)?;
+        let out = found
+            .iter()
+            .enumerate()
+            .map(|(i, f)| choice_of(i, f))
+            .collect();
+        lock_all(found);
+        out
+    }
+
+    /// Opens the hidden profile `choice` names among those `name` and `passphrase` open (owner 2026-11-28): the search run again,
+    /// the choice matched by its place and its creation time; a choice that no longer holds `ProfileOpen`.
+    pub fn open_hidden_match(
+        &self,
+        name: &[u8],
+        passphrase: &[u8],
+        choice: HiddenMatch,
+    ) -> Result<OpenProfile, Error> {
+        let mut found = self.matches(name, passphrase)?;
+        let at = usize::try_from(choice.index).unwrap_or(usize::MAX);
+        let chosen = found.get(at).map(|f| choice_of(at, f)) == Some(Ok(choice));
+        let f = match chosen {
+            true => found.swap_remove(at),
+            false => {
                 lock_all(found);
                 return Err(Error::ProfileOpen);
             }
         };
+        lock_all(found);
         self.open_found(&f).inspect_err(|_| f.keys.lock())
     }
 

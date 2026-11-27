@@ -206,6 +206,8 @@ own_codes! {
     /// user-profiles spec §7.2 "Errors": the store codes `StoreError::ProfileRollback` and `ProfileDamaged`, by name
     ProfileRollback,
     ProfileDamaged,
+    /// a hidden name and passphrase that open two or more hidden profiles (owner 2026-11-28): `hidden_matches` lists them
+    ProfileHiddenAmbiguous,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).
