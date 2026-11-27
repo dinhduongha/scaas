@@ -1558,3 +1558,31 @@ fn e6_name_helpers_reexported() {
     );
     assert_eq!(check_name("work").unwrap(), "work");
 }
+
+/// G-1 two-step (owner 2026-11-28) through the SDK: a copy of a deleted profile's directory put back under its id is
+/// `ProfileRollback`; `purge_tombstones` drops the marker and it opens. Control: the open before the delete.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn g1_purge_tombstones_through_sdk() {
+    use scaas_sdk::user_profile::{ConfirmDeleteProfile, ConfirmPurgeTombstones};
+    let base = tmp();
+    let root = base.join("root");
+    let ups = UserProfiles::new(ProfilesConfig::new(root.to_string_lossy().into_owned()))
+        .await
+        .unwrap();
+    let id = ups.list().await.unwrap()[0].id.clone();
+    let up = ups.open(id.clone(), None).await.unwrap();
+    let dir = root.join("p").join(&id);
+    let copy = base.join("copy");
+    std::fs::create_dir_all(copy.join("g0")).unwrap();
+    std::fs::copy(dir.join("profile.envelope"), copy.join("profile.envelope")).unwrap();
+    let name = ConfirmDeleteProfile {
+        name: sec("default"),
+    };
+    up.delete(name, None).await.unwrap();
+    std::fs::rename(&copy, &dir).unwrap();
+    assert_eq!(code(ups.open(id.clone(), None).await), "ProfileRollback");
+    ups.purge_tombstones(ConfirmPurgeTombstones {})
+        .await
+        .unwrap();
+    ups.open(id, None).await.unwrap();
+}

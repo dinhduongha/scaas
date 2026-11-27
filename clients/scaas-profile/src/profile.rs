@@ -29,6 +29,8 @@ const ROOT_LOCK: &str = "profiles.json.lock";
 pub(crate) const INSTANCE_LOCK: &str = "instance.lock";
 pub(crate) const BUILD_LOCK: &str = "build.lock";
 pub(crate) const TOMBSTONE: &str = ".deleted";
+/// `p/.tombstones/<id>`: an empty file per deleted id, kept until [`Profiles::purge_tombstones`] (owner 2026-11-28, review G-1).
+pub(crate) const MARKS: &str = ".tombstones";
 /// At most 32 profile directories under `p/` (spec §6).
 pub(crate) const DIRS_MAX: usize = 32;
 /// The keychain items of a profile (spec §5, §7.1, §7.2, §7.6), removed with its tombstone.
@@ -262,7 +264,12 @@ fn rev_at(bytes: &Option<Option<Vec<u8>>>) -> Option<u64> {
 /// The UUID-named directories of `p/` by id, each with its envelope and its bytes (`None`: missing or not usable).
 pub(crate) type Scan = Vec<(String, Option<(Envelope, Vec<u8>)>)>;
 
-/// Every UUID-named directory of `p` and its envelope and bytes, sorted by id.
+/// Whether id `id` of `p` carries a tombstone marker (owner 2026-11-28, review G-1): its directory is never opened.
+pub(crate) fn marked(p: &Path, id: &str) -> bool {
+    std::fs::symlink_metadata(p.join(MARKS).join(id)).is_ok()
+}
+
+/// Every UUID-named directory of `p` without a tombstone marker and its envelope and bytes, sorted by id.
 pub(crate) fn scan(p: &Path) -> Result<Scan, Error> {
     let mut out = Vec::new();
     for e in std::fs::read_dir(p).map_err(|_| Error::VaultIo)? {
@@ -275,7 +282,7 @@ pub(crate) fn scan(p: &Path) -> Result<Scan, Error> {
         else {
             continue;
         };
-        if !e.file_type().map_err(|_| Error::VaultIo)?.is_dir() {
+        if !e.file_type().map_err(|_| Error::VaultIo)?.is_dir() || marked(p, &id) {
             continue;
         }
         let env = read_envelope(&e.path(), &id).ok().flatten();
@@ -358,6 +365,14 @@ impl Profiles {
         lock_file(&self.root.join(ROOT_LOCK))
     }
 
+    /// The permanent tombstone marker of `id` written (`p/.tombstones/<id>`, empty; owner 2026-11-28, review G-1), before its
+    /// tombstone's rename or its keychain items' removal.
+    pub(crate) fn mark(&self, id: &str) -> Result<(), Error> {
+        let marks = self.p.join(MARKS);
+        mkdir(&marks)?;
+        file::write(&marks, &marks.join(id), b"")
+    }
+
     /// The keychain items of profile `id` removed (spec §10: a tombstone's).
     pub(crate) fn remove_keychain(&self, id: &str) -> Result<(), Error> {
         if let Some(kc) = &self.keychain {
@@ -402,10 +417,18 @@ impl Profiles {
                         self.event(ProfileEvent::ProfileDamaged);
                         remove_dir(&path)
                     }
-                    // the keychain items first, as a delete removes them: a failure keeps the tombstone for the next start
-                    Some(_held) => self.remove_keychain(id).and_then(|()| remove_dir(&path)),
+                    // the id marked first (an old copy put back later is refused, review G-1), then the keychain items, as a
+                    // delete removes them: a failure keeps the tombstone for the next start
+                    Some(_held) => self
+                        .mark(id)
+                        .and_then(|()| self.remove_keychain(id))
+                        .and_then(|()| remove_dir(&path)),
                     None => Ok(()),
                 })
+            } else if is_id(name) && marked(&self.p, name) {
+                // a copy put back under a deleted id: never opened (review G-1)
+                self.event(ProfileEvent::ProfileRollback);
+                Ok(())
             } else {
                 Ok(())
             };
@@ -680,6 +703,11 @@ impl Profiles {
         let is_dir = std::fs::symlink_metadata(&dir).is_ok_and(|m| m.is_dir());
         if !is_id(id) || !is_dir {
             return Err(Error::ProfileUnknown);
+        }
+        // a directory under a deleted id (a copy put back): never opened, its keychain items never read (review G-1)
+        if marked(&self.p, id) {
+            self.event(ProfileEvent::ProfileRollback);
+            return Err(Error::ProfileRollback);
         }
         let instance = try_lock_file(&dir.join(INSTANCE_LOCK))?.ok_or(Error::ProfileInUse)?;
         let (env, bytes) = read_envelope(&dir, id)?.ok_or(Error::ProfileFormat)?;

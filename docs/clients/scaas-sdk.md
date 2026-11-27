@@ -759,7 +759,11 @@ many seeds lack a backup and asks a second confirmation for them, and starts by 
 finishes; a directory without an envelope is reported, never removed; a locked visible profile is deleted with the name typed and a
 confirmation that its data is lost. A whole profile exports and imports by [CLI-UPR-17](#CLI-UPR-17). Owner 2026-11-27: a hidden
 profile whose passphrase is lost is neither named nor deleted by the app; the user removes its directory by hand; no call deletes
-unlisted directories.
+unlisted directories. **Change (owner 2026-11-28; BUILT, `scaas-profile` `g1_two_step_old_copy_after_a_tombstone_refused`, the
+SDK's `g1_purge_tombstones_through_sdk`):** a deleted id keeps a permanent marker, `p/.tombstones/<id>`, written by a delete before
+its rename and by start before it finishes a tombstone; a directory under a marked id is refused at start (`ProfileRollback`
+reported) and at open (`ProfileRollback`), never listed, searched or opened, its keychain items never used, until the user calls
+`purge_tombstones` with its confirm.
 
 <a id="CLI-UPR-16"></a>**CLI-UPR-16** — **Clients open a profile by name, a hidden one only through a prompt; the CLI never follows
 the last profile an app opened** (controller call; SPECIFIED, nothing built: the CLI's flags and commands, the apps' pickers,

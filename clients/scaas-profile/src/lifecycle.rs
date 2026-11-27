@@ -9,11 +9,14 @@
 //!   (a rename keeps open files on Unix), so no other instance opens the profile, and no start removes the tombstone, before
 //!   the delete has finished or died; it is released last.
 //! - No call deletes an unlisted (hidden) directory by id, nor a directory without a usable envelope (spec §10, Q-UP10).
+//! - **Tombstone markers** (owner 2026-11-28, review G-1): a delete writes `p/.tombstones/<id>` before its rename, and start
+//!   writes it before it finishes a tombstone; a directory under a marked id is never opened (`ProfileRollback`), until the
+//!   user calls [`Profiles::purge_tombstones`].
 use crate::file::try_lock_file;
 use crate::names::{is_id, same_name};
 use crate::profile::{
     read_envelope, remove_dir, remove_file, sync_dir, without, OpenProfile, Profiles,
-    INSTANCE_LOCK, TOMBSTONE,
+    INSTANCE_LOCK, MARKS, TOMBSTONE,
 };
 use crate::{Error, ProfilePart, Step};
 use std::fs::File;
@@ -31,6 +34,11 @@ pub struct ConfirmDeleteUnbacked {}
 /// The marker of [`Profiles::rebuild_index`] (spec §6: on demand with a typed confirm).
 #[derive(Debug, Clone, Copy)]
 pub struct ConfirmRebuildIndex {}
+
+/// The marker of [`Profiles::purge_tombstones`] (owner 2026-11-28): the user was told that a copy of a deleted profile put
+/// back afterwards opens again.
+#[derive(Debug, Clone, Copy)]
+pub struct ConfirmPurgeTombstones {}
 
 impl Profiles {
     /// Deletes the open profile `open` (spec §10 "delete"): `confirm_name` its name typed again; a profile holding a keystore
@@ -73,6 +81,14 @@ impl Profiles {
         self.entomb(id, instance)
     }
 
+    /// Every tombstone marker removed (owner 2026-11-28, review G-1): a copy of a deleted profile's directory put back under
+    /// its id opens again.
+    pub fn purge_tombstones(&self, _: ConfirmPurgeTombstones) -> Result<(), Error> {
+        let _root = self.root_lock()?;
+        remove_dir(&self.p.join(MARKS))?;
+        sync_dir(&self.p)
+    }
+
     /// The index rebuilt from the envelopes (spec §6, on demand): every visible profile listed, `last` dropped.
     pub fn rebuild_index(&self, _: ConfirmRebuildIndex) -> Result<(), Error> {
         let _root = self.root_lock()?;
@@ -88,6 +104,8 @@ impl Profiles {
         {
             let _root = self.root_lock()?;
             let (mut ix, at) = self.index_locked()?;
+            // the id marked before the rename (review G-1): a crash after it leaves the marker, a copy put back is refused
+            self.mark(id)?;
             std::fs::rename(self.p.join(id), &tomb).map_err(|_| Error::VaultIo)?;
             sync_dir(&self.p)?;
             self.died(Step::Tombstone)?;

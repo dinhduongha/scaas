@@ -13,9 +13,9 @@
 
 use scaas_profile::settings::{ChainSettings, Endpoint, EndpointList};
 use scaas_profile::{
-    keychain_name, uuid7, ConfirmDeleteUnbacked, Envelope, Error, ImportSource, KdfParams,
-    OpenProfile, ProfileEvent, ProfileKeychain, ProfilePart, ProfileSettings, Profiles,
-    ProfilesConfig,
+    keychain_name, uuid7, ConfirmDeleteUnbacked, ConfirmPurgeTombstones, Envelope, Error,
+    ImportSource, KdfParams, OpenProfile, ProfileEvent, ProfileKeychain, ProfilePart,
+    ProfileSettings, Profiles, ProfilesConfig,
 };
 use scaas_ua::wallet::ProfileKeys;
 use std::collections::HashMap;
@@ -774,4 +774,60 @@ fn f2_older_envelope_with_raised_rev_is_rollback() {
         p.open_hidden(b"Renamed", PASS).unwrap().info().hidden,
         "control"
     );
+}
+
+/// `from`'s tree copied to `to` (an old copy of a profile directory a writer keeps).
+fn copy_dir(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for e in std::fs::read_dir(from).unwrap() {
+        let e = e.unwrap();
+        match e.file_type().unwrap().is_dir() {
+            true => copy_dir(&e.path(), &to.join(e.file_name())),
+            false => drop(std::fs::copy(e.path(), to.join(e.file_name())).unwrap()),
+        }
+    }
+}
+
+/// G-1 two-step (owner 2026-11-28): a tombstone start finishes leaves a permanent marker of its id, so an old copy put back
+/// under that id afterwards is refused at start (`ProfileRollback` reported) and at open (`ProfileRollback`), never listed or
+/// opened, its keychain items never used; a delete writes the marker before its rename. Both forms: the live directory
+/// renamed to its tombstone by a writer of the root, and a delete. Control: `purge_tombstones` drops the markers, after
+/// which the copy opens.
+#[test]
+fn g1_two_step_old_copy_after_a_tombstone_refused() {
+    let _k = kdf_lock();
+    let (root, kc) = (tmp(), Arc::new(Keychain::default()));
+    let (p, o, id, dir) = protected(&root, Some(&kc));
+    o.lock();
+    let old = root.join("old-copy");
+    copy_dir(&dir, &old);
+    drop(p);
+    std::fs::rename(&dir, dir.with_file_name(format!("{id}.deleted"))).unwrap();
+    drop(Profiles::new(cfg(&root, Some(&kc))).unwrap());
+    assert!(
+        !kc.has(&id, "head"),
+        "the tombstone went with its keychain items"
+    );
+    copy_dir(&old, &dir);
+    let p = Profiles::new(cfg(&root, Some(&kc))).unwrap();
+    assert!(p.drain_events().contains(&ProfileEvent::ProfileRollback));
+    assert!(p.list().unwrap().iter().all(|i| i.id != id), "not listed");
+    assert_eq!(code(p.open(&id, Some(PASS))), "ProfileRollback");
+    assert!(
+        !kc.has(&id, "head"),
+        "its keychain items never written again"
+    );
+
+    // a delete marks its id before the rename: a copy put back is refused the same way
+    let other = p.create("Other").unwrap().id;
+    let o2 = p.open(&other, None).unwrap();
+    let odir = o2.core().dir().to_path_buf();
+    copy_dir(&odir, &root.join("other-copy"));
+    p.delete(&o2, b"Other", None).unwrap();
+    copy_dir(&root.join("other-copy"), &odir);
+    assert_eq!(code(p.open(&other, None)), "ProfileRollback");
+
+    p.purge_tombstones(ConfirmPurgeTombstones {}).unwrap();
+    p.open(&id, Some(PASS)).unwrap();
+    p.open(&other, None).unwrap();
 }

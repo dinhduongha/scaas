@@ -15,9 +15,9 @@ pub use scaas_profile::settings::{
 };
 pub use scaas_profile::{
     check_name, keychain_name, name_key, same_name, Anchor, ConfirmDeleteUnreadable,
-    ConfirmRebuildIndex, Core, CoreOpen, Error, Head, Item, KdfParams, Manifest, MatrixStore,
-    Plain, ProfileEvent, ProfileInfo as UserProfileInfo, ProfileKeychain, ProfilePart,
-    ProfileSettings, Verdict, WriteGuard, PART_MAX,
+    ConfirmPurgeTombstones, ConfirmRebuildIndex, Core, CoreOpen, Error, Head, Item, KdfParams,
+    Manifest, MatrixStore, Plain, ProfileEvent, ProfileInfo as UserProfileInfo, ProfileKeychain,
+    ProfilePart, ProfileSettings, Verdict, WriteGuard, PART_MAX,
 };
 
 use crate::error::SdkError;
@@ -265,6 +265,13 @@ impl UserProfiles {
     pub async fn rebuild_index(&self, confirm: ConfirmRebuildIndex) -> Result<(), SdkError> {
         let p = self.profiles.clone();
         run(move || p.rebuild_index(confirm)).await
+    }
+
+    /// Every tombstone marker removed (owner 2026-11-28, review G-1): a profile directory put back under a deleted id is
+    /// refused (`ProfileRollback`) until this call, after which it opens again.
+    pub async fn purge_tombstones(&self, confirm: ConfirmPurgeTombstones) -> Result<(), SdkError> {
+        let p = self.profiles.clone();
+        run(move || p.purge_tombstones(confirm)).await
     }
 
     /// Opens an export (spec §10.1, the first call): read and verified whole in memory, nothing written; its keystore checked
