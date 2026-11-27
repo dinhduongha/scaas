@@ -1,0 +1,9 @@
+# up7 mutants (name | outcome | commit | test | first failure line)
+the journal ignored at open | killed | 86e1192a8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test reseal -- --exact g4_crash_at_each_step | panicked at tests/reseal.rs:221:9:
+the envelope renamed before the generation is complete | killed | 86e1192a8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test reseal -- --exact g4_crash_at_each_step | panicked at tests/reseal.rs:217:10:
+removing every generation other than gen | killed | 86e1192a8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test reseal -- --exact generations_older_envelope_kept | panicked at tests/reseal.rs:319:5:
+removing a lower generation before the wrap opens | killed | 86e1192a8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test reseal -- --exact generations_older_envelope_kept | panicked at tests/reseal.rs:323:5:
+DEK_p kept at a passphrase change | killed | 86e1192a8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test reseal -- --exact g5_old_envelope_opens_nothing_after_change | panicked at tests/reseal.rs:391:5:
+tombstones carried into the new generation | killed | 86e1192a8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test reseal -- --exact tombstones_dropped_at_reseal | panicked at tests/reseal.rs:407:5:
+the store write lock not held during the re-seal | killed | 86e1192a8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test reseal -- --exact writer_through_change_waits_and_lands | panicked at tests/reseal.rs:267:9:
+7 mutants, 7 killed, 0 survived, 0 not loaded, 0 other failure
