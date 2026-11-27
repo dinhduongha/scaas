@@ -87,3 +87,4 @@ UP6b | SDK suites over the changed spawn / chain paths: --lib; wallet, wallet_op
 UP6b | features | 8fb61b159 + UP6b files | 0 | check_test_features ok, every control True; feature_tree 5 / 5
 UP6b | fmt rust toml py | 8fb61b159 + UP6b files | 0 | every part ok
 UP6b | docs | 8fb61b159 + UP6b files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
+UP6b | mutants up6 part b (one at a time: run "<name>") | 7fea4c179 | 0 | close not called at lock: killed (left "Ok"); the closed flag not checked: killed (left "ChainUnknown"); record 11 mutants, 11 killed, 0 survived, 0 not loaded, 0 other failure (part a rows kept at aa921c1f7)
