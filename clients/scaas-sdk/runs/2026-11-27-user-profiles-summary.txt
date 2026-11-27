@@ -6,3 +6,4 @@ UP1 | ck | ae584748d + UP1 files (a detached worktree: the shared tree held anot
 UP1 | ck-gen | ae584748d tree dirty | 0 | profile-vectors.mjs into a mktemp dir, diff -r against smartcontracts/vectors/profile: identical (4 files)
 UP1 | fmt js | ae584748d tree dirty | 0 | format.sh --check js with the UP1 files staged: js ok
 UP1 | docs | ae584748d tree dirty | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
+UP1 | mutants | d0b16db55 | 0 | 5 mutants, 5 killed, 0 survived, 0 not loaded, 0 other failure (run in a detached worktree at d0b16db55)
