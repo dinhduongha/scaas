@@ -703,7 +703,7 @@ seed, key or name; it reaches the client only to name keychain items, and `UserP
 public names; a one-time move from the CLI's data directory into "default"** (controller call; BUILT: `scaas-profile`
 `g12_root_modes_and_symlink`, `g10_rebuild_lists_every_visible`, `tests/lifecycle.rs` `migration_moves_into_default`,
 `g4_crash_at_each_migration_step`, `legacy_beside_profiles_reported`, the sources given as `ProfilesConfig.legacy` and
-`legacy_overlay`; migration's step (3) at `set_passphrase`'s commit, a controller call pending owner confirmation (decisions);
+`legacy_overlay`; migration's step (3) at `set_passphrase`'s commit, owner 2026-11-28 (decisions);
 SPECIFIED: the CLI computing the source paths, wave 2). Profiles sit in `p/<id>/`
 under a root the SDK tightens to `0700` only when it holds profiles or was made by the SDK (another wider directory refused, a
 symlinked root refused); on mobile the root is the app's private directory and the app supplies only keychain items. A visible

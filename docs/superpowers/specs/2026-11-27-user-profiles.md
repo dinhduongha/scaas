@@ -50,6 +50,7 @@ ARCH-POS-15. Order of sources: AGENTS.md "Which source wins".
 | O19 | 2026-11-28 | The reverse of a strengthening counts as weakening and needs the profile passphrase: a chain profile's `strict_majority` turned off, a lowered cap raised or removed (per chain profile and global), alongside the list's turning the idle lock off or lengthening it and turning the clipboard on (§7.7); the import's filter keeps only what strengthens the defaults (review G-5, A-15). | CLI-UPR-26 |
 | O20 | 2026-11-28 | Two instances running `create_hidden` with one (name, passphrase) at once may both pass the duplicate search (no lock is held across a KDF): accepted. A hidden open never picks silently: two or more matches is **`ProfileHiddenAmbiguous`**; `hidden_matches(name, passphrase)` lists them as opaque choices (`HiddenMatch { index, created_ms }`: the place among the matches by id order and the creation time from the UUIDv7, never the id), and `open_hidden_match(name, passphrase, choice)` runs the search again and opens the choice that still holds by place and creation time, else `ProfileOpen` (§8). | CLI-UPR-13 |
 | O21 | 2026-11-28 | `ProfileBusy` and `ProfilePartFull` become `StoreError` codes: the store face passes them through by name (they were `Unavailable`), `vault::io` maps each to the `SdkError` of the same name, a foreign or wasm store names them, and every SDK caller sees them (§7.2 "Errors"). | CLI-UPR-22 |
+| O22 | 2026-11-28 | The migration's `migration: pending` is cleared at `set_passphrase`'s commit (the re-seal's new envelope carries none), not as a step of the move: an unprotected `g0` accepts the moved keystore only under `migration: pending`, so the flag stays until the seal (§12's step order fixed to the code). | CLI-UPR-11 |
 
 Standing rules applied: secrets never leave the SDK and every KDF, AEAD and MAC runs in `ua-rs` (CLI-SDK-01, CLI-SDK-02); fail closed
 with named errors; no decryption oracle (ARCH-POS-13); every RPC consumer takes a list of nodes (ARCH-POS-15); the node is open and
@@ -748,7 +749,9 @@ Every chain is test-only, so **a one-time move into "default" is enough**; no ol
 - **Steps:** (1) create "default" with `migration: pending` (unprotected, as at create, its row written); (2) move each legacy item
   into its `g0/` by `rename(2)` (same filesystem; copy, `fsync`, then remove across filesystems); re-name the keychain anchor and a
   seed's platform key under the id, or rewrite the anchor from the moved container (as `accept_rollback` writes it); move the overlay
-  into `settings`; (3) clear `migration`. Each step is idempotent: an item already moved is absent at the source. A process of the old
+  into `settings`; (3) `migration: pending` is cleared by `set_passphrase`'s commit, whose new envelope carries none (owner O22,
+  2026-11-28): an unprotected `g0` accepts the moved keystore only under `migration: pending`, so the flag stays from the move
+  until the seal. Each step is idempotent: an item already moved is absent at the source. A process of the old
   binary still running is held off by the legacy `keystore.lock`, and its later writes at the old path are reported at the next start.
 - A migrated "default" holds secrets while unprotected, the one case: every `vault` and `app_core` call on it is refused
   `ProfilePassphraseRequired` until `set_passphrase` seals it (§7.3: the plain `g0` is removed only after the commit).
