@@ -116,6 +116,8 @@ pub struct Client {
     pub held: Mutex<BTreeSet<String>>,
     /// `send_event` fails (`MatrixRoom`): a transport failure for that store only
     pub fail_send: AtomicBool,
+    /// `hold_invite(_, true)` refused, as `scaas-matrix` refuses a room the account uses as a Matrix room
+    pub refuse_hold: AtomicBool,
 }
 
 impl Client {
@@ -126,6 +128,7 @@ impl Client {
             calls: Mutex::new(vec![]),
             held: Mutex::new(BTreeSet::new()),
             fail_send: AtomicBool::new(false),
+            refuse_hold: AtomicBool::new(false),
         })
     }
     fn rec(&self, call: &str, room: &str) {
@@ -263,6 +266,9 @@ impl MatrixTransport for Client {
     }
     async fn hold_invite(&self, room: &str, hold: bool) -> Result<(), TransportError> {
         self.rec("hold_invite", room);
+        if hold && self.refuse_hold.load(Ordering::SeqCst) {
+            return Err(no_room());
+        }
         let mut h = self.held.lock().unwrap();
         if hold {
             h.insert(room.into());

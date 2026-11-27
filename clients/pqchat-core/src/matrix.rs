@@ -37,6 +37,9 @@ pub const HISTORY_MAX: usize = 4096;
 pub const MXIDS_MAX: usize = 8;
 /// Events kept per room while the seed is locked; past it the room is read again from its history at unlock.
 pub const LOCKED_MAX: usize = 64;
+/// Bound rooms listed for [`PqChat::tell_bound_rooms`], at most.
+pub const BOUND_MAX: usize = 4096;
+const BOUND_INDEX: &str = "mroom-index";
 
 /// The content of the event carrying `env` under `hint`.
 pub fn event(hint: &[u8], env: &[u8]) -> Value {
@@ -186,7 +189,7 @@ impl PqChat {
             }),
             _ => Err(PqChatError::MatrixRoom),
         })?;
-        Ok(())
+        self.index_bound(room)
     }
 
     /// The Matrix ids `ua` asserted (each by its contact card or an envelope signed by `ua` received from that sender), at
@@ -292,18 +295,61 @@ impl PqChat {
             if !members.iter().all(|m| *m == me || known.contains(&m)) {
                 return refuse(RoomRefusal::JoinedBefore);
             }
+            Items(&*self.store).update::<RoomBind, _>(&room_key(room), |_| {
+                Ok(RoomBind {
+                    session: Some(sid.clone()),
+                    created: false,
+                })
+            })?;
         } else {
             t.join(room).await?;
-            t.hold_invite(room, false).await?;
+            // the binding written before anything else can fail, so a failure below never leaves a joined room unbound
+            Items(&*self.store).update::<RoomBind, _>(&room_key(room), |_| {
+                Ok(RoomBind {
+                    session: Some(sid.clone()),
+                    created: false,
+                })
+            })?;
+            // the invite is no longer held (the bound room is the session's from here; a failed release changes nothing)
+            let _ = t.hold_invite(room, false).await;
         }
-        Items(&*self.store).update::<RoomBind, _>(&room_key(room), |_| {
-            Ok(RoomBind {
-                session: Some(sid.clone()),
-                created: false,
-            })
-        })?;
+        self.index_bound(room)?;
         t.bound(room).await?;
         Ok(RoomUse::Bound)
+    }
+
+    /// `room` added to the list of bound rooms (at most [`BOUND_MAX`], the oldest dropped), read by
+    /// [`PqChat::tell_bound_rooms`].
+    fn index_bound(&self, room: &str) -> Result<(), PqChatError> {
+        Items(&*self.store).update::<Vec<String>, _>(BOUND_INDEX, |v| {
+            let mut v = v.unwrap_or_default();
+            if !v.iter().any(|r| r == room) {
+                v.push(room.to_string());
+            }
+            while v.len() > BOUND_MAX {
+                v.remove(0);
+            }
+            Ok(v)
+        })?;
+        Ok(())
+    }
+
+    /// Every room this device binds to an accepted session told to the attached transport ([`MatrixTransport::bound`]), so
+    /// a Matrix client that knows none of them (a fresh device, a new Matrix login, a profile without a store key) treats
+    /// them as PqChat rooms before any session is opened. The app calls it after [`PqChat::attach_matrix`]. How many.
+    pub async fn tell_bound_rooms(&self) -> Result<usize, PqChatError> {
+        let t = self.transport()?;
+        let rooms: Vec<String> = Items(&*self.store).get(BOUND_INDEX)?.unwrap_or_default();
+        let mut n = 0;
+        for room in rooms {
+            if let Some(s) = self.room_session(&room)? {
+                if self.is_accepted(&s)? {
+                    t.bound(&room).await?;
+                    n += 1;
+                }
+            }
+        }
+        Ok(n)
     }
 
     /// `Bound`, told to the transport when one is attached (none attached: nothing to tell).

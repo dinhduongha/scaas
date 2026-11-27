@@ -363,3 +363,27 @@ fixed; P3s fixed or recorded with a reason. The changes, by area of this spec:
 - **Supply chain (D-6).** The lockfile's crates published after 2026-11-13 are moved back to their newest release at least 14
   days old where the graph allows; the rest are named in the gate summary.
 
+### 15.1 Revision 3: Fable's re-check of the P1 fixes at `307474279` (2026-11-27)
+
+Report and rulings: `scratchpad/scaas-matrix-recheck-20261127-1928/` (`fable-R.md`, `STATUS.md`). Verdict: rework for M1, approve
+with fixes for F-1, M2, M3; the record cipher checked out.
+
+- **R-1 (P1):** a hold asks the homeserver whether the account is joined (`joined_rooms`), never matrix-sdk's local view a fresh
+  login or a late sync lacks; no answer, no hold (fail closed).
+- **R-2, R-3 (P2):** the marks keep two sets: the user's own (rooms the user's sessions create, join or bind; at most 4,096, kept
+  after a leave) and the held invites (pending sessions someone else describes; at most 256, the oldest dropped; released by
+  `hold_invite(room, false)`, a released room returns to Matrix; a held room the session then uses moves to the own set). A
+  stranger's sessions fill only the held set. A marked id is at most 255 printable ASCII bytes.
+- **R-4 (P2):** `logout` on a closed handle deletes nothing (`MatrixSession`); `logout` and a failed login delete the stores only
+  under the directory's lock (`wipe`), so never under another client.
+- **R-5 (P2):** `pqchat-core` lists its bound rooms and `tell_bound_rooms()` tells each accepted one to the transport; the app calls
+  it after `attach_matrix`, so a new Matrix login knows its PqChat rooms before any session is opened.
+- **R-6 (P2):** tests that can fail: `preview` refused by a transport that refuses the hold (`pqchat-core` `recovery.rs`), the record
+  cipher opening only under its store key (unit), the server-side joined check (an e2e mutant).
+- **R-8 (P3):** `join_room` writes the binding before it releases the hold, and the release is best effort.
+- **R-9 (P3):** the test wrappers forward `bound`.
+- **R-10 (P3):** marking a room already in the own set takes no lock and copies nothing.
+- **Recorded:** R-7 (`close` frees the lock while a call already in flight still holds a client clone; SQLite closes its
+  connections on a background thread: the crate cannot cancel matrix-sdk's own tasks), R-11 (a deleted or rolled-back marks
+  record opens as no marks: the store's own integrity, CLI-UPR-28's anchor is the profile's).
+

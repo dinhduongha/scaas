@@ -46,7 +46,8 @@ tokio runtime and one Matrix login ([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12)'s one 
 `app-matrix` becomes the crate `clients/scaas-matrix` ([scaas-matrix.md](scaas-matrix.md)), which implements `MatrixTransport` and is
 used by scaas-app's front-ends, `scaas-tui` and this crate's e2e (PLANNED there: the e2e still runs its test-only HTTP client). The
 trait, its error `TransportError`, its value types and `conformance` live in the trait-only crate `clients/pqchat-transport`
-([CLI-MTX-01](scaas-matrix.md#CLI-MTX-01)), re-exported here at `pqchat_core::matrix`, so neither crate depends on the other; this
+([CLI-MTX-01](scaas-matrix.md#CLI-MTX-01)), re-exported here at `pqchat_core::matrix`, so neither crate depends on the other; every bound room is told to the
+transport (`bound`) on each `join_room`, and all of them by `tell_bound_rooms`, which the app calls after `attach_matrix`; this
 crate's normal graph still holds no Matrix crate (`tests/deps.rs`). **Each user profile has its own Matrix**:
 its logins, session, store, crypto keys and device id are sealed in that profile and shared with no other; the app runs one
 `scaas-matrix` client per open profile, not per app, and a profile switch closes it before the other profile's opens. So "the app's

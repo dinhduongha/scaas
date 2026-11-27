@@ -74,10 +74,12 @@ sent unless the user turned typing on; every sync says `set_presence=offline` an
 receipt, typing notice or presence is ever sent, whatever the settings.
 
 <a id="CLI-MTX-06"></a>**CLI-MTX-06** — **Two room kinds that never mix** (CLI-PQC-19 G1; the means a controller call 2026-11-27). A
-room id (at most 255 bytes) the transport created, joined, holds an invite to, or used for a session `pqchat-core` has bound
-(`bound`, `send_event`, `history`, `invite`, `remove`, `set_admin`) is marked PqChat in the sealed marks record, the mark kept after
-a leave; every other room is Matrix. An invite cannot be held for a room the account is joined to as a Matrix room
-(`MatrixRoomKind`): a session someone else describes never takes a room the user already uses. The Matrix room list never shows a
+room id (at most 255 printable ASCII bytes) the transport created, joined or used for a session `pqchat-core` has bound (`bound`,
+`send_event`, `history`, `invite`, `remove`, `set_admin`; `pqchat-core`'s `tell_bound_rooms` names them all to a new login) is marked
+PqChat in the sealed marks record, kept after a leave (at most 4,096); an invite held for a pending session counts as PqChat while
+held (at most 256, the oldest dropped, released by `hold_invite(room, false)`); every other room is Matrix. An invite cannot be held
+for a room the homeserver says the account is joined to as a Matrix room (`MatrixRoomKind`; no answer, no hold): a session someone
+else describes never takes a room the user already uses. The Matrix room list never shows a
 PqChat room, joined or invited; the crate refuses a front-end's Matrix action in a PqChat room (`MatrixRoomKind`): sending text, a
 receipt, typing, reading its timeline, accepting the invite; leaving or declining is allowed in either kind. Until `pqchat-core`
 previews a pending session, its invite is an ordinary invite to the crate: the scaas build previews pending sessions before it lists

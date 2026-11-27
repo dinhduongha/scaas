@@ -514,4 +514,7 @@ impl MatrixTransport for LastN {
     async fn hold_invite(&self, room: &str, hold: bool) -> Result<(), TransportError> {
         self.inner.hold_invite(room, hold).await
     }
+    async fn bound(&self, room: &str) -> Result<(), TransportError> {
+        self.inner.bound(room).await
+    }
 }

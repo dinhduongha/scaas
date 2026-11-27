@@ -43,6 +43,8 @@ pub enum Receipt {
 
 /// A room id's length at most (the Matrix spec's bound).
 pub const ROOM_ID_MAX: usize = 255;
+/// Held invites kept at most (pending sessions someone else describes; the oldest dropped past it).
+pub const HELD_MAX: usize = 256;
 /// PqChat rooms marked at most per profile.
 pub const MARKS_MAX: usize = 4096;
 /// The session record's bound.
@@ -50,52 +52,82 @@ pub const SESSION_MAX: usize = 8 * 1024;
 /// The settings record's bound.
 pub const SETTINGS_MAX: usize = 4 * 1024;
 /// The marks record's bound (4,096 room ids of at most 255 bytes, with JSON's quotes, commas and frame).
-pub const MARKS_RECORD_MAX: usize = MARKS_MAX * (ROOM_ID_MAX + 3) + 64;
+pub const MARKS_RECORD_MAX: usize = (MARKS_MAX + HELD_MAX) * (ROOM_ID_MAX + 3) + 64;
 /// A text to send, at most (a Matrix event is at most 65,536 bytes).
 pub const TEXT_MAX: usize = 60_000;
 /// Events of a page, at most.
 pub const PAGE_MAX: u32 = 100;
 
-/// The rooms of a profile marked PqChat: created, joined or used by the transport for a bound session, or an invite it holds
-/// unanswered (CLI-PQC-08). A mark is kept after a leave. Only a room id (at most 255 bytes) is marked.
+/// The rooms of a profile marked PqChat. `pqchat`: rooms the user's own sessions use (created, joined or used by the transport
+/// for a bound session), kept after a leave, at most [`MARKS_MAX`]. `held`: invites held unanswered for pending sessions someone
+/// else describes (CLI-PQC-08), at most [`HELD_MAX`], the oldest dropped past it, released by `hold(room, false)`; a stranger's
+/// sessions fill only this set. Only a room id (at most 255 printable ASCII bytes) is marked.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Marks {
     pqchat: BTreeSet<String>,
+    #[serde(default)]
+    held: Vec<String>,
+}
+
+/// A room id as the crate marks it: at most 255 bytes, printable ASCII, parsed by ruma (matrix-sdk turns on ruma's
+/// arbitrary-length ids, so the spec's bound is checked here).
+fn room_id_ok(room: &str) -> bool {
+    room.len() <= ROOM_ID_MAX
+        && room.bytes().all(|b| (0x21..=0x7e).contains(&b))
+        && RoomId::parse(room).is_ok()
 }
 
 impl Marks {
     pub fn kind(&self, room: &str) -> RoomKind {
-        if self.pqchat.contains(room) {
+        if self.pqchat.contains(room) || self.held.iter().any(|h| h == room) {
             RoomKind::PqChat
         } else {
             RoomKind::Matrix
         }
     }
 
-    /// `room` marked PqChat; `MatrixArgument` for a string that is not a room id or past [`MARKS_MAX`].
+    /// Whether `room` is in the user's own set (no write needed to mark it).
+    pub fn marked(&self, room: &str) -> bool {
+        self.pqchat.contains(room)
+    }
+
+    /// `room` marked PqChat for good (a room the user's own session uses; a held invite of it moves here); `MatrixArgument`
+    /// for a string that is not a room id or past [`MARKS_MAX`].
     pub fn mark(&mut self, room: &str) -> Result<(), MatrixError> {
-        // matrix-sdk turns on ruma's arbitrary-length ids: the spec's 255 bytes checked here
-        if room.len() > ROOM_ID_MAX || RoomId::parse(room).is_err() {
+        if !room_id_ok(room) {
             return Err(MatrixError::MatrixArgument);
         }
         if !self.pqchat.contains(room) && self.pqchat.len() >= MARKS_MAX {
             return Err(MatrixError::MatrixArgument);
         }
+        self.held.retain(|h| h != room);
         self.pqchat.insert(room.to_string());
         Ok(())
     }
 
-    /// An invite held (`hold`) marks the room PqChat, unless the account is joined to it as a Matrix room (`joined_matrix`:
-    /// joined and not marked): a session someone else describes cannot take over a room the user already uses
-    /// (`MatrixRoomKind`). Released, a room stays as it is.
+    /// An invite held (`hold`): the room counts as PqChat while held, unless the account is joined to it as a Matrix room
+    /// (`joined_matrix`: joined, the caller asked the server, and not in the user's own set): a session someone else describes
+    /// cannot take over a room the user already uses (`MatrixRoomKind`). Past [`HELD_MAX`] the oldest hold is dropped.
+    /// Released (`!hold`), a held room returns to Matrix; a room of the user's own set stays.
     pub fn hold(&mut self, room: &str, hold: bool, joined_matrix: bool) -> Result<(), MatrixError> {
+        if !room_id_ok(room) {
+            return Err(MatrixError::MatrixArgument);
+        }
         if !hold {
+            self.held.retain(|h| h != room);
             return Ok(());
         }
-        if joined_matrix && self.kind(room) == RoomKind::Matrix {
+        if self.pqchat.contains(room) || self.held.iter().any(|h| h == room) {
+            return Ok(());
+        }
+        if joined_matrix {
             return Err(MatrixError::MatrixRoomKind);
         }
-        self.mark(room)
+        if self.held.len() >= HELD_MAX {
+            self.held.remove(0);
+        }
+        self.held.push(room.to_string());
+        Ok(())
     }
 
     /// Whether a room belongs in the list `filter` asks for.
@@ -228,9 +260,35 @@ mod tests {
         assert_eq!(m.kind("!m:x"), RoomKind::Matrix);
         assert!(m.shows(RoomFilter::Matrix, "!m:x"));
         assert!(!m.shows(RoomFilter::PqChat, "!m:x"));
-        // a released invite stays PqChat
+        // a released invite returns to Matrix; a room of the user's own set stays PqChat when released
         m.hold("!h:x", false, false).unwrap();
-        assert_eq!(m.kind("!h:x"), RoomKind::PqChat);
+        assert_eq!(m.kind("!h:x"), RoomKind::Matrix);
+        m.hold("!p:x", false, false).unwrap();
+        assert_eq!(m.kind("!p:x"), RoomKind::PqChat);
+        // a held invite the user's session then joins moves to the own set and stays after a release
+        m.hold("!j:x", true, false).unwrap();
+        m.mark("!j:x").unwrap();
+        m.hold("!j:x", false, false).unwrap();
+        assert_eq!(m.kind("!j:x"), RoomKind::PqChat);
+    }
+
+    #[test]
+    fn strangers_fill_only_the_held_set() {
+        let mut m = Marks::default();
+        m.mark("!own:x").unwrap();
+        for i in 0..HELD_MAX + 10 {
+            m.hold(&format!("!h{i}:x"), true, false).unwrap();
+        }
+        // bounded, the oldest dropped; the own set untouched and still open to the user's rooms
+        assert_eq!(m.kind("!h0:x"), RoomKind::Matrix);
+        assert_eq!(m.kind(&format!("!h{}:x", HELD_MAX + 9)), RoomKind::PqChat);
+        assert_eq!(m.kind("!own:x"), RoomKind::PqChat);
+        assert_eq!(m.mark("!own-2:x"), Ok(()));
+        // a held id with control bytes is refused
+        assert_eq!(
+            m.hold("!a\u{1}b:x", true, false),
+            Err(MatrixError::MatrixArgument)
+        );
     }
 
     #[test]

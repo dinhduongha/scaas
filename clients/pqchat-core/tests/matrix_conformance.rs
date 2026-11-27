@@ -117,6 +117,9 @@ impl MatrixTransport for Leaky {
         }
         Ok(p)
     }
+    async fn bound(&self, room: &str) -> Result<(), TransportError> {
+        self.inner.bound(room).await
+    }
     async fn hold_invite(&self, room: &str, hold: bool) -> Result<(), TransportError> {
         self.inner.hold_invite(room, hold).await?;
         if self.fault == Fault::AutoJoin {

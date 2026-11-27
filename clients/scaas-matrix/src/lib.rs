@@ -510,16 +510,28 @@ impl Inner {
 
     /// `room` marked PqChat (a room the crate creates, joins or uses as bound).
     pub(crate) async fn mark(&self, room: &str) -> R<()> {
+        // the common case (a bound room used again) takes no write lock and copies nothing
+        if lk(&self.marks).marked(room) {
+            return Ok(());
+        }
         self.marks_update(|m| m.mark(room)).await
     }
 
     /// An invite to `room` held (or released): refused for a room the account is joined to as a Matrix room (CLI-MTX-06).
+    /// "Joined" is the homeserver's answer, not the local view a fresh login or a late sync may lack; no answer, no hold.
     pub(crate) async fn hold(&self, room: &str, hold: bool) -> R<()> {
-        let id = RoomId::parse(room).map_err(|_| MatrixError::MatrixArgument)?;
-        let joined = self
-            .client()?
-            .get_room(&id)
-            .is_some_and(|r| r.state() == RoomState::Joined);
+        let joined = if hold && !lk(&self.marks).marked(room) {
+            use matrix_sdk::ruma::api::client::membership::joined_rooms;
+            self.client()?
+                .send(joined_rooms::v3::Request::new())
+                .await
+                .map_err(|_| MatrixError::MatrixRoom)?
+                .joined_rooms
+                .iter()
+                .any(|r| r.as_str() == room)
+        } else {
+            false
+        };
         self.marks_update(|m| m.hold(room, hold, joined)).await
     }
 
@@ -787,7 +799,8 @@ impl MatrixClient {
         };
         let r = Self::login_on(dir, l, client, key, opts, &login).await;
         if r.is_err() {
-            let _ = std::fs::remove_dir_all(store_dir(dir));
+            // under the lock again (a refused wipe leaves the store to whoever holds the directory now)
+            let _ = Self::wipe(dir);
         }
         r
     }
@@ -923,21 +936,19 @@ impl MatrixClient {
         lk(&self.inner.lock).take();
     }
 
-    /// The token invalidated on the server (at most 30 s), the client closed and the directory's stores deleted whatever
-    /// the server answered. `Ok(true)`: the server invalidated the token; `Ok(false)`: it could not be reached or refused,
-    /// and the token may still be valid there; `Err`: the local stores could not be deleted.
+    /// The token invalidated on the server (at most 30 s), the client closed and the directory's stores deleted under the
+    /// directory's lock, whatever the server answered. `Ok(true)`: the server invalidated the token; `Ok(false)`: it could
+    /// not be reached or refused, and the token may still be valid there; `Err`: a closed client (`MatrixSession`, nothing
+    /// deleted), another client holds the directory now (`MatrixProfileBusy`), or the stores could not be deleted.
     pub async fn logout(&self) -> R<bool> {
-        let at_server = match self.inner.client() {
-            Ok(c) => matches!(
-                tokio::time::timeout(Duration::from_secs(30), c.logout()).await,
-                Ok(Ok(_))
-            ),
-            Err(_) => false,
-        };
+        let c = self.inner.client()?;
+        let at_server = matches!(
+            tokio::time::timeout(Duration::from_secs(30), c.logout()).await,
+            Ok(Ok(_))
+        );
+        drop(c);
         self.close().await;
-        if store_dir(&self.dir).exists() {
-            std::fs::remove_dir_all(store_dir(&self.dir)).map_err(|_| MatrixError::MatrixStore)?;
-        }
+        Self::wipe(&self.dir)?;
         Ok(at_server)
     }
 
@@ -1841,6 +1852,34 @@ mod tests {
             .err(),
             Some(MatrixError::MatrixStore)
         );
+    }
+
+    #[tokio::test]
+    async fn the_record_cipher_opens_only_under_its_store_key() {
+        let s = matrix_sdk::MemoryStore::new();
+        let a = record_cipher(&s, &StoreKey::from_bytes(&mut [1; 32]))
+            .await
+            .unwrap();
+        let b = seal(&a, SETTINGS_KEY, &Settings::default(), policy::SETTINGS_MAX).unwrap();
+        // the same key finds the same cipher
+        let again = record_cipher(&s, &StoreKey::from_bytes(&mut [1; 32]))
+            .await
+            .unwrap();
+        assert_eq!(
+            unseal::<Settings>(&again, SETTINGS_KEY, &b, policy::SETTINGS_MAX).unwrap(),
+            Settings::default()
+        );
+        // another key opens nothing, and does not replace the stored cipher
+        assert_eq!(
+            record_cipher(&s, &StoreKey::from_bytes(&mut [2; 32]))
+                .await
+                .err(),
+            Some(MatrixError::MatrixStore)
+        );
+        let still = record_cipher(&s, &StoreKey::from_bytes(&mut [1; 32]))
+            .await
+            .unwrap();
+        assert!(unseal::<Settings>(&still, SETTINGS_KEY, &b, policy::SETTINGS_MAX).is_ok());
     }
 
     #[test]

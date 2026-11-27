@@ -257,6 +257,28 @@ async fn shown_only_with_a_listed_equal_home() {
     assert_eq!(found[0].s.home, HOME);
 }
 
+/// A transport that refuses to hold the room a pending session names (scaas-matrix: a room the account uses as a Matrix room)
+/// makes the preview fail closed (`MatrixRoom`); the control holds and previews.
+#[tokio::test(flavor = "multi_thread")]
+async fn preview_fails_closed_when_the_hold_is_refused() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    let server = Server::new();
+    let room = server.ordinary(ALICE, &[], false);
+    let s = found_one(&w, vec![room_entry(&room), chain_entry(HOME)]).await;
+    let bob = device(&w, Arc::new(MemoryStore::new()));
+    let c = Client::new(&server, BOB);
+    bob.attach_matrix(c.clone());
+    let sr = sref(&s.e);
+    c.refuse_hold
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(code(bob.preview(&sr, &me(&w.bob)).await), "MatrixRoom");
+    c.refuse_hold
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    assert!(bob.preview(&sr, &me(&w.bob)).await.is_ok());
+    assert!(c.held.lock().unwrap().contains(&room));
+}
+
 /// A pending session makes no store read, no join, no receipt and no write; its wrap is opened only on the user's look,
 /// which holds its room's invite; declining writes nothing.
 #[tokio::test(flavor = "multi_thread")]

@@ -110,6 +110,9 @@ async fn one_client_per_profile_directory() {
     assert_eq!(t.user_id(), "");
     assert_eq!(a.user_id(), None);
     assert_eq!(a.next_update().await, None);
+    // a closed handle's logout deletes nothing (another client may hold the directory by now)
+    assert_eq!(a.logout().await, Err(MatrixError::MatrixSession));
+    assert!(d.join("store").exists());
     let b = MatrixClient::restore(&d, key(), SHOWN).await.unwrap();
     assert_eq!(b.device_id().as_deref(), Some("DEVICEA"));
     b.close().await;
@@ -123,7 +126,7 @@ async fn no_secret_on_any_file() {
     let c = MatrixClient::restore(&d, key(), SHOWN).await.unwrap();
     c.set_public_receipts(false).await.unwrap();
     c.transport()
-        .hold_invite("!held-room-id:localhost", true)
+        .bound("!held-room-id:localhost")
         .await
         .unwrap();
     // while the client is open (journal files included), then once it is closed
@@ -181,14 +184,14 @@ async fn marks_persist_and_refuse_a_non_room() {
     let d = seeded("marks").await;
     let c = MatrixClient::restore(&d, key(), SHOWN).await.unwrap();
     let t = c.transport();
-    t.hold_invite("!pending:localhost", true).await.unwrap();
-    assert!(t.hold_invite("not a room id", true).await.is_err());
+    // a hold needs the homeserver's answer on whether the room is joined: none here, so no hold (fail closed)
+    assert!(t.hold_invite("!pending:localhost", true).await.is_err());
+    assert_eq!(c.kind("!pending:localhost"), scaas_matrix::RoomKind::Matrix);
+    assert!(t.bound("not a room id").await.is_err());
     t.bound("!bound:localhost").await.unwrap();
     c.close().await;
     let c = MatrixClient::restore(&d, key(), SHOWN).await.unwrap();
-    for r in ["!pending:localhost", "!bound:localhost"] {
-        assert_eq!(c.kind(r), scaas_matrix::RoomKind::PqChat, "{r}");
-    }
+    assert_eq!(c.kind("!bound:localhost"), scaas_matrix::RoomKind::PqChat);
     assert_eq!(c.kind("!other:localhost"), scaas_matrix::RoomKind::Matrix);
     c.close().await;
     std::fs::remove_dir_all(&d).unwrap();

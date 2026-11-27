@@ -18,6 +18,9 @@ L.NOT_CODE = [f":!{R}/*-mutants.txt", f":!{R}/2026-11-27-scaas-matrix-summary.tx
 P = "clients/scaas-matrix/src/policy.rs"
 LIB = "clients/scaas-matrix/src/lib.rs"
 TR = "clients/scaas-matrix/src/transport.rs"
+PQ_CONSENT = "clients/pqchat-core/src/consent.rs"
+PQ_MATRIX = "clients/pqchat-core/src/matrix.rs"
+PQC = "cd clients/pqchat-core && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 "
 C = "cd clients/scaas-matrix && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 "
 UNIT = C + "--lib policy::tests::"
 PROF = C + "--features testing --test profile "
@@ -37,14 +40,14 @@ MUTANTS = [
      [(P, "RoomFilter::Matrix => self.kind(room) == RoomKind::Matrix,", "RoomFilter::Matrix => true,")],
      UNIT + "kinds_never_mix"),
     ("a held invite not marked PqChat",
-     [(P, "            return Err(MatrixError::MatrixRoomKind);\n        }\n        self.mark(room)\n",
-       "            return Err(MatrixError::MatrixRoomKind);\n        }\n        Ok(())\n")],
+     [(P, "        self.held.push(room.to_string());\n        Ok(())\n", "        Ok(())\n")],
      UNIT + "kinds_never_mix"),
     ("a held invite takes a joined Matrix room",
-     [(P, "        if joined_matrix && self.kind(room) == RoomKind::Matrix {", "        if false {")],
+     [(P, "        if joined_matrix {\n            return Err(MatrixError::MatrixRoomKind);", "        if false {\n            return Err(MatrixError::MatrixRoomKind);")],
      UNIT + "a_held_invite_cannot_take_a_joined_matrix_room"),
     ("any string marked",
-     [(P, "        if room.len() > ROOM_ID_MAX || RoomId::parse(room).is_err() {", "        if room.is_empty() {")],
+     [(P, "    room.len() <= ROOM_ID_MAX\n        && room.bytes().all(|b| (0x21..=0x7e).contains(&b))\n        && RoomId::parse(room).is_ok()",
+       "    !room.is_empty()")],
      UNIT + "a_held_invite_cannot_take_a_joined_matrix_room"),
     ("Matrix actions allowed in a PqChat room",
      [(P, "        RoomKind::PqChat => Err(MatrixError::MatrixRoomKind),", "        RoomKind::PqChat => Ok(()),")],
@@ -100,6 +103,32 @@ MUTANTS = [
     ("a PqChat event above the bound forwarded",
      [(TR, "    if m.ty != EVENT_TYPE || c.len() > EVENT_MAX {", "    if m.ty != EVENT_TYPE {")],
      C + "--lib transport::tests::pqchat_events_only_and_bounded"),
+    ("held invites unbounded",
+     [(P, "        if self.held.len() >= HELD_MAX {\n            self.held.remove(0);\n        }\n", "")],
+     UNIT + "strangers_fill_only_the_held_set"),
+    ("a release keeps the held room PqChat",
+     [(P, "        if !hold {\n            self.held.retain(|h| h != room);\n", "        if !hold {\n")],
+     UNIT + "kinds_never_mix"),
+    ("the record cipher replaced under another key",
+     [(LIB, "            StoreCipher::import_with_key(&key.0[..], &b).map_err(|_| MatrixError::MatrixStore)\n        }",
+       "            StoreCipher::import_with_key(&key.0[..], &b)\n                .or_else(|_| StoreCipher::new())\n                .map_err(|_| MatrixError::MatrixStore)\n        }")],
+     C + "--lib tests::the_record_cipher_opens_only_under_its_store_key"),
+    ("a closed handle's logout wipes",
+     [(LIB, "        let c = self.inner.client()?;\n        let at_server = matches!(",
+       "        let c = match self.inner.client() {\n            Ok(c) => c,\n            Err(_) => {\n                let _ = std::fs::remove_dir_all(store_dir(&self.dir));\n                return Err(MatrixError::MatrixSession);\n            }\n        };\n        let at_server = matches!(")],
+     PROF + "one_client_per_profile_directory"),
+    ("joined read from the local view",
+     [(LIB, "        let joined = if hold && !lk(&self.marks).marked(room) {", "        let joined = if false {")],
+     E2E),
+    ("preview not failing closed",
+     [(PQ_CONSENT, "            t.hold_invite(room, true).await?;", "            let _ = t.hold_invite(room, true).await;")],
+     PQC + "--test recovery preview_fails_closed_when_the_hold_is_refused"),
+    ("a bound room not told on its second use",
+     [(PQ_MATRIX, "            }) if s == sid => return self.told_bound(room).await,", "            }) if s == sid => return Ok(RoomUse::Bound),")],
+     PQC + "--test matrix_fake a_bound_room_is_told_to_the_transport"),
+    ("bound rooms not listed for a new login",
+     [(PQ_MATRIX, "            if !v.iter().any(|r| r == room) {\n                v.push(room.to_string());\n            }\n", "")],
+     PQC + "--test matrix_fake a_bound_room_is_told_to_the_transport"),
     ("a transport room left unmarked",
      [(TR, "        let id = send!(self, r)?.room_id;\n        self.mark(id.as_str()).await?;\n",
        "        let id = send!(self, r)?.room_id;\n")],

@@ -174,7 +174,12 @@ async fn a_bound_room_is_told_to_the_transport() {
     assert_eq!(w.pq.join_room(&ep).await.unwrap(), RoomUse::Bound);
     assert_eq!(c.calls_of("bound"), vec![room.clone()]);
     assert_eq!(w.pq.join_room(&ep).await.unwrap(), RoomUse::Bound);
-    assert_eq!(c.calls_of("bound"), vec![room.clone(), room]);
+    assert_eq!(c.calls_of("bound"), vec![room.clone(), room.clone()]);
+    // a Matrix client that knows nothing (a new login) learns every bound room at once, before any session is opened
+    let fresh = Client::new(&server, ALICE);
+    w.pq.attach_matrix(fresh.clone());
+    assert_eq!(w.pq.tell_bound_rooms().await.unwrap(), 1);
+    assert_eq!(fresh.calls_of("bound"), vec![room]);
 }
 
 /// An event of a room no session binds is ignored (nothing counted, nothing read); the same kind of event in the bound room
