@@ -131,8 +131,8 @@ contract PqTopicsTest is PqTopicsBase {
         assertEq(v.versionCount, 3);
         assertEq(v.body, abi.encodePacked("edit ", uint8(3)));
         assertEq(v.parentId, p, "the original's parent");
-        (, bytes memory b1,) = chat.versionAt(r, 1);
-        (, bytes memory b2,) = chat.versionAt(r, 2);
+        (, bytes memory b1,,,,) = chat.versionAt(r, 1);
+        (, bytes memory b2,,,,) = chat.versionAt(r, 2);
         assertEq(b1, bytes("a *post*"));
         assertEq(b2, abi.encodePacked("edit ", uint8(2)));
         IPqChat.PqTopicEdit memory d = _editRec(r, ids[0], 1, 4); // the topic admin, not the author

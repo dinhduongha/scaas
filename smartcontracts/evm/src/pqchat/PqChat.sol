@@ -520,7 +520,11 @@ contract PqChat is IPqChat, PqChatCore {
         _forwardView();
     }
 
-    function versionAt(bytes32, uint32) external view returns (string memory, bytes memory, bytes32) {
+    function versionAt(bytes32, uint32)
+        external
+        view
+        returns (string memory, bytes memory, bytes32, uint64, uint64, uint64)
+    {
         _forwardView();
     }
 

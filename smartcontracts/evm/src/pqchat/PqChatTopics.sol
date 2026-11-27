@@ -81,7 +81,7 @@ contract PqChatTopics is PqChatCore {
         _useNonce(PqChatTypes.scopeEntry(e.topicId, e.author), e.nonce);
         eid = PqChatTypes.entryId(e.topicId, e.author, e.nonce);
         S storage s = _s();
-        s.entries[eid] = Entry(_put(abi.encode(e, keccak256(abi.encode(sig))), limit), depth);
+        s.entries[eid] = Entry(_put(abi.encode(e, keccak256(abi.encode(sig))), limit), depth, uint64(block.timestamp));
         if (e.parentId == 0) s.posts[e.topicId].push(eid);
         else s.replies[e.parentId].push(eid);
         s.byAuthor[e.author].push(eid);
@@ -115,14 +115,14 @@ contract PqChatTopics is PqChatCore {
         address original = _s().entries[d.entryId].record;
         if (original == address(0)) revert IPqChat.PqTopicUnknown(d.entryId);
         if (_word(original, 96) != d.author) revert IPqChat.PqTopicNotAuthor(d.author);
-        address[] storage vs = _s().versions[d.entryId];
+        Version[] storage vs = _s().versions[d.entryId];
         uint32 next = uint32(vs.length) + 2;
         if (d.version != next) revert IPqChat.PqTopicVersion(next, d.version);
         uint256 ml = bytes(d.mediaType).length;
         if (ml == 0 || ml > 64 || d.body.length == 0) revert IPqChat.PqTopicShape();
         _auth(reg, d.author, PqChatTypes.hashEdit(d), sig);
         _useNonce(PqChatTypes.scopeEntry(_word(original, 64), d.author), d.nonce);
-        vs.push(_put(abi.encode(d, keccak256(abi.encode(sig))), limit));
+        vs.push(Version(_put(abi.encode(d, keccak256(abi.encode(sig))), limit), uint64(block.timestamp)));
         emit IPqChat.PqTopicEntryEdited(d.entryId, d.version, sig);
     }
 
@@ -157,31 +157,42 @@ contract PqChatTopics is PqChatCore {
         Entry storage en = _s().entries[entryId];
         if (en.record == address(0)) revert IPqChat.PqTopicUnknown(entryId);
         (IPqChat.PqTopicEntry memory e, bytes32 sh) = abi.decode(_get(en.record), (IPqChat.PqTopicEntry, bytes32));
-        address[] storage vs = _s().versions[entryId];
+        Version[] storage vs = _s().versions[entryId];
         (v.topicId, v.author, v.parentId, v.depth, v.ref) = (e.topicId, e.author, e.parentId, en.depth, e.ref);
         (v.mediaType, v.body, v.sigHash, v.versionCount) = (e.mediaType, e.body, sh, uint32(vs.length) + 1);
+        (v.postedAt, v.nonce) = (en.postedAt, e.nonce);
         if (vs.length != 0) {
-            (IPqChat.PqTopicEdit memory d, bytes32 dh) =
-                abi.decode(_get(vs[vs.length - 1]), (IPqChat.PqTopicEdit, bytes32));
+            Version storage last = vs[vs.length - 1];
+            (IPqChat.PqTopicEdit memory d, bytes32 dh) = abi.decode(_get(last.record), (IPqChat.PqTopicEdit, bytes32));
             (v.mediaType, v.body, v.sigHash) = (d.mediaType, d.body, dh);
+            (v.editedAt, v.nonce) = (last.editedAt, d.nonce);
         }
     }
 
     function versionAt(bytes32 entryId, uint32 version)
         external
         view
-        returns (string memory mediaType, bytes memory body, bytes32 sigHash)
+        returns (
+            string memory mediaType,
+            bytes memory body,
+            bytes32 sigHash,
+            uint64 nonce,
+            uint64 postedAt,
+            uint64 editedAt
+        )
     {
-        address original = _s().entries[entryId].record;
-        if (original == address(0)) revert IPqChat.PqTopicUnknown(entryId);
-        address[] storage vs = _s().versions[entryId];
+        Entry storage en = _s().entries[entryId];
+        if (en.record == address(0)) revert IPqChat.PqTopicUnknown(entryId);
+        Version[] storage vs = _s().versions[entryId];
         if (version == 0 || version > vs.length + 1) revert IPqChat.PqTopicVersion(uint32(vs.length) + 1, version);
+        postedAt = en.postedAt;
         if (version == 1) {
-            (IPqChat.PqTopicEntry memory e, bytes32 sh) = abi.decode(_get(original), (IPqChat.PqTopicEntry, bytes32));
-            return (e.mediaType, e.body, sh);
+            (IPqChat.PqTopicEntry memory e, bytes32 sh) = abi.decode(_get(en.record), (IPqChat.PqTopicEntry, bytes32));
+            return (e.mediaType, e.body, sh, e.nonce, postedAt, 0);
         }
-        (IPqChat.PqTopicEdit memory d, bytes32 dh) = abi.decode(_get(vs[version - 2]), (IPqChat.PqTopicEdit, bytes32));
-        return (d.mediaType, d.body, dh);
+        Version storage ver = vs[version - 2];
+        (IPqChat.PqTopicEdit memory d, bytes32 dh) = abi.decode(_get(ver.record), (IPqChat.PqTopicEdit, bytes32));
+        return (d.mediaType, d.body, dh, d.nonce, postedAt, ver.editedAt);
     }
 
     function writerOf(bytes32 topicId, bytes32 ua) external view returns (bool granted, uint64 seq) {
