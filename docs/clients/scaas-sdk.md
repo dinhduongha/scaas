@@ -641,31 +641,36 @@ call; SPECIFIED). The name is a label only; a rename keeps the id; an envelope w
 id is never on chain, in a job, a request, a message, a log, an error, an event, a backup or an export, and is not derived from any
 seed, key or name; it reaches the client only to name keychain items, and `UserProfileInfo`'s `Debug` redacts it.
 
-<a id="CLI-UPR-11"></a>**CLI-UPR-11** — **One profile root; the index is a cache of visible names rebuilt from the envelopes; a
-one-time move from the exact legacy path into "default"** (controller call; SPECIFIED). Profiles sit in `p/<id>/` under a root
-whose mode is tightened to `0700` at open (a symlinked root refused); `profiles.json` lists visible profiles by id and name (and the
-last visible one an app opened), bounded, canonical, without a previous copy. A name and a hidden flag live in each envelope; a
-missing or corrupt index while profiles exist is rebuilt, never a first run; a row that points at a profile sealed as hidden is
-refused and dropped, never repaired into the clear. The migration reads the CLI's data directory as today on every OS, runs under
-the root lock and the legacy keystore lock only when no profile directory exists, and resumes only into the profile marked
-`migration: pending`.
+<a id="CLI-UPR-11"></a>**CLI-UPR-11** — **One profile root, a directory on every platform; the index is a cache of the envelopes'
+public names; a one-time move from the CLI's data directory into "default"** (controller call; SPECIFIED). Profiles sit in `p/<id>/`
+under a root the SDK tightens to `0700` only when it holds profiles or was made by the SDK (another wider directory refused, a
+symlinked root refused); on mobile the root is the app's private directory and the app supplies only keychain items. A visible
+profile's name is a public field of its envelope, so a rebuilt index (never a first run while profiles exist) lists every visible
+profile; a row that points at a hidden envelope is refused and dropped. The generation of a protected profile accepts only HMAC
+names, their `.lock` files and FileStore's crash-left temporaries (removed at open); the unprotected `g0` holds plain items of part
+`sdk` only. The migration reads `--data-dir` or the default data directory on every OS, under the root lock and the legacy keystore
+lock, only when no profile directory exists; legacy items beside existing profiles are reported.
 
 <a id="CLI-UPR-12"></a>**CLI-UPR-12** — **A profile's items are sealed under its own random data key, wrapped by Argon2id of its
 passphrase; every state refuses what does not belong to it** (controller call; SPECIFIED). An envelope with per-profile parameters
-(default 64 MiB / 3 / 4), the wrap's associated data its public fields (format, version, id, state, generation, parameters and
-salt), the name and hidden flag sealed; a protected profile refuses any plain item, an unprotected one any sealed item and (outside a
-migration) a keystore, and a keychain marker, where there is one, refuses an unprotected envelope after protection; the passphrase in
-OpaqueString form, its length rule counted on that form, never kept; an unprotected profile holds no secret
-(`ProfilePassphraseRequired`); the biometric wrap per device, off by default, under a policy that requires the current biometric
-enrollment, never on a hidden profile. Owner 2026-11-27: the default is 64 MiB / 3 / 4, stronger allowed within the bounds, no timing
-run; at the first secret the profile passphrase and the seed's vault passphrase are two entries.
+(default 64 MiB / 3 / 4); the wraps' associated data the canonical object of exactly its public fields (format, version, id, state,
+generation, the visible name, parameters and salt) after `ua-rs`'s `seal_key` prefix; the hidden flag sealed in the label; a protected
+profile refuses any plain item, an unprotected one any sealed item and (outside a migration) a keystore, and a keychain marker, where
+there is one, refuses an unprotected envelope after protection and is rewritten when missing; an unprotected profile is announced at
+every open and its settings shown before they are sealed; the passphrase in OpaqueString form, its length rule counted on that form,
+never kept; an unprotected profile holds no secret (`ProfilePassphraseRequired`); the biometric wrap per device, off by default, under
+a policy that requires the current biometric enrollment, never on a hidden profile, dropped at a passphrase change. Owner 2026-11-27:
+the default is 64 MiB / 3 / 4, stronger allowed within the bounds, no timing run; at the first secret the profile passphrase and the
+seed's vault passphrase are two entries.
 
-<a id="CLI-UPR-13"></a>**CLI-UPR-13** — **A hidden profile is created without ever being listed and found by a bounded search with
-no early stop and one error; it is hidden from the list, not deniable on disk** (controller call; SPECIFIED). `create_hidden` writes
-no index row; duplicates of (name, passphrase) refused; the search reads at most 16 unlisted directories, runs max(count, 4) KDFs at
-each envelope's own parameters, a dummy run for each unusable one, compares names by one helper (NFKC, then lower case), and opens
-only a single match; `ProfileOpen` for every failure. Owner 2026-11-27: the name is a label, not key material; nothing stronger than
-hidden from the list is offered.
+<a id="CLI-UPR-13"></a>**CLI-UPR-13** — **At most 16 hidden profiles, created without ever being listed, never two with one name and
+passphrase, found by a bounded search over the envelopes with no early stop and one error; hidden from the list, not deniable on
+disk** (controller call; SPECIFIED). `create_hidden`, a hidden import and `hide()` refuse at the cap (`ProfileHiddenLimit`); every
+path that makes a profile hidden or changes a hidden one's name or passphrase runs the duplicate check; the search takes the
+envelopes without a public name and the unusable directories (not the index), at most 16 (`ProfileSearchTooLarge`), runs max(count,
+4) KDFs at each envelope's own parameters, compares names by one helper (NFKC, then lower case), and opens only a single match;
+`ProfileOpen` for every failure. Owner 2026-11-27: the name is a label, not key material; nothing stronger than hidden from the list
+is offered.
 
 <a id="CLI-UPR-14"></a>**CLI-UPR-14** — **The instance lock is a non-blocking OS advisory lock held for the open profile's life**
 (controller call; SPECIFIED). `try_lock` before the envelope is read, released by the OS at any process end, nothing written into
@@ -683,9 +688,10 @@ profile whose passphrase is lost is neither named nor deleted by the app; the us
 unlisted directories.
 
 <a id="CLI-UPR-16"></a>**CLI-UPR-16** — **Clients open a profile by name, a hidden one only through a prompt; the CLI never follows
-the last profile an app opened** (controller call; SPECIFIED). `--profile <name>` (else "default") and `--profile-hidden`, the
-hidden name and every passphrase from the terminal without echo or one file descriptor per secret, never the command line or the
-environment; the CLI names the profile on stderr; `scaas profile settings` replaces `--overlay`; the apps' pickers always offer
+the last profile an app opened** (controller call; SPECIFIED). `--profile <name>` or `--profile-name-fd` (else "default"; an unknown
+name `ProfileUnknown`) and `--profile-hidden`, the hidden name and every passphrase from the terminal without echo or one file
+descriptor per secret, never the command line or the environment; commands that need no profile open none; the CLI names the profile
+on stderr (a line that lands in CI logs, stated); `scaas profile settings` replaces `--overlay`; the apps' pickers always offer
 "Open another profile"; a hidden profile's name is never drawn; the clipboard value a client set is cleared at lock. Owner
 2026-11-27: the idle lock locks the seeds, as today, not the profile.
 
@@ -695,40 +701,48 @@ included. Never inside: the OS lock, caches. Sealed under a passphrase the user 
 Argon2id bounds; a typed confirm; the integrity of the whole file bound in the seal. Import makes a new profile with a new UUIDv7; a
 file never overwrites an existing profile. Vectors in clientkeys and `ua-rs` before code (spec §10, export and import).
 
-<a id="CLI-UPR-18"></a>**CLI-UPR-18** — **The export file holds no id, so an import is always a new profile; it is sealed in chunks,
-bounded, verified before it is parsed, and brings no setting that could weaken the profile** (controller call; SPECIFIED). The file
-holds the label (name, hidden flag), the keystore and the operation state (operations in flight followed only on the user's word),
-and the settings without credential references; never `keystore.prev`, the PqChat store, caches, locks, the envelope or keychain
-items (owner 2026-11-27 for `keystore.prev`, the PqChat store and credential references). Export needs the name typed and the profile passphrase, writes a new `0600` file never through a symlink; the seal is
-AES-256-GCM-SIV in 1 MiB chunks with a last-chunk flag, the payload at most 64 MiB (`ProfileExportTooLarge`); import keeps a stronger
-policy, lowered caps and the default chain profile, and every endpoint, `first` mark, idle-lock and clipboard choice only on the
-user's confirm of each; one error `ProfileImportOpen`, header reasons in the local log, a new profile passphrase and a new PqChat
-device id.
+<a id="CLI-UPR-18"></a>**CLI-UPR-18** — **The export file holds no id, so an import is always a new profile; it is sealed in pinned
+chunks, bounded, verified before it is parsed, and brings no setting that could weaken the profile** (controller call; SPECIFIED).
+The file holds the label (name, hidden flag), the keystore and the operation state (operations in flight followed only on the user's
+word), and the settings without credential references; never `keystore.prev`, the PqChat store, caches, locks, the envelope or
+keychain items (owner 2026-11-27 for `keystore.prev`, the PqChat store and credential references). Export needs the name typed and
+the profile passphrase, writes a new `0600` file never through a symlink; the seal is AES-256-GCM-SIV in chunks of exactly 1 MiB (the
+last 1 byte to 1 MiB) with a last-chunk flag, a header of at most 4 KiB, the items `keystore` and `sdk.state` only, the payload at most
+64 MiB (`ProfileExportTooLarge`); import keeps a stronger policy, lowered caps and the default chain profile, every endpoint, `first`
+mark, idle-lock and clipboard choice only on the user's confirm of each, and always drops a credential reference; one error
+`ProfileImportOpen`, header reasons in the local log, a new profile passphrase and a new PqChat device id.
 
-<a id="CLI-UPR-19"></a>**CLI-UPR-19** — **The sealed store: AES-256-GCM-SIV with a random nonce per seal, length-framed associated
-data, HMAC file names and an anchored manifest of item revisions** (controller call; SPECIFIED). Associated data: domain,
-profile-format version, store part, item name, rev; file names HMAC-SHA-256 of part and name under a key derived from `DEK_p`, the
-names themselves in a sealed manifest whose revision and hash are anchored in the keychain (else a file); an item below the manifest
-is `ProfileRollback`; every derived key separated by its own HKDF label, distinct from PqVault's; every key and plaintext buffer
-zeroized at the end of its call; `DEK_p` in a new profile arena of `ua-rs`.
+<a id="CLI-UPR-19"></a>**CLI-UPR-19** — **The sealed store: AES-256-GCM-SIV with a random nonce per seal, pinned length-framed
+associated data, HMAC file names, one manifest per part with tombstones, and an anchor over generation, manifests and envelope**
+(controller call; SPECIFIED). Associated data: domain, profile-format version, store part, item name, rev; file names HMAC-SHA-256 of
+part and name under a key derived from `DEK_p`, no part name handed to another store; each part's manifest a sealed item of the
+reserved part `profile`, holding every item's rev and a tombstone per deleted item, at most 65,536 entries (`ProfilePartFull`),
+written under the store write lock with `put_if`; an item below its manifest or at its tombstone is `ProfileRollback`, a listed item
+missing `ProfileDamaged`, a manifest or envelope unlike the anchor `ProfileRollback`; the anchor in the keychain, else a file whose
+covered set put back together is not seen (stated); every derived key separated by its own HKDF label, distinct from PqVault's; every
+key and plaintext buffer zeroized at the end of its call; `DEK_p` in a new profile arena of `ua-rs`.
 
-<a id="CLI-UPR-20"></a>**CLI-UPR-20** — **No crash loses a profile: re-seals by generation and journal, root work under the root lock,
-deletes by tombstone** (controller call; SPECIFIED). Setting or changing the passphrase writes a journal envelope and a new
-generation under a new data key, then commits by one rename; an uncommitted journal is rolled back at the next open or start;
-first run, migration, create, import, rebuild and start-up clean-up hold the root lock; create and import are journaled with their
-row; temporary directories and tombstones are removed at start.
+<a id="CLI-UPR-20"></a>**CLI-UPR-20** — **No crash loses a profile: re-seals by a journal written as protected and a new generation,
+generations removed only when lower or journaled, root work under a briefly held root lock, deletes by tombstone** (controller call;
+SPECIFIED). Setting or changing the passphrase writes `profile.envelope.next` (protected, `gen + 1`, a new data key; the platform wrap
+dropped), re-seals into `g<N+1>/`, then commits by one rename and writes the anchor; an uncommitted journal is rolled back at the
+profile's own open, its generation first; a lower generation is removed, a higher one without a journal is `ProfileDamaged`, never
+removed; the root lock covers only short root steps, never a KDF run, a re-seal or a dialog; create and import are journaled with
+their row; start removes only the temporary directories and tombstones whose locks it can take and takes no live profile's lock.
 
 <a id="CLI-UPR-21"></a>**CLI-UPR-21** — **KDF bounds per field and per device; `p` is fixed; a cost the device cannot pay is named**
 (controller call; SPECIFIED). `m` 64 MiB to 1 GiB on desktop and to 256 MiB on mobile and in a browser, `t` 3 to 10, `p` 4; outside
 the general bounds `ProfileFormat`, above this device's maximum `ProfileKdfTooLarge`, both before any KDF runs; out of memory
 `ProfileKdfOutOfMemory`, never "wrong passphrase"; a test-only parameter set behind `test-hooks`, refused in a release build.
 
-<a id="CLI-UPR-22"></a>**CLI-UPR-22** — **The profile layer fits the SDK: its own config, its own `Sdk`, named store errors, a sealed
-size bound and stores for app cores** (controller call; SPECIFIED). `UserProfiles` takes a root or the app's own stores, an
-authenticator and its own heavy limiter; a profile opens and keeps its `Sdk`, and its lock is a state every later call meets
-(`ProfileLocked`); `StoreError` gains `VaultFormat`, `ProfileLocked` and `ProfilePassphraseRequired`; `rev_of` reads a sealed item up
-to the base64 of its plain bound; `keystore.head` stays unsealed; app cores get a sealed store per part (pqchat-core through an
-adapter of its revisions); no new crate.
+<a id="CLI-UPR-22"></a>**CLI-UPR-22** — **The profile layer fits the SDK: its own config, its own `Sdk` closed at lock, named store
+errors, a sealed size bound and a synchronous store face for pqchat-core** (controller call; SPECIFIED). `UserProfiles` takes a root
+directory, the app's keychain interface, an authenticator and its own heavy limiter; a profile opens and keeps its `Sdk` (a second
+call returns it), and its lock calls the new `Sdk::close` (tasks stopped, pools dropped, a closed flag) and leaves a state every later
+call meets (`ProfileLocked`); `StoreError` gains `VaultFormat`, `ProfileLocked`, `ProfilePassphraseRequired`, `ProfileRollback` and
+`ProfileDamaged`; `rev_of` reads a sealed item up to the base64 of its plain bound; `keystore.head` stays unsealed; one synchronous
+sealed core, the SDK's `SecureStore` over it on `spawn_blocking`, pqchat-core's `PqChatStore` over it directly from a blocking task (a
+synchronous face never waits on a future), `StoreFault` carrying the code; no new crate.
 
 <a id="CLI-UPR-23"></a>**CLI-UPR-23** — **Platform unlock on a shared OS account is an accepted risk; each seed and each imported
 secret key may carry its own passphrase, never opened by platform unlock** (owner 2026-11-27; SPECIFIED). Everyone enrolled on the
@@ -736,10 +750,28 @@ OS account opens a profile whose platform unlock is on. The user may lock each s
 item: every seed (its own vault passphrase) and every imported native secret key; that passphrase is only typed, never opened by
 platform or biometric unlock.
 
-<a id="CLI-UPR-24"></a>**CLI-UPR-24** — **The key lock: an imported key under its own passphrase, opened only by typing it; what a
-platform unlock leaves readable is stated** (controller call; SPECIFIED). `import_key` takes an optional key passphrase; such a key is
-the vault `native-import-locked:<network>:<n>` with a pin envelope only, opened by `unlock_key` alone, never by the seed's unlock of
-any kind, a passkey, a platform secret or the profile's unlock; a signature while it is locked is `KeyLocked`;
-`lock_key_separately` moves an existing import under its own passphrase, the earlier copies' residual stated. A platform unlock of the
-profile leaves readable its settings, the keystore's public fields, the operation history, the PqChat and Matrix stores and PqVault's
-cache; no seed, imported key, key-locked key, PqVault item or sealed PqChat history.
+<a id="CLI-UPR-24"></a>**CLI-UPR-24** — **The key lock: an imported key under its own passphrase, opened only by typing it, untouched
+by every seed-wide operation; what a platform unlock leaves readable is stated** (controller call; SPECIFIED). `import_key` takes an
+optional key passphrase; such a key is the vault `native-import-locked:<network>:<n>` with a pin envelope only, opened by
+`unlock_key` alone, never by the seed's unlock of any kind, a passkey, a platform secret or the profile's unlock; every seed-wide loop
+(re-wrap, PRF enable and disable, same-DEK re-seal, retained-PRF open) skips it, and a reader refuses one that carries a `prf`
+envelope; the seed's sealed backup and device link leave it out and say so; a signature while it is locked is `KeyLocked`;
+`lock_key_separately` moves an existing import under its own passphrase and rewrites `keystore.prev` in the same procedure. A
+platform unlock of the profile leaves readable its settings, the keystore's public fields, the operation history, the PqChat and
+Matrix stores and PqVault's cache; no seed, imported key, key-locked key, PqVault item or sealed PqChat history.
+
+<a id="CLI-UPR-25"></a>**CLI-UPR-25** — **A re-seal holds the profile's exclusive store write lock for its whole run; no write is
+lost** (controller call; SPECIFIED). Every writer of every part (the SDK, pqchat-core, pqvault-core) takes the store write lock for a
+write; a re-seal takes it from before its journal to its commit, so writers wait and then write into the new generation; a pqchat
+counter never goes backwards.
+
+<a id="CLI-UPR-26"></a>**CLI-UPR-26** — **A settings change that could weaken the profile needs the profile passphrase typed**
+(controller call; SPECIFIED). Adding an endpoint, a `first` mark or a credential reference, turning the idle lock off or lengthening
+it, and turning the clipboard opt-in on need the passphrase, checked against the envelope (a platform unlock does not count); a change
+that only strengthens, or picks the default chain profile, does not.
+
+<a id="CLI-UPR-27"></a>**CLI-UPR-27** — **An import is two calls: a preview of everything in the file, then the import of the user's
+choices** (controller call; SPECIFIED). `import_preview(source, export_passphrase)` verifies and opens the whole file, builds the new
+profile in a temporary directory under its own lock and returns the name, the hidden flag, the counts and every setting with an item
+id, kept ones included, each string through the name helper; `import(review, choices, profile_passphrase, name)` seals and commits
+it under the root lock, by one rename and the row.
