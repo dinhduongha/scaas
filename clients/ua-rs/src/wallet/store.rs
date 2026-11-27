@@ -583,6 +583,16 @@ impl SecretStore {
         })
     }
 
+    /// A store of its own with an open, empty arena (no entropy, no seed): the profile arena (user-profiles spec §7.1).
+    #[cfg(feature = "user-profile")]
+    pub(crate) fn empty_open() -> Arc<SecretStore> {
+        Self::of(Inner {
+            generation: 0,
+            arena: Some(Arena::empty()),
+            manifest: Manifest::default(),
+        })
+    }
+
     /// A store of its own holding only `secret` (an ephemeral KEM key, spec §8.2), and the secret's handle.
     pub(crate) fn single(secret: &[u8]) -> Result<Handle> {
         let mut arena = Arena::empty();

@@ -124,6 +124,17 @@ pub struct AppKeys {
     scope: u64,
 }
 
+impl AppKeys {
+    /// A new scope over `store`, a store of its own (the profile arena, `profile.rs`: no seed, so no app root).
+    #[cfg(feature = "user-profile")]
+    pub(super) fn over(store: Arc<SecretStore>) -> AppKeys {
+        AppKeys {
+            store,
+            scope: SCOPES.fetch_add(1, Ordering::Relaxed),
+        }
+    }
+}
+
 impl Wallet {
     /// A new scope of app-core key handles over this wallet's arena: its handles serve this scope only.
     pub fn app_keys(&self) -> AppKeys {

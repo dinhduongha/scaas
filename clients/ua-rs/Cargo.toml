@@ -172,6 +172,12 @@ mlock = ["wallet", "dep:libc"]
 roots = ["wallet", "dep:argon2"]
 # scaas-sdk T21: app-core key handles (src/wallet/appkey.rs; spec §12.2, §23.1 item 9)
 app-core = ["wallet", "dep:argon2"]
+# user-profiles plan UP2 (spec 2026-11-27-user-profiles §7.1, §7.2, §7.5, §10.1): the profile arena `ProfileKeys` and the export
+# key (src/wallet/profile.rs) over the app-core handles
+user-profile = ["app-core"]
+# user-profiles spec §7.5: the test-only KDF set (8 MiB / 1 / 4), the forced out-of-memory hook and the Argon2id run counter;
+# never in a release build
+test-hooks = ["user-profile"]
 # PqVault plan V1 (spec §6.5, CLI-PQV-10; owner 2026-11-21, O8): the vault passphrase's Argon2id set 1 (64 MiB / 3 / 4), the same
 # `argon2` 0.6.0 pin as `roots` (MIT OR Apache-2.0, `alloc` + `zeroize`, no `password-hash`; its blake2 0.11.0 is ua-rs's), so no
 # second version enters the lock. Today only tests/pqvault_pass.rs reads it (the reproducer of vectors/pqvault/pass.json); the key
@@ -521,6 +527,11 @@ required-features = ["app-core", "fam-arweave", "vectors"]
 [[test]]
 name = "file_seal"
 required-features = ["app-core"]
+
+# user-profiles plan UP2: every envelope, label, item, file-name and export-chunk row of vectors/profile, the bounds, G2, G8, G15
+[[test]]
+name = "profile"
+required-features = ["test-hooks", "vectors"]
 
 # owner 2026-11-26: the wasm32 Falcon verifier's gate, every FN-DSA row through falcon-rs 0.3.1 beside PQClean
 [[test]]

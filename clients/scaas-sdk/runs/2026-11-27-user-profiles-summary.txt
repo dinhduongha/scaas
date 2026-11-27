@@ -7,3 +7,9 @@ UP1 | ck-gen | ae584748d tree dirty | 0 | profile-vectors.mjs into a mktemp dir,
 UP1 | fmt js | ae584748d tree dirty | 0 | format.sh --check js with the UP1 files staged: js ok
 UP1 | docs | ae584748d tree dirty | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
 UP1 | mutants | d0b16db55 | 0 | 5 mutants, 5 killed, 0 survived, 0 not loaded, 0 other failure (run in a detached worktree at d0b16db55)
+UP2 | ua-profile | 4505606cf + UP2 files | 0 | profile 18 / 18 pass (one 64 MiB default-set Argon2id run), app_core 22 / 22 pass
+UP2 | ua-lib | 4505606cf + UP2 files | 0 | --lib profile_test_set: 1 / 1 without test-hooks (the test set refused), 1 / 1 with it (accepted)
+UP2 | ua-clippy | 4505606cf + UP2 files | 0 | -D warnings: --all-targets default ok; --all-targets user-profile,test-hooks,vectors ok; --no-default-features app-core ok; --no-default-features user-profile ok
+UP2 | ua-vault | 4505606cf + UP2 files | 0 | wallet_vault 29, wallet_custody 13, retained_key 2, wallet_import_ua 8: all pass (UP3 already committed: no foreign edits in the tree)
+UP2 | fmt rust toml | 4505606cf + UP2 files | 0 | format.sh --check rust toml: every part ok
+UP2 | docs | 4505606cf + UP2 files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok

@@ -64,6 +64,8 @@ pub mod pqsign;
 mod pqsign;
 #[cfg(feature = "app-core")]
 pub mod pqvault;
+#[cfg(feature = "user-profile")]
+mod profile;
 #[cfg(feature = "roots")]
 pub mod roots;
 #[cfg(feature = "vectors")]
@@ -126,6 +128,8 @@ pub use policy::{
     sign_scaas_bls_multi, sign_typed_by, AllowAnyTypedData, AllowRow, DecodedCall, Expect,
     Invalidate, SubjectKey,
 };
+#[cfg(feature = "user-profile")]
+pub use profile::{ExportKey, ProfileKeys};
 #[cfg(feature = "pqz")]
 pub(crate) use seal::now;
 pub use seal::{
@@ -271,6 +275,8 @@ pub enum Error {
     FileHashMismatch,
     /// An Arweave data item `ua-rs` built that its own verifying parser refused (CLI-UAL-64): nothing returned.
     ArweaveItem,
+    /// Argon2id could not allocate its memory (argon2's `OutOfMemory`; user-profiles spec §7.5): never `Argument`.
+    KdfOutOfMemory,
     /// A TreeKEM session's named refusal (`tree_public::TreeError`; spec 2026-11-23-pqchat-treekem §8, §10, §11).
     #[cfg(feature = "app-core")]
     Tree(tree_public::TreeError),
@@ -319,6 +325,7 @@ impl Error {
             Error::FileFrame => "FileFrame",
             Error::FileHashMismatch => "FileHashMismatch",
             Error::ArweaveItem => "ArweaveItem",
+            Error::KdfOutOfMemory => "KdfOutOfMemory",
             #[cfg(feature = "app-core")]
             Error::Tree(e) => e.code(),
             Error::Ua(e) => e.code(),
