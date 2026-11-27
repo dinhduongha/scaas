@@ -222,8 +222,10 @@ if two labels are made equal.
 
 **`try` (C47).** The device's counter per head (as built; the path-less review's E-6 = G-6, a controller call of
 2026-11-27): every path-less Add the device signs on a head takes the next `try`, a new head starts at 0 (a rebuild after
-losing the slot has a new parent). A `try` reused after a restore, its record in state, is refused `PqChatNonceUsed` at the
-send; the client reports it as `TreeStale` and the rebuild takes the next `try`. One id holds one record in state, and both
+losing the slot has a new parent). A `try` reused after a restore, its record in state, is refused at the send: self-relayed,
+the simulation reverts `PqChatNonceUsed`, which the client reports as `TreeStale`, and the rebuild takes the next `try`;
+through a node, the node finds the record by its id and sends the job's wraps against it, refused by the record's wrap
+hashes (the re-check's R-3; an open point, recorded). One id holds one record in state, and both
 candidates carry the same joiner secret by construction, so a reuse costs a refused send only. With every `try` below
 `ADD_NONCE_TRIES` used on a head the author builds a path commit instead.
 
@@ -788,7 +790,10 @@ the foreground.
 | P11 | Deploy, on the owner's word: a new `PqChat` release in the factory's catalogue on the test-only chains; the node's rows drop the old selectors, so sessions of the release deployed today are no longer relayable (test-only chains: no migration); Blockscout verification of every new module | the deploy e2e; the verification completeness check |
 
 Order: P0 → P1; P0 → P2 → P3; P2 → P4 (the vectors) → P5; P3 → P6 → P7 → P7b; P8 after P4; P8b after P5 and P7; P9 after
-P3 to P8b; P9b after P9; P10 last before merge; P11 after the merge. No `pqz-core` path changes: no gate there. The code
+P3 to P8b; P9b after P9; P10 last before merge; P11 after the merge. State 2026-11-27: P8b's node-relayed half is open, recorded for the controller's
+ruling (no harness signs a tree commit for the node: the fake-chain test `a_pathless_set_lands_on_a_fake_chain` relays a
+path-less set, `chain_tree` lands path-less Adds self-relayed on anvil and the Nethermind copy; the path-less review's
+B-1 = E-1, re-check R-2). No `pqz-core` path changes: no gate there. The code
 stays UNAUDITED until an AI audit round covers it at its commit. Merge and push on the owner's word.
 
 ## 15. Controller calls and known limits
