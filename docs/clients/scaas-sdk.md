@@ -24,6 +24,7 @@ by Fable on 2026-11-17 with every finding applied; plan `docs/superpowers/plans/
 9. [Bindings](#9-bindings)
 10. [Chain profiles and native chains](#10-chain-profiles-and-native-chains)
 11. [The CLI](#11-the-cli)
+12. [User profiles](#12-user-profiles)
 
 ## 1. Scope
 
@@ -591,3 +592,80 @@ serves as the reference client of the SDK's end-to-end tests. Its profiles are p
 The interactive terminal front-end over the SDK is `scaas-tui`, a separate program with its own rules
 ([CLI-TUI-01](scaas-tui.md#CLI-TUI-01)): a session that follows events and reviews every operation on screen, where the CLI runs one
 call per command.
+
+## 12. User profiles
+
+Status: **SPECIFIED**, nothing built; the design is the [user-profiles spec](../superpowers/specs/2026-11-27-user-profiles.md)
+(a frame; open points in its §16). A **user profile** ("Profile" on screen, `UserProfile` / `user_profile` in code) is one local
+identity with its own keystore, app-core state and settings; a **chain profile** (`ChainProfile`, §10) is a chain's pinned data.
+UNAUDITED.
+
+<a id="CLI-UPR-01"></a>**CLI-UPR-01** — **"Profile" on screen, `UserProfile` in code; a chain's pinned data is a "chain profile"**
+(owner 2026-11-27; SPECIFIED). The per-chain profile of §10, the CLI's and the TUI's profile files and their default, caps and
+features are called chain profiles (`ChainProfile`) in docs and code. The rename touches no on-chain byte and is a later task,
+listed in the spec §15; it lands before the CLI's `--profile` flag.
+
+<a id="CLI-UPR-02"></a>**CLI-UPR-02** — **User profiles live in the SDK layer and every client uses them** (owner 2026-11-27;
+SPECIFIED): scaas-app desktop and mobile, `scaas-tui` and the CLI `scaas` open, lock and switch profiles through one SDK surface
+(spec §11), with no profile logic of their own.
+
+<a id="CLI-UPR-03"></a>**CLI-UPR-03** — **A machine holds many profiles, each its own data directory** (owner 2026-11-27;
+SPECIFIED): its encrypted store (many seeds, many native secret keys, hidden sets: the keystore of §3 unchanged), its chat and vault
+state, and its own settings, its chain-profile settings included. The release chain profiles stay the build's (CLI-TUI-11); a
+profile only selects and overlays them under CLI-TUI-06.
+
+<a id="CLI-UPR-04"></a>**CLI-UPR-04** — **Each profile is protected separately; opening one unlocks nothing of another** (owner
+2026-11-27; SPECIFIED): its own passphrase and KDF parameters, an optional biometric unlock, opt-in (the pattern of PqVault's
+O7 (b)). Each seed keeps its own vault passphrase inside (CLI-SDK-03).
+
+<a id="CLI-UPR-05"></a>**CLI-UPR-05** — **A first run with no profile creates "default"; its passphrase is asked when its first
+secret is created** (owner 2026-11-27; SPECIFIED).
+
+<a id="CLI-UPR-06"></a>**CLI-UPR-06** — **A profile is open in at most one instance; instances meet only over the network** (owner
+2026-11-27; SPECIFIED). A lock file in the profile's directory; a second instance opening the same profile is refused with
+`ProfileInUse`. Instances with different profiles work together only over PqChat, Matrix and the node, with no local side channel,
+so two-person chat is tested on one machine.
+
+<a id="CLI-UPR-07"></a>**CLI-UPR-07** — **Switching locks the current profile, forgetting its secrets exactly as a seed lock does
+(CLI-SDK-06), then opens the other** (owner 2026-11-27; SPECIFIED), on desktop and mobile.
+
+<a id="CLI-UPR-08"></a>**CLI-UPR-08** — **The profile list shows the user-given names only; a profile may be hidden from it and is
+then opened only by typing its name** (owner 2026-11-27; SPECIFIED), as a hidden set opens only by its passphrase.
+
+<a id="CLI-UPR-09"></a>**CLI-UPR-09** — **A profile's id is a UUIDv7** (owner 2026-11-27; SPECIFIED). Its timestamp gives each
+profile's creation time, hidden ones included, to anyone who can list the profile root (spec §4, §14).
+
+<a id="CLI-UPR-10"></a>**CLI-UPR-10** — **The id is stable, names the profile's directory, and never leaves the device** (controller
+call; SPECIFIED). The name is a label only; a rename keeps the id. The id is never on chain, in a job, a request, a message, a log,
+an error, an event or a backup, and is not derived from any seed, key or name.
+
+<a id="CLI-UPR-11"></a>**CLI-UPR-11** — **One profile root; an index of ids and names only; a one-time move into "default"**
+(controller call; SPECIFIED). Profiles sit in `p/<id>/` under the root; `profiles.json` lists visible profiles by id and name (and
+the last visible one opened), bounded and canonical, written by `put_if` without a previous copy, untrusted until the sealed name
+confirms it (`ProfileIndexMismatch`). Today's single store and per-person config move into "default" once; no old layout is read
+after (every chain is test-only).
+
+<a id="CLI-UPR-12"></a>**CLI-UPR-12** — **A profile's items are sealed under its own random data key, wrapped by Argon2id of its
+passphrase** (controller call; SPECIFIED). Per-profile parameters recorded in its envelope (default 64 MiB / 3 / 4, bounded both
+ways), the passphrase in OpaqueString form and never kept; every item sealed with its name and revision bound; an unprotected profile
+holds no secret (`ProfilePassphraseRequired`) and a protected one never becomes unprotected; the biometric wrap per device, off by
+default; every KDF, AEAD and draw in `ua-rs` (CLI-SDK-01), the data key a handle in its arena.
+
+<a id="CLI-UPR-13"></a>**CLI-UPR-13** — **A hidden profile is found by trying every unlisted directory, padded, with one error;
+it is hidden from the list, not deniable on disk** (controller call; SPECIFIED). Name and passphrase both secret inputs; no early
+exit; at least four KDF runs; `ProfileOpen` for every failure; nothing outside its directory names it.
+
+<a id="CLI-UPR-14"></a>**CLI-UPR-14** — **The instance lock is an OS advisory lock held for the open profile's life** (controller
+call; SPECIFIED). Non-blocking, released by the OS at any process end, nothing written into it, so no stale lock exists to detect;
+local filesystems only; Web Locks in a browser. When built it replaces, for a profile, the shared-directory sentence of
+[CLI-SDK-17](#CLI-SDK-17) and the SDK spec §6.3: clients share the root and the index, never an open profile.
+
+<a id="CLI-UPR-15"></a>**CLI-UPR-15** — **Create, rename, hide and delete are atomic and confirmed; a profile export is a named gap**
+(controller call; SPECIFIED). Delete needs the profile open and its name typed, shows how many seeds lack a backup and asks a second
+confirmation for them, and removes the envelope before the data. The SDK has no profile-level sealed backup; seeds move with their
+sealed backups and the device link (CLI-SDK-06).
+
+<a id="CLI-UPR-16"></a>**CLI-UPR-16** — **Clients open a profile by name, a hidden one only through a prompt** (controller call;
+SPECIFIED). The CLI and the TUI take `--profile <name>` and `--profile-hidden` (name and passphrase from the terminal without echo
+or a file descriptor, never the command line or the environment); the apps a picker that always offers "Open another profile"; a
+hidden profile's name is never drawn.

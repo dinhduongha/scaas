@@ -12659,6 +12659,152 @@ Change (controller calls, 2026-11-23, T26 area A part b (custody), branch `sdk-t
 
 Change (owner 2026-11-23, "agreed, add it", relayed by the coordinator; owner: yes; status: BUILT on branch `sdk-t26-b`, UNAUDITED; numbered (161) on its branch, renumbered (169) at the merge `t26-merge`, where area A part b holds (160) to (167); B-21 alike, (160) to (168)): (169) **B-20, wasm32 reads a body chunk by chunk to its cap, as natively (CLI-RPC-07).** `scaas-rpc` turns on reqwest's `stream` feature for the wasm32 target only; its `bytes_stream` needs the new dependency **`wasm-streams` 0.4.2** (licence `MIT OR Apache-2.0`, already allowed by every `deny.toml`), pinned exactly (`=0.4.2`) in `clients/scaas-rpc/Cargo.toml` and added to every lockfile that resolves `scaas-rpc` (no other version moved). Why: the fetch backend without streams reads the whole body before it can be bounded, so an endpoint announcing no length could exhaust a page's memory. One bounded read (`http::read_capped`) now serves both targets and both readers (the capped answer and the hashed object): it stops at the first chunk that would pass the cap, before the rest is read, with the same `AnswerTooLarge` as before.
 
+**User profiles (CLI-UPR-\*).** The rules are in [clients/scaas-sdk.md](clients/scaas-sdk.md#12-user-profiles) §12; the design is the [user-profiles spec](superpowers/specs/2026-11-27-user-profiles.md), a frame whose open points are its §16. Entries 01 to 09 carry the owner's rulings of 2026-11-27; 10 to 16 are the controller's means (owner may override).
+
+### CLI-UPR-01 — "Profile" on screen and `UserProfile` in code; a chain's pinned data is a "chain profile"
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-01 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-01).) User-facing text says "Profile"; code and docs say `UserProfile` / `user_profile`. The per-chain profile (EVM and network profiles, the default one, the TUI's pinned ones and caps) is "chain profile" / `ChainProfile` in docs and code. The rename touches no on-chain byte and is a later task, listed in the spec §15.
+**Status.** SPECIFIED; the rename PLANNED. UNAUDITED.
+**Why.** One word for two things would make "switch profile" ambiguous on every screen and in every API.
+**Cost if wrong.** A user switches chain when meaning to switch identity, or the reverse.
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the feature is named Profile, `UserProfile` / `user_profile` in code and docs; the per-chain profile is renamed chain profile (`ChainProfile`) in docs and code, as a later task; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O1, §15.
+
+### CLI-UPR-02 — User profiles live in the SDK layer and every client uses them
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-02 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-02).) One SDK surface (module `user_profile`) opens, locks and switches profiles for scaas-app desktop and mobile, `scaas-tui` and the CLI.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The same protection and lock rules in every client.
+**Cost if wrong.** A client with its own profile code that seals or locks differently.
+**Source.** Owner ruling 2026-11-27 (chat): profiles are in the SDK layer, used by every client; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O2, §11.
+
+### CLI-UPR-03 — A machine holds many profiles, each its own data directory
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-03 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-03).) Each profile directory holds its encrypted store (many seeds, many native secret keys, hidden sets), its chat and vault state and its own settings, its chain-profile settings included.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Several people or roles on one machine and one OS account.
+**Cost if wrong.** One person's seeds, chats or endpoints visible to another.
+**Source.** Owner ruling 2026-11-27 (chat), point 1; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O3, §5.
+
+### CLI-UPR-04 — Each profile is protected separately; opening one unlocks nothing of another
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-04 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-04).) Its own passphrase and KDF parameters; an optional biometric unlock, opt-in (PqVault's O7 (b) pattern); no key shared between profiles.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A profile is a separate person's or role's data.
+**Cost if wrong.** One passphrase or one biometric opens every profile.
+**Source.** Owner ruling 2026-11-27 (chat), point 2; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O4, §7.
+
+### CLI-UPR-05 — A first run with no profile creates "default"; its passphrase is asked at its first secret
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-05 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-05).) The client creates a profile named "default" on first run; the profile asks for a passphrase when its first seed or key is created.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A first run needs no setup step, and no secret is ever stored unprotected.
+**Cost if wrong.** A first screen that blocks on a passphrase, or a seed in an unprotected profile.
+**Source.** Owner ruling 2026-11-27 (chat), point 3; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O5, §7.
+
+### CLI-UPR-06 — A profile is open in at most one instance; instances of different profiles meet only over the network
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-06 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-06).) A lock file in the profile's directory; a second instance opening the same profile is refused with `ProfileInUse`. Instances on different profiles work together only over PqChat, Matrix and the node, with no local side channel.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Two writers of one profile's state, and a local shortcut that tests would take instead of the real paths.
+**Cost if wrong.** A corrupted profile store, or two-person chat that works on one machine and fails across two.
+**Source.** Owner ruling 2026-11-27 (chat), point 4; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O6, §9.
+
+### CLI-UPR-07 — Switching locks the current profile as a seed lock does, then opens the other
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-07 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-07).) The current profile's secrets are forgotten exactly as CLI-SDK-06's lock forgets a seed's; then the other opens; on desktop and mobile.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Nothing of one profile may stay usable in the other's session.
+**Cost if wrong.** A key handle of profile A signing in profile B's session.
+**Source.** Owner ruling 2026-11-27 (chat), point 5; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O7, §10.
+
+### CLI-UPR-08 — The profile list shows names only; a hidden profile opens only by typing its name
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-08 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-08).) The list shows the user-given names only; an option hides a profile from it, after which it opens only by typing its name, as a hidden set opens only by its passphrase.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Someone looking at the screen learns no more than the names the user chose to show.
+**Cost if wrong.** The list reveals a profile its owner wanted unseen.
+**Source.** Owner ruling 2026-11-27 (chat), point 6; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O8, §8.
+
+### CLI-UPR-09 — A profile's id is a UUIDv7
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-09 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-09).) The id is a UUIDv7. Consequence, stated: its timestamp gives each profile's creation time to the millisecond, hidden ones included, to anyone who can list the profile root.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The owner's ruling; the creation-time disclosure is covered by CLI-UPR-13's limit (hidden from the list, not deniable on disk).
+**Cost if wrong.** A stolen disk dates every profile.
+**Source.** Owner ruling 2026-11-27 (chat): a profile's id is a UUIDv7; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O9, §4, §14.
+
+### CLI-UPR-10 — The profile id is stable, names the directory and never leaves the device
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-10 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-10).) Made once, never changed; names the profile's directory and its keychain items; the user-given name is only a label, a rename keeps the id; never on chain, in a job, a request, a message, a log, an error, an event or a backup; not derived from any seed, key or name.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A rename must not move data; an id that left the device or came from a seed would link the profile to its UAs.
+**Cost if wrong.** A gateway or homeserver links a machine's profiles, or a rename loses a profile's data.
+**Source.** Controller call 2026-11-27 (the owner asked for an id; the version is CLI-UPR-09); [spec](superpowers/specs/2026-11-27-user-profiles.md) §4.
+
+### CLI-UPR-11 — One profile root; an index of ids and names only; a one-time move into "default"
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-11 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-11).) `p/<id>/` per profile under one root per OS user; `profiles.json` holds visible ids and names and the last visible one opened, bounded, canonical, written by `put_if` without a previous copy, untrusted until the sealed name confirms it; today's store and per-person config move into "default" once, no old layout read after.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A previous copy of the index would keep a hidden profile's row; every chain is test-only, so no compatibility path is owed.
+**Cost if wrong.** A hidden profile listed by a stale copy; an edited index trusted.
+**Source.** Controller call 2026-11-27; [spec](superpowers/specs/2026-11-27-user-profiles.md) §5, §6, §12.
+
+### CLI-UPR-12 — A profile's items are sealed under its own data key, wrapped by Argon2id of its passphrase
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-12 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-12).) A random 32-byte data key per profile in `ua-rs`'s arena; an envelope with per-profile Argon2id parameters (default 64 MiB / 3 / 4, bounded both ways), the wrapped key, an optional per-device biometric wrap and the sealed name; every store item sealed with its name and revision as associated data, through a `SecureStore` adapter so the keystore code runs unchanged; seed vaults keep their own passphrases inside; an unprotected profile holds no secret (`ProfilePassphraseRequired`).
+**Status.** SPECIFIED; vectors before code. UNAUDITED.
+**Why.** The owner's separate protection (CLI-UPR-04) made concrete with the parameters already pinned for PqVault (CLI-PQV-10's Change) and the arena handling of CLI-SDK-06; the SDK holds no cryptography (CLI-SDK-01).
+**Cost if wrong.** A tampered envelope that weakens or stalls the KDF; items swapped between names unnoticed.
+**Source.** Controller call 2026-11-27; CLI-SDK-01, CLI-SDK-06, CLI-PQV-07, CLI-PQV-10; [spec](superpowers/specs/2026-11-27-user-profiles.md) §7, §16 Q-UP1, Q-UP2.
+
+### CLI-UPR-13 — A hidden profile is found by trying every unlisted directory, padded, with one error; it is not deniable on disk
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-13 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-13).) Name and passphrase as secret inputs; the KDF run on every unlisted directory with no early exit, padded to at least four runs; `ProfileOpen` for every failure; nothing outside its directory names it; the directory, its UUIDv7 and its keychain items stay visible on disk.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The time and the error of a failed open must not tell whether a hidden profile exists; deniability on disk would need decoys, which is a non-goal.
+**Cost if wrong.** A screen observer learns that a hidden profile exists from a fast failure.
+**Source.** Controller call 2026-11-27; ARCH-POS-13; [spec](superpowers/specs/2026-11-27-user-profiles.md) §8, §16 Q-UP7, Q-UP9.
+
+### CLI-UPR-14 — The instance lock is an OS advisory lock held for the open profile's life
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-14 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-14).) A non-blocking exclusive lock on `instance.lock`, the mechanism FileStore's item locks use; released by the OS at any process end; nothing written into it, so no stale lock and no race; local filesystems only; Web Locks in a browser. When built, clients share the root and the index, never an open profile (CLI-SDK-17's shared directory, SDK spec §6.3).
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A PID or time stamp in a lock file needs a stale-lock rule, and every such rule races.
+**Cost if wrong.** A crash leaves a profile that cannot open, or two instances both judge a lock stale.
+**Source.** Controller call 2026-11-27; [spec](superpowers/specs/2026-11-27-user-profiles.md) §9, §16 Q-UP3, Q-UP4.
+
+### CLI-UPR-15 — Profile lifecycle: atomic create, typed-name delete with a backup reminder; export a named gap
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-15 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-15).) Create builds the directory under a temporary name and renames it in; delete needs the profile open and its name typed, shows the seeds without a backup and asks a second confirmation for them, removes the envelope before the data; no profile-level sealed backup exists, seeds move by their sealed backups and the device link.
+**Status.** SPECIFIED; the profile backup PLANNED as a question. UNAUDITED.
+**Why.** A crash must not leave half a profile; a delete loses every unbacked seed.
+**Cost if wrong.** Lost seeds at a hasty delete; an orphaned directory.
+**Source.** Controller call 2026-11-27; CLI-SDK-04 (`ConfirmRemoveUnbacked`), CLI-SDK-06 (export); [spec](superpowers/specs/2026-11-27-user-profiles.md) §10, §16 Q-UP5.
+
+### CLI-UPR-16 — Clients open a profile by name, a hidden one only through a prompt
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-16 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-16).) `--profile <name>` and `--profile-hidden` in the CLI and the TUI, the hidden name and passphrase from the terminal without echo or a file descriptor; the apps' pickers always offer "Open another profile"; a hidden profile's name never drawn; the chain-profile rename lands before `--profile`.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A hidden name on a command line stays in shell history; `--profile` beside today's `--profiles` invites a wrong flag.
+**Cost if wrong.** A hidden profile named in `~/.bash_history`; a chain-profile file taken for a user profile.
+**Source.** Controller call 2026-11-27; CLI-SDK-17, CLI-TUI-16; [spec](superpowers/specs/2026-11-27-user-profiles.md) §13.
+
 ## 42. Clients — terminal UI (`scaas-tui`)
 
 The rules are in [clients/scaas-tui.md](clients/scaas-tui.md); the design is the [scaas-tui spec](superpowers/specs/2026-11-17-scaas-tui.md), a frame whose parts that wait on unsettled SDK sections are marked (its §15), with open points in its §16 (Q-T2, Q-T5, Q-T6 and Q-T7 answered on 2026-11-24) and Fable's review of 2026-11-17 applied (its §18). Owner entries carry the owner's words only; the controller's means and proposals have entries of their own (Fable U14).
