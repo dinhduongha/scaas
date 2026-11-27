@@ -227,9 +227,10 @@ pub struct TreeCommitWrite {
     pub review: Vec<(String, String)>,
     pub(crate) pathless: bool,
     pub(crate) session_id: String,
-    /// the `try` (C47) after this one's, and the head it was built on
+    /// the `try` (C47) after this one's, reserved by the confirm before the signature; the head it was built on, and its number
     pub(crate) next: u32,
     pub(crate) head: Option<String>,
+    pub(crate) number: u64,
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
@@ -237,14 +238,37 @@ pub struct TreeCommitWrite {
 impl Then for TreeCommitWrite {
     type Out = TreeBuilt;
 
-    /// C47 across reviews: a path-less commit is signed only while its `try` is still the next one on its head; another
-    /// path-less commit confirmed since took it (`TreeStale`: build again), so no `try` is signed twice.
+    /// C47 across reviews (reviews A-7, D-3): a path-less commit's `try` is reserved in the store before the signature, in
+    /// one compare-and-set: it must still be the next on its head, and the store must name no later head; else `TreeStale`
+    /// (build again). So no `try` is signed twice, by two reviews or two concurrent confirms, and a stale review never
+    /// resets the counter of a later head.
     async fn before(&self, chat: &PqChat) -> Result<(), PqChatError> {
-        if self.pathless
-            && chat.stored_try(&self.session_id, self.head.clone())? != self.next.saturating_sub(1)
-        {
-            return Err(PqChatError::TreeStale);
+        if !self.pathless {
+            return Ok(());
         }
+        let want = self.next.saturating_sub(1);
+        let (head, number) = (self.head.clone().unwrap_or_default(), self.number);
+        crate::store::Items(&*chat.store).update::<Value, _>(
+            &tries_key(&self.session_id),
+            |t| {
+                let t = t.filter(|t| !t.is_null());
+                let parent = t
+                    .as_ref()
+                    .and_then(|t| t.get("parent"))
+                    .and_then(Value::as_str)
+                    .map(str::to_ascii_lowercase);
+                let at = |k: &str| t.as_ref().and_then(|t| t.get(k)).and_then(Value::as_u64);
+                let cur = match parent {
+                    Some(p) if p == head => at("next").unwrap_or(u64::MAX),
+                    Some(_) if at("number").unwrap_or(0) > number => u64::MAX,
+                    _ => 0,
+                };
+                if cur != u64::from(want) {
+                    return Err(PqChatError::TreeStale);
+                }
+                Ok(json!({"parent": head, "next": self.next, "number": number}))
+            },
+        )?;
         Ok(())
     }
 
@@ -257,14 +281,6 @@ impl Then for TreeCommitWrite {
             .get("parentEpochId")
             .cloned()
             .unwrap_or_default();
-        if self.pathless {
-            // C47: the next path-less build on this head takes the next `try`
-            let next = self.next;
-            crate::store::Items(&*chat.store)
-                .update::<Value, _>(&tries_key(&self.session_id), |_| {
-                    Ok(json!({"parent": parent, "next": next}))
-                })?;
-        }
         // F-5 (owner 2026-11-27): this device's own path commit holds its path-less Adds back while it is staged on this head
         // (the path-less review's D-7 = G-5: every signed path commit, one transaction or several: until it lands the head
         // does not move, and once it moves the marker names another parent)
@@ -1314,6 +1330,7 @@ impl PqChat {
                 session_id: st.session_id.clone(),
                 next,
                 head: st.ids.last().map(|x| x.to_ascii_lowercase()),
+                number: st.head,
             },
         })
     }

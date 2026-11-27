@@ -311,7 +311,11 @@ async fn chain_topics() {
             content_hash: pq.content_hash_at(&on, &b1_id, v).await.unwrap(),
             ..r.clone()
         };
-        assert_eq!(pq.resolve_ref(&pinned).await, RefState::Verified, "v{v}");
+        assert_eq!(
+            pq.resolve_ref(&pinned).await,
+            RefState::VerifiedVersion(v),
+            "v{v}"
+        );
     }
     let pinned = PqEntryRef {
         content_hash: format!("0x{}", "c4".repeat(32)),

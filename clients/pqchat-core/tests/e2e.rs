@@ -848,7 +848,7 @@ async fn run() {
         content_hash: pb.content_hash_at(&on1, &e1, 1).await.unwrap(),
         ..r.clone()
     };
-    assert_eq!(pb.resolve_ref(&pinned).await, RefState::Verified);
+    assert_eq!(pb.resolve_ref(&pinned).await, RefState::VerifiedVersion(1));
     let pinned = PqEntryRef {
         content_hash: format!("0x{}", "c4".repeat(32)),
         ..r.clone()

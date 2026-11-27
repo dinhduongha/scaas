@@ -642,7 +642,11 @@ async fn a_pinned_content_hash_is_checked() {
             content_hash: h.clone(),
             ..r.clone()
         };
-        assert_eq!(pq.resolve_ref(&pinned).await, RefState::Verified, "v{v}");
+        assert_eq!(
+            pq.resolve_ref(&pinned).await,
+            RefState::VerifiedVersion(v),
+            "v{v}"
+        );
         // the same version under another nonce is another digest: one change
         version_at(&w.net, REPLICA, &e, v, "43");
         assert_eq!(
@@ -666,6 +670,19 @@ async fn a_pinned_content_hash_is_checked() {
         })
         .unwrap();
     assert_eq!(pq.content_hash_at(&on, &e, 1).await.unwrap(), v1);
+    // version 2 is its `PqTopicEdit` (review D-5: an expected value of its own)
+    let v2 = w
+        .app
+        .pqchat_edit_hash(scaas_sdk::pqchat_records::PqTopicEdit {
+            entry_id: e.clone(),
+            author: hex(&[0xa0; 32]),
+            nonce: 42,
+            version: 2,
+            media_type: "text/markdown".into(),
+            body: b"v2".to_vec(),
+        })
+        .unwrap();
+    assert_eq!(pq.content_hash_at(&on, &e, 2).await.unwrap(), v2);
     // version 1 is a `PqTopicEntry`, version 2 a `PqTopicEdit`: their digests differ though the inputs match
     assert_ne!(
         pq.content_hash_at(&on, &e, 1).await.unwrap(),
@@ -695,7 +712,7 @@ async fn a_pinned_content_hash_is_checked() {
         },
         ..r.clone()
     };
-    assert_eq!(pq.resolve_ref(&at2).await, RefState::Verified);
+    assert_eq!(pq.resolve_ref(&at2).await, RefState::VerifiedVersion(2));
     assert_eq!(w.net.writes(), 0);
 }
 
@@ -760,7 +777,8 @@ async fn topic_writes_sign_after_confirm_relayed_by_default() {
     for p in six(&w, &Path::Relayed).await {
         let c = w.pq.confirm(p).await.unwrap();
         assert_eq!(c.out.path, Path::Relayed);
-        assert!(w.pq.dispatch(&c.out).await.is_ok());
+        let sent = w.pq.dispatch(&c.out).await.unwrap();
+        assert!(matches!(sent, pqchat_core::confirm::Sent::Relayed(r) if r.queued));
         items.push(c.out.item());
     }
     assert_eq!(
@@ -1075,4 +1093,96 @@ async fn a_window_is_the_newest_256() {
     assert_eq!(r.rows[1].0, 10, "ties by the lower index");
     assert_eq!(w.net.reads_of("IPqChat.posts"), 4);
     assert_eq!(w.net.reads_of("IPqChat.entryRows"), 4);
+}
+
+/// Review A-11: a repeated id is ranked once; Best ranks the first window of replies and Controversial the newest, through
+/// `ranked`; a window with a short page is not `whole` (review A-9).
+#[tokio::test(flavor = "multi_thread")]
+async fn ranked_reads_each_id_once() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    let (on, p, v) = (here(), uid(0xe0), w.alice.ua.clone());
+    let ids = vec![uid(0xe1), uid(0xe2), uid(0xe1), uid(0xe3)];
+    w.net.answer(
+        HOME,
+        "IPqChat.replies",
+        json!({"parentId": p, "start": "0", "count": "4"}),
+        json!({"ids": ids, "total": "4"}),
+    );
+    let once = vec![uid(0xe1), uid(0xe2), uid(0xe3)];
+    rows_answer(&w.net, &once, &v, &[(1, 3), (5, 0), (2, 2)]);
+    let list = List::Replies(p.clone());
+    let r =
+        w.pq.ranked(&on, &list, Rank::Best, 4, &v, None)
+            .await
+            .unwrap();
+    let order: Vec<(u64, String)> = r.rows.iter().map(|(i, x)| (*i, x.id.clone())).collect();
+    assert_eq!(
+        order,
+        vec![(1, uid(0xe2)), (3, uid(0xe3)), (0, uid(0xe1))],
+        "e1 once, at its first index"
+    );
+    assert!(!r.whole, "4 indexes, 3 distinct ids");
+    let r =
+        w.pq.ranked(&on, &list, Rank::Controversial, 4, &v, None)
+            .await
+            .unwrap();
+    assert_eq!(
+        r.rows[0].1.id,
+        uid(0xe3),
+        "2 up, 2 down: the most controversial"
+    );
+    // a short page: fewer ids than the snapshot says
+    w.net.answer(
+        HOME,
+        "IPqChat.replies",
+        json!({"parentId": p, "start": "0", "count": "4"}),
+        json!({"ids": once, "total": "4"}),
+    );
+    w.net.answer(
+        HOME,
+        "IPqChat.replies",
+        json!({"parentId": p, "start": "3", "count": "1"}),
+        json!({"ids": [], "total": "4"}),
+    );
+    let r =
+        w.pq.ranked(&on, &list, Rank::Top, 4, &v, None)
+            .await
+            .unwrap();
+    assert_eq!((r.rows.len(), r.whole), (3, false));
+}
+
+/// Review A-11: on the SDK's port a chain whose profile lists no gateway answers a relayed write `RelayUnavailable` by the
+/// crate's name (the SDK's `SubmitPathNone`), nothing sent.
+#[tokio::test(flavor = "multi_thread")]
+async fn no_gateway_is_relay_unavailable() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    let sdk_net = pqchat_core::net::SdkNet {
+        sdk: w.sdk.clone(),
+        app: w.app.clone(),
+    };
+    let args = json!({"v": {"entryId": uid(0xe1), "voter": w.alice.ua, "value": "1", "seq": "1"},
+        "sig": {"keyData": "0x01", "signature": "0x02", "members": []}});
+    let e = pqchat_core::net::Net::relay(&sdk_net, CHAIN, HOME, "IPqChat.voteEntry", args).await;
+    assert_eq!(code(e), "RelayUnavailable");
+    assert!(w.chain.lock().unwrap().bodies.is_empty(), "nothing posted");
+}
+
+/// Review E-1 (CLI-PQC-21, CLI-PQC-13): the views a signed topic record's `seq` or `version` comes from are trusted reads; the
+/// feed views stay plain.
+#[test]
+fn signed_record_inputs_are_trusted_reads() {
+    use pqchat_core::net::{trust, Trust};
+    for item in [
+        "IPqChat.topicOf",
+        "IPqChat.writerOf",
+        "IPqChat.voteOf",
+        "IPqChat.entryOf",
+    ] {
+        assert_eq!(trust(item).unwrap(), Trust::Trusted, "{item}");
+    }
+    for item in ["IPqChat.posts", "IPqChat.replies", "IPqChat.entryRows"] {
+        assert_eq!(trust(item).unwrap(), Trust::Plain, "{item}");
+    }
 }

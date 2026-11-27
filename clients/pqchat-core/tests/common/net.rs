@@ -11,7 +11,7 @@
 use async_trait::async_trait;
 use pqchat_core::net::{Net, Signature, Unsigned};
 use pqchat_core::PqChatError;
-use scaas_sdk::app_core::{AppCall, AppQuote};
+use scaas_sdk::app_core::{AppCall, AppQuote, AppRelay};
 use scaas_sdk::op::KeyRef;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -199,12 +199,16 @@ impl Net for FakeNet {
         contract: &str,
         item: &'static str,
         args: Value,
-    ) -> Result<bool, PqChatError> {
+    ) -> Result<AppRelay, PqChatError> {
         self.relayed
             .lock()
             .unwrap()
             .push((contract.to_ascii_lowercase(), item.into(), args));
-        Ok(self.accept.load(Ordering::SeqCst))
+        Ok(AppRelay {
+            queued: self.accept.load(Ordering::SeqCst),
+            refused: vec![],
+            unreachable: 0,
+        })
     }
     async fn submit(&self, _call: AppCall) -> Result<String, PqChatError> {
         let mut w = self.writes.lock().unwrap();
@@ -288,7 +292,7 @@ impl Net for Counting {
         contract: &str,
         item: &'static str,
         args: Value,
-    ) -> Result<bool, PqChatError> {
+    ) -> Result<AppRelay, PqChatError> {
         self.inner.relay(chain, contract, item, args).await
     }
 }

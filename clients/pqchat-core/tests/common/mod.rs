@@ -126,7 +126,7 @@ pub async fn called(
     let w = confirmed(pq, p).await?;
     match pq.dispatch(&w).await? {
         pqchat_core::confirm::Sent::Call(c) => Ok((w.id, *c)),
-        pqchat_core::confirm::Sent::Relayed { .. } => Err(pqchat_core::PqChatError::Internal),
+        pqchat_core::confirm::Sent::Relayed(_) => Err(pqchat_core::PqChatError::Internal),
     }
 }
 

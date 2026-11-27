@@ -10,7 +10,7 @@ use crate::net::{Signature, Unsigned};
 use crate::topics::At;
 use crate::{PqChat, PqChatError};
 use async_trait::async_trait;
-use scaas_sdk::app_core::{AppCall, AppQuote};
+use scaas_sdk::app_core::{AppCall, AppQuote, AppRelay};
 use scaas_sdk::op::{KeyRef, ReviewField};
 use serde_json::{json, Value};
 
@@ -47,10 +47,12 @@ pub struct Confirmed<O> {
 }
 
 impl<O> Confirmed<O> {
-    /// CLI-PQV-18's rule for `fresh`, the call of this write prepared after the confirm: it may be sent on the confirm already
-    /// given only when its payer is the reviewed one and its `max_cost` at most the reviewed `max_cost`. `false` without a
-    /// reviewed quote (relayed, a tree commit, unquoted) or when a figure does not parse: the front-end then shows `fresh`
-    /// and sends only on a second confirm.
+    /// CLI-PQV-18's rule for `fresh`, the one call this confirm covers (`Built.call`, `TreeCreated.call`, or the
+    /// `Sent::Call` of [`PqChat::dispatch`] of this write): it may be sent on the confirm already given only when its payer
+    /// is the reviewed one and its `max_cost` at most the reviewed `max_cost`. `false` without a reviewed quote (relayed, a
+    /// tree commit, unquoted) or when a figure does not parse: the front-end then shows `fresh` and sends only on a second
+    /// confirm. A later call of the same write (an `addWraps` chunk, a tree commit's next piece) is none of these: each is
+    /// shown with its own quote and confirmed (reviews A-2, E-6).
     pub fn within_review(&self, fresh: &AppCall) -> bool {
         let Some(r) = self.reviewed.as_ref().and_then(|q| q.quote.as_ref()) else {
             return false;
@@ -68,7 +70,8 @@ impl<O> Confirmed<O> {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait Then: Send + Sync {
     type Out;
-    /// Before the signature (a room bound to the session, CLI-PQC-05); nothing by default.
+    /// Before the signature: what must still hold since the review (a rekey's parent slot free, a path-less `try` reserved);
+    /// nothing by default.
     async fn before(&self, _chat: &PqChat) -> Result<(), PqChatError> {
         Ok(())
     }
@@ -113,12 +116,11 @@ impl PqChat {
     /// payer's call prepared and simulated (the front-end sends it, [`Confirmed::within_review`] first).
     pub async fn dispatch(&self, w: &SignedWrite) -> Result<Sent, PqChatError> {
         match &w.path {
-            Path::Relayed => Ok(Sent::Relayed {
-                queued: self
-                    .net
+            Path::Relayed => Ok(Sent::Relayed(
+                self.net
                     .relay(&w.at.chain, &w.at.instance, w.item, w.args.clone())
                     .await?,
-            }),
+            )),
             Path::Payer(p) => Ok(Sent::Call(Box::new(
                 self.net
                     .prepare(&w.at.chain, &w.at.instance, w.item, w.args.clone(), p)
@@ -149,9 +151,10 @@ pub enum Path {
 
 /// What [`PqChat::dispatch`] did.
 pub enum Sent {
-    /// relayed: whether a gateway queued it (`false`: none did; the same bytes may go again, or by
-    /// [`PqChat::dispatch_paid`])
-    Relayed { queued: bool },
+    /// relayed: whether a gateway queued it (a queue is no landing), each gateway's refusal by its code (a simulation's
+    /// revert, a limit of the operator's), the gateways unreachable; not queued: the same bytes may go again, or by
+    /// [`PqChat::dispatch_paid`]
+    Relayed(AppRelay),
     /// the payer's call, prepared and simulated
     Call(Box<AppCall>),
 }

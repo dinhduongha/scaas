@@ -529,6 +529,7 @@ async fn file_rows() {
 #[tokio::test(flavor = "multi_thread")]
 async fn content_hash_rows() {
     use scaas_sdk::pqchat_records::{PqEntryRef, PqTopicEdit, PqTopicEntry};
+    let _one = ONE.lock().await;
     let (app, _seed, _chain) = app().await;
     let t = pq("topics");
     let entry = |r: &Value| PqTopicEntry {

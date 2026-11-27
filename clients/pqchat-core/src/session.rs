@@ -168,8 +168,10 @@ pub struct EpochWrite {
     pub(crate) item: &'static str,
     pub(crate) name: &'static str,
     pub(crate) record: Value,
-    /// a creation: the session accepted on this device and its Matrix room bound, before the signature (CLI-PQC-05)
+    /// a creation: its room bound after the signature, the session accepted once its first write is prepared (CLI-PQC-05)
     pub(crate) create: Option<(SessionRef, Option<String>)>,
+    /// a rekey: the session and the parent whose slot must still be free at the confirm
+    pub(crate) rekey_of: Option<(SessionRef, String)>,
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
@@ -177,14 +179,12 @@ pub struct EpochWrite {
 impl Then for EpochWrite {
     type Out = Built;
 
+    /// A rekey on a parent whose slot another child took since the review (review A-6): `EpochTaken` before the signature.
     async fn before(&self, chat: &PqChat) -> Result<(), PqChatError> {
-        if let Some((s, room)) = &self.create {
-            // only a room this client created for the session, bound to it before anything is signed (CLI-PQC-05)
-            if let Some(room) = room {
-                chat.bind_created(room, &s.session_id)?;
+        if let Some((s, parent)) = &self.rekey_of {
+            if chat.child_of(s, parent).await?.is_some() {
+                return Err(PqChatError::EpochTaken);
             }
-            // the creator's own session: accepted on this device
-            chat.set_consent(s, crate::consent::Consent::Accepted, true)?;
         }
         Ok(())
     }
@@ -194,8 +194,17 @@ impl Then for EpochWrite {
             return Err(PqChatError::Internal);
         };
         let sig = sig_json(&signed.sig);
+        // a creation: only a room this client created for the session, bound to it once its record is signed and before
+        // anything leaves the device (CLI-PQC-05); released when the first write cannot be prepared (review A-1)
+        let room = match &self.create {
+            Some((s, Some(room))) => {
+                chat.bind_created(room, &s.session_id)?;
+                Some((room, &s.session_id))
+            }
+            _ => None,
+        };
         let (record, wraps, name) = (&self.record, &self.wraps, self.name);
-        let (call, sent) = chat
+        let fitted = chat
             .fit(
                 &self.at.chain,
                 &self.at.instance,
@@ -206,7 +215,20 @@ impl Then for EpochWrite {
                     json!({ name: record, "wraps": wraps.iter().take(n).map(wrap_json).collect::<Vec<_>>(), "sig": sig})
                 },
             )
-            .await?;
+            .await;
+        let (call, sent) = match fitted {
+            Ok(x) => x,
+            Err(e) => {
+                if let Some((room, sid)) = room {
+                    chat.release_created(room, sid)?;
+                }
+                return Err(e);
+            }
+        };
+        if let Some((s, _)) = &self.create {
+            // the creator's own session: accepted on this device
+            chat.set_consent(s, crate::consent::Consent::Accepted, true)?;
+        }
         Ok(Built {
             session_id: self.session_id,
             epoch_id: self.epoch_id,
@@ -546,6 +568,7 @@ impl PqChat {
             item: "IPqChat.createSession",
             name: "s",
             record: s,
+            rekey_of: None,
             create: Some((
                 SessionRef {
                     chain: r.chain,
@@ -687,6 +710,7 @@ impl PqChat {
             name: "e",
             record: e,
             create: None,
+            rekey_of: Some((s.clone(), p.id.clone())),
         };
         self.epoch_write(&r.me, prepared, then).await
     }

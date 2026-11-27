@@ -32,6 +32,12 @@ pub const FOLD_DEFAULT: u64 = 5;
 /// The most ids one `entryRows` call takes (`PqChat.ENTRY_ROWS_MAX`, CTR-CHAT-30).
 pub const ROWS_MAX: usize = 64;
 
+/// The review line of every topic record (review E-2): once signed it may land whenever a relayer or anyone sends it, until
+/// its nonce or `seq` is used.
+pub const NO_DEADLINE: &str =
+    "a signed topic record carries no deadline: once it leaves this device it may land later, \
+     until its nonce or seq is used; it cannot be withdrawn";
+
 /// The media type the crate writes (RFC 7763, CommonMark).
 pub const MARKDOWN: &str = "text/markdown";
 /// The most ids one page asks for.
@@ -102,7 +108,11 @@ pub enum RefFault {
 pub enum RefState {
     /// not read yet: shown as unverified
     Unresolved,
+    /// listed, at its home, no `contentHash` pinned
     Verified,
+    /// listed, at its home, and the pinned `contentHash` is this version's (G5): the front-end shows that version, or says
+    /// the entry was edited after it (reviews D-1, E-4)
+    VerifiedVersion(u64),
     Unverified(RefFault),
 }
 
@@ -246,8 +256,16 @@ impl PqChat {
                     .await?,
             ),
         };
+        let mut review = prepared.review.clone();
+        // review E-2: a topic record has no deadline (`validUntil` is a relayer's job field, not signed)
+        review.push(scaas_sdk::op::ReviewField {
+            name: "noDeadline".into(),
+            value: NO_DEADLINE.into(),
+            display: NO_DEADLINE.into(),
+            source: scaas_sdk::op::Source::Derived,
+        });
         Ok(Prepared {
-            review: prepared.review.clone(),
+            review,
             unsigned: Unsigned::Record(prepared),
             quote,
             then: RecordWrite {
@@ -628,15 +646,18 @@ impl PqChat {
     }
 
     /// The standing of `r` (P35) on its own chain: that chain served, its factory listing the instance, the referenced
-    /// entry's topic naming that instance as its home, `contentHash` zero. Reads only; nothing is written or sent.
+    /// entry's topic naming that instance as its home, and a pinned `contentHash` the typed digest of one of its versions,
+    /// the newest [`REF_VERSIONS_MAX`] read (G5; up to 3 + 64 reads with bodies: a front-end resolves a `ref` when it is
+    /// shown and keeps the answer). Reads only; nothing is written or sent.
     pub async fn resolve_ref(&self, r: &PqEntryRef) -> RefState {
         match self.resolve(r).await {
-            Ok(()) => RefState::Verified,
+            Ok(None) => RefState::Verified,
+            Ok(Some(v)) => RefState::VerifiedVersion(v),
             Err(f) => RefState::Unverified(f),
         }
     }
 
-    async fn resolve(&self, r: &PqEntryRef) -> Result<(), RefFault> {
+    async fn resolve(&self, r: &PqEntryRef) -> Result<Option<u64>, RefFault> {
         let uid = r.chain_uid.to_ascii_lowercase();
         let chain = self
             .conf
@@ -669,7 +690,7 @@ impl PqChat {
             return Err(RefFault::OtherHome);
         }
         if r.content_hash.eq_ignore_ascii_case(ZERO32) {
-            return Ok(());
+            return Ok(None);
         }
         // G5 (CTR-CHAT-31): the version the hash pins, rebuilt from state, newest first
         let want = r.content_hash.to_ascii_lowercase();
@@ -684,7 +705,7 @@ impl PqChat {
                 .map_err(|_| RefFault::Unreadable)?
                 == want
             {
-                return Ok(());
+                return Ok(Some(v));
             }
         }
         Err(match first {
@@ -808,12 +829,14 @@ impl PqChat {
         }
         let names: Vec<String> = ids.iter().map(|(_, x)| x.clone()).collect();
         let rows = self.entry_rows(on, &names, viewer, fold_at).await?;
+        // whole only when every index of the list was read, each a distinct id (reviews A-9, E-8)
+        let read = ids.len() as u64;
         let mut rows: Vec<(u64, EntryRow)> = ids.into_iter().map(|(i, _)| i).zip(rows).collect();
         rank(&mut rows, sort);
         Ok(Ranked {
             rows,
             total: snapshot,
-            whole: start == 0 && end == snapshot,
+            whole: start == 0 && end == snapshot && read == snapshot,
         })
     }
 }
@@ -917,11 +940,11 @@ fn log2_q32(n: u128) -> u128 {
 
 /// The Wilson score interval's lower bound of `up / (up + down)` at z = 1.2816 (Reddit's `confidence`); 0 without votes.
 fn wilson(r: &EntryRow) -> f64 {
-    // the sum in f64: no saturation at the top of `u128`
-    let (n, z) = (r.up as f64 + r.down as f64, 1.2816_f64);
-    if n == 0.0 {
+    // no up-vote: the bound is 0 exactly, never rounding noise (reviews A-5, D-2); the sum in f64: no saturation
+    if r.up == 0 {
         return 0.0;
     }
+    let (n, z) = (r.up as f64 + r.down as f64, 1.2816_f64);
     let p = r.up as f64 / n;
     let z2 = z * z;
     (p + z2 / (2.0 * n) - z * ((p * (1.0 - p) + z2 / (4.0 * n)) / n).sqrt()) / (1.0 + z2 / n)

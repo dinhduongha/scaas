@@ -20,9 +20,13 @@ SE = "clients/pqchat-core/src/session.rs"
 TO = "clients/pqchat-core/src/topics.rs"
 AC = "clients/scaas-sdk/src/app_core.rs"
 GW = "scaas-node/src/gateway.rs"
+GU = "scaas-node/src/guard.rs"
+NET = "clients/pqchat-core/src/net.rs"
 CD = "cd clients/pqchat-core && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 "
 SES = CD + "--test session "
 TOP = CD + "--test topics "
+SITES = CD + "--test sign_sites "
+MFAKE = CD + "--test matrix_fake "
 SDK = ("cd clients/scaas-sdk && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 "
        "--features app-core --test app_core ")
 NODE = "cd scaas-node && CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked --offline -j2 --lib "
@@ -63,8 +67,8 @@ MUTANTS = [
     # CLI-PQC-18 F3: relayed by default, no payer quote
     (
         "a relayed write dispatched as the payer's call",
-        [(CF, "            Path::Relayed => Ok(Sent::Relayed {\n                queued: self\n                    .net\n"
-              "                    .relay(&w.at.chain, &w.at.instance, w.item, w.args.clone())\n                    .await?,\n            }),",
+        [(CF, "            Path::Relayed => Ok(Sent::Relayed(\n                self.net\n"
+              "                    .relay(&w.at.chain, &w.at.instance, w.item, w.args.clone())\n                    .await?,\n            )),",
           "            Path::Relayed => Err(PqChatError::RelayUnavailable),")],
         TOP + "topic_writes_sign_after_confirm_relayed_by_default",
     ),
@@ -75,7 +79,7 @@ MUTANTS = [
     ),
     (
         "any kind relayed",
-        [(AC, '        if !matches!(kind.as_str(), "pqchat" | "pqvault") {', "        if kind.is_empty() {")],
+        [(AC, '        if kind != "pqchat" {', "        if kind.is_empty() {")],
         SDK + "relay_app_call_posts_the_job_to_the_gateways",
     ),
     # NODE-GW-09
@@ -137,8 +141,8 @@ MUTANTS = [
     # G5: the pinned contentHash
     (
         "a pinned hash taken unchecked",
-        [(TO, "        if r.content_hash.eq_ignore_ascii_case(ZERO32) {\n            return Ok(());\n        }",
-          "        if !r.content_hash.is_empty() {\n            return Ok(());\n        }")],
+        [(TO, "        if r.content_hash.eq_ignore_ascii_case(ZERO32) {\n            return Ok(None);\n        }",
+          "        if !r.content_hash.is_empty() {\n            return Ok(None);\n        }")],
         TOP + "a_pinned_content_hash_is_checked",
     ),
     (
@@ -150,6 +154,65 @@ MUTANTS = [
         "only the latest version read",
         [(TO, "e.version_count.saturating_sub(REF_VERSIONS_MAX - 1).max(1);", "e.version_count.max(1);")],
         TOP + "a_pinned_content_hash_is_checked",
+    ),
+]
+
+# the review of 2026-11-28 (scratchpad STATUS): a mutant of each fix
+MUTANTS += [
+    (
+        "a topic record's seq from a plain read (E-1)",
+        [(NET, '    ("IPqChat.writerOf", Trusted),', '    ("IPqChat.writerOf", Plain),')],
+        TOP + "signed_record_inputs_are_trusted_reads",
+    ),
+    (
+        "a signing call made at build time outside the port (A-4, D-4)",
+        [(TO, "        let mut review = prepared.review.clone();",
+          "        let _ = self.app.prepare_pqchat_topic_vote(me.key.clone(), PqTopicVote {\n"
+          "            entry_id: ZERO32.into(), voter: me.ua.clone(), value: 0, seq: 0 }).await?.sign().await;\n"
+          "        let mut review = prepared.review.clone();")],
+        SITES + "every_signing_call_is_the_ports",
+    ),
+    (
+        "a rekey signed on a slot taken since its review (A-6)",
+        [(SE, "            if chat.child_of(s, parent).await?.is_some() {",
+          "            if false && chat.child_of(s, parent).await?.is_some() {")],
+        SES + "nothing_is_signed_before_the_confirm",
+    ),
+    (
+        "a creation's room kept after its call was refused (A-1)",
+        [(SE, "                    chat.release_created(room, sid)?;", "                    let _ = (room, sid);")],
+        MFAKE + "created_room_unencrypted_and_bound_by_create",
+    ),
+    (
+        "a pinned hash verified without its version (D-1, E-4)",
+        [(TO, "            Ok(Some(v)) => RefState::VerifiedVersion(v),", "            Ok(Some(_)) => RefState::Verified,")],
+        TOP + "a_pinned_content_hash_is_checked",
+    ),
+    (
+        "a window whole with ids missing (A-9)",
+        [(TO, "            whole: start == 0 && end == snapshot && read == snapshot,",
+          "            whole: start == 0 && end == snapshot,")],
+        TOP + "ranked_reads_each_id_once",
+    ),
+    (
+        "Best ranks no up-vote by rounding noise (A-5, D-2)",
+        [(TO, "    if r.up == 0 {\n        return 0.0;\n    }\n", "")],
+        TOP + "window_sorts_are_deterministic",
+    ),
+    (
+        "a public chain relays topic records by default (C-1, E-3)",
+        [(GU, '                None => cfg.profile == "private",', "                None => true,")],
+        NODE + "gateway::tests::door_a_takes_a_pqchat_topic_write",
+    ),
+    (
+        "a signing key past its hourly bucket (C-1, E-3)",
+        [(GU, "        if n.1 >= self.pqchat_topics_per_hour {", "        if n.1 > self.pqchat_topics_per_hour {")],
+        NODE + "gateway::tests::door_a_takes_a_pqchat_topic_write",
+    ),
+    (
+        "a repeated topic call queued twice (C-2)",
+        [(GU, "        if calls.contains_key(&call) {", "        if false && calls.contains_key(&call) {")],
+        NODE + "gateway::tests::door_a_takes_a_pqchat_topic_write",
     ),
 ]
 

@@ -466,6 +466,58 @@ pub struct AppQuote {
     pub quote: Option<crate::op::SubmitQuote>,
 }
 
+/// What the gateways did with a relayed call ([`AppCore::relay_app_call`]): whether one queued it (a queue is no landing),
+/// each refusal as `code: detail` (at most 200 characters, a gateway's own words), and how many could not be reached.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AppRelay {
+    pub queued: bool,
+    pub refused: Vec<String>,
+    pub unreachable: u32,
+}
+
+impl AppRelay {
+    fn of(out: scaas_rpc::node::SubmitOutcome) -> Self {
+        use scaas_rpc::node::{NodeOutcome, SubmitOutcome};
+        let said = |e: &scaas_rpc::RpcError| -> String {
+            let t = match e {
+                scaas_rpc::RpcError::NodeRefused { code, detail, .. } => match detail {
+                    Some(d) => format!("{code}: {d}"),
+                    None => code.clone(),
+                },
+                e => e.code().to_string(),
+            };
+            t.chars().filter(|c| !c.is_control()).take(200).collect()
+        };
+        match out {
+            SubmitOutcome::Queued {
+                refused,
+                unreachable,
+                ..
+            } => AppRelay {
+                queued: true,
+                refused: refused.iter().map(|(_, e)| said(e)).collect(),
+                unreachable: u32::try_from(unreachable.len()).unwrap_or(u32::MAX),
+            },
+            SubmitOutcome::NotQueued { outcomes } => {
+                let mut r = AppRelay {
+                    queued: false,
+                    refused: vec![],
+                    unreachable: 0,
+                };
+                for (_, o) in outcomes {
+                    match o {
+                        NodeOutcome::Refused(e) => r.refused.push(said(&e)),
+                        NodeOutcome::Unreachable(_) => r.unreachable += 1,
+                        NodeOutcome::Queued { .. } => r.queued = true,
+                    }
+                }
+                r
+            }
+        }
+    }
+}
+
 /// One registry record as [`AppCore::verify_app_record`] reads it: `(kind, keyData)` of `registrationOf`, an `msig`'s current
 /// structure with its `enabled` word (`None`: never updated) and `version`, the structures of the versions the record's tags
 /// name (`msigAt`, CTR-UA-74: [`tagged_versions`]) and its accepted bits (`msigStateOf.accepted`: acceptance is per slot and
@@ -1955,11 +2007,12 @@ impl AppCore {
     /// A signed record's call of the app's own contract relayed by the profile's gateways (CLI-PQC-18 F3, owner 2026-11-27: the
     /// default path of a topic write, fee 0 allowed): `POST /v1/op {chain, op: {entry, contract: kind, token: contract, args,
     /// validUntil}}`, the same bytes to every gateway that announces the profile's chain (`kept_gateways`). `entry` and `args`
-    /// as [`Self::prepare_app_call`]'s, checked the same way (`Argument`, `AppDomainRefused`); `kind` the node's contract kind
-    /// of an app's factory class (`pqchat`, `pqvault`; another: `Argument`); every `int8` sent as a JSON number (the job API's
-    /// form, a `PqChat` vote); `validUntil` now plus the profile's validity window. Nothing is simulated here: the gateway
-    /// simulates before it queues. `true` when a gateway queued it, `false` when none did (refused or unreachable: the same
-    /// bytes may go again, or the payer sends them itself). The SDK keeps no row: the signed record is the caller's.
+    /// as [`Self::prepare_app_call`]'s, checked the same way (`Argument`, `AppDomainRefused`); `kind` the node's contract kind,
+    /// `pqchat` only (the one app kind door A takes, NODE-GW-09; another: `Argument`); every `int8` sent as a JSON number (the
+    /// job API's form, a `PqChat` vote), every other value as given; `validUntil` now plus the profile's validity window, a job
+    /// field the record does not sign. Nothing is simulated here: the gateway simulates before it queues. [`AppRelay`]: whether
+    /// a gateway queued it, each refusal by its code and detail, and how many gateways were unreachable (the same bytes may go
+    /// again, or the payer sends them itself). A queue is no landing. The SDK keeps no row: the signed record is the caller's.
     pub async fn relay_app_call(
         self: &Arc<Self>,
         chain: String,
@@ -1967,8 +2020,9 @@ impl AppCore {
         contract: String,
         entry: String,
         args: String,
-    ) -> Result<bool, SdkError> {
-        if !matches!(kind.as_str(), "pqchat" | "pqvault") {
+    ) -> Result<AppRelay, SdkError> {
+        // NODE-GW-09: the one app kind a gateway's door takes
+        if kind != "pqchat" {
             return Err(SdkError::Argument);
         }
         let (f, mut o, _, _) = call_review(&entry, &args, &contract)?;
@@ -1988,7 +2042,7 @@ impl AppCore {
         let out = node
             .submit_op(chain_id, &op, scaas_rpc::node::Fanout::All)
             .await?;
-        Ok(matches!(out, scaas_rpc::node::SubmitOutcome::Queued { .. }))
+        Ok(AppRelay::of(out))
     }
 
     /// Whether `ua`'s single key (`kind`, `key_data`, read by the caller from the UA's record) signs `typed_json` on `path`.

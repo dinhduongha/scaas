@@ -1563,16 +1563,20 @@ async fn relay_app_call_posts_the_job_to_the_gateways() {
     })
     .await
     .unwrap();
-    let a = AppCore::new(s.clone(), desc(Some(APP_ID), &["scaas/call/v1/"])).unwrap();
+    let a = AppCore::new(s.clone(), desc(Some(APP_ID), &["scaas/relay/v1/"])).unwrap();
+    // the contract's `voteEntry(PqTopicVote v, UASig sig)` (IPqChat; the node's door test posts the same body)
     let entry = json!({"type": "function", "name": "voteEntry", "stateMutability": "nonpayable", "outputs": [], "inputs": [
         {"name": "v", "type": "tuple", "components": [{"name": "entryId", "type": "bytes32"},
-            {"name": "value", "type": "int8"}, {"name": "seq", "type": "uint64"}]},
+            {"name": "voter", "type": "bytes32"}, {"name": "value", "type": "int8"}, {"name": "seq", "type": "uint64"}]},
         {"name": "sig", "type": "tuple", "components": [{"name": "keyData", "type": "bytes"},
             {"name": "signature", "type": "bytes"}, {"name": "members", "type": "tuple[]", "components": [
                 {"name": "index", "type": "uint16"}, {"name": "sig", "type": "bytes"}]}]}]})
     .to_string();
-    let id = format!("0x{}", "11".repeat(32));
-    let args = json!({"v": {"entryId": id, "value": "-1", "seq": "3"},
+    let (id, voter) = (
+        format!("0x{}", "11".repeat(32)),
+        format!("0x{}", "a1".repeat(32)),
+    );
+    let args = json!({"v": {"entryId": id, "voter": voter, "value": "-1", "seq": "3"},
         "sig": {"keyData": "0x01", "signature": "0xabcd", "members": []}})
     .to_string();
     let relay = |kind: &str, contract: &str, entry: &str, args: &str| {
@@ -1585,7 +1589,14 @@ async fn relay_app_call_posts_the_job_to_the_gateways() {
         );
         async move { a.relay_app_call("local".into(), k, c, e, x).await }
     };
-    assert!(relay("pqchat", APP_CONTRACT, &entry, &args).await.unwrap());
+    let upper = APP_CONTRACT.replace("aa", "AA");
+    let r = relay("pqchat", &upper, &entry, &args).await.unwrap();
+    let queued = scaas_sdk::app_core::AppRelay {
+        queued: true,
+        refused: vec![],
+        unreachable: 0,
+    };
+    assert_eq!(r, queued);
     let body: serde_json::Value = {
         let c = chain.lock().unwrap();
         assert_eq!(c.gw_paths.last().map(String::as_str), Some("/v1/op"));
@@ -1593,8 +1604,9 @@ async fn relay_app_call_posts_the_job_to_the_gateways() {
     };
     assert_eq!(body["chain"], json!(CHAIN_ID));
     let op = &body["op"];
+    let named = (&op["entry"], &op["contract"], &op["token"]);
     assert_eq!(
-        (&op["entry"], &op["contract"], &op["token"]),
+        named,
         (&json!("voteEntry"), &json!("pqchat"), &json!(APP_CONTRACT))
     );
     assert_eq!(
@@ -1613,40 +1625,36 @@ async fn relay_app_call_posts_the_job_to_the_gateways() {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    assert!(until > now);
+    let window = Limits::default().max_valid_secs;
+    assert!(
+        until > now && until <= now + window + 60,
+        "now plus the profile's window"
+    );
     assert!(chain.lock().unwrap().sent.is_empty(), "no transaction");
     let posted = chain.lock().unwrap().bodies.len();
-    for (kind, contract, e, x, want) in [
-        (
-            "token",
-            APP_CONTRACT,
-            entry.as_str(),
-            args.as_str(),
-            "Argument",
-        ),
-        ("pqchat", APP_CONTRACT, "{}", args.as_str(), "Argument"),
-        (
-            "pqchat",
-            APP_CONTRACT,
-            entry.as_str(),
-            "{\"v\": 1}",
-            "Argument",
-        ),
-        (
-            "pqchat",
-            TOKEN,
-            entry.as_str(),
-            args.as_str(),
-            "AppDomainRefused",
-        ),
-    ] {
-        assert_eq!(
-            code(relay(kind, contract, e, x).await),
-            want,
-            "{kind} {contract}"
-        );
+    let (e, x) = (entry.as_str(), args.as_str());
+    let refusals = [
+        ("token", APP_CONTRACT, e, x, "Argument"),
+        ("pqvault", APP_CONTRACT, e, x, "Argument"),
+        ("pqchat", APP_CONTRACT, "{}", x, "Argument"),
+        ("pqchat", APP_CONTRACT, e, "{\"v\": 1}", "Argument"),
+        ("pqchat", TOKEN, e, x, "AppDomainRefused"),
+    ];
+    for (kind, contract, e, x, want) in refusals {
+        let got = code(relay(kind, contract, e, x).await);
+        assert_eq!(got, want, "{kind} {contract}");
     }
     assert_eq!(chain.lock().unwrap().bodies.len(), posted, "nothing posted");
     chain.lock().unwrap().gw = fake_chain::Gw::Refuse;
-    assert!(!relay("pqchat", APP_CONTRACT, &entry, &args).await.unwrap());
+    let r = relay("pqchat", APP_CONTRACT, &entry, &args).await.unwrap();
+    assert!(
+        !r.queued && r.refused.len() == 1 && r.unreachable == 0,
+        "{r:?}"
+    );
+    chain.lock().unwrap().gw = fake_chain::Gw::Down;
+    let r = relay("pqchat", APP_CONTRACT, &entry, &args).await.unwrap();
+    assert!(
+        !r.queued && r.refused.is_empty() && r.unreachable == 1,
+        "{r:?}"
+    );
 }

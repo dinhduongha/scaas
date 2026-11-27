@@ -13901,8 +13901,10 @@ max` in Q32 integer arithmetic (Reddit's `(up + down)^(min/max)` order without a
 at z = 1.2816 with `+ − × ÷ √` on `f64` only, ties by the lower list index; Top and Controversial over the newest 256 ids
 against the snapshot, Best over the first 256; a repeated id ranked once; a row folds when `down ≥ up + threshold`, the
 threshold the caller's (`None`: no fold). A pinned `contentHash` is compared with the typed digest of each version rebuilt by
-the SDK (`pqchat_entry_hash` for version 1, `pqchat_edit_hash` after), the newest 64 versions read: none equal is
-`HashMismatch` when every version was read, else `HashUnchecked`.
+the SDK (`pqchat_entry_hash` for version 1, `pqchat_edit_hash` after), the newest 64 versions read: a match names its version,
+none equal is `HashMismatch` when every version was read, else `HashUnchecked`. After the review of 2026-11-28: a topic
+record's `seq` or `version` from trusted reads; a rekey's slot and a path-less `try` checked (the `try` reserved) before the
+signature; a creation's room bound after it; the relay's outcome names each refusal.
 **Status.** BUILT on branch `pqchat-core-confirm`, UNAUDITED (tests named in the normative section).
 **Why.** The owner's rulings left the API shape, the sort arithmetic and the bound of the version scan open; a `pow` or `exp`
 of a platform's libm is not correctly rounded, so two clients could order a near-tie apart.
@@ -13915,7 +13917,9 @@ an unbounded number of versions a node claims.
 
 **Rule.** (Summary; normative [gateway.md](node/gateway.md#NODE-GW-09).) `POST /v1/op` takes `createTopic`, `updateTopic`,
 `setTopicWriter`, `postEntry`, `editEntry` and `voteEntry` with `contract: "pqchat"` on an instance the guard's `pqchat` rule
-accepts, fee 0 allowed; every other `PqChat` write stays a namespace's job.
+accepts, fee 0 allowed, under the operator's switch `params.relay_pqchat_topics` (default on for a `private` chain, off for a
+`public` one) and an hourly bucket per signing key (`params.pqchat_topics_per_hour`, 60), a call queued this hour answered
+queued once; every other `PqChat` write stays a namespace's job.
 **Status.** BUILT (`scaas-node` `gateway.rs`, test `door_a_takes_a_pqchat_topic_write`), UNAUDITED.
 **Why.** The owner's ruling F3 relays topic writes by default; door A took a registered token's entries only.
 **Cost if wrong.** A topic write that only a funded UA can make, or a door that relays a session's writes the owner did not name.

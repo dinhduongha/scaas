@@ -187,14 +187,20 @@ becomes a `~gateway` job).
 [CLI-PQC-18](../decisions.md#CLI-PQC-18) F3: a topic write is relayed by default, fee 0 allowed; BUILT, UNAUDITED). `POST /v1/op`
 takes an `op` with `contract: "pqchat"` and the entry `createTopic`, `updateTopic`, `setTopicWriter`, `postEntry`, `editEntry` or
 `voteEntry` (each a record with its `UASig`, the job API's [PqChat call](job-api.md#pqchat-calls) form, `validUntil` required)
-besides a registered token's entries: the guard's `pqchat` rule judges the target (a contract the chain's `token_factory` lists
-as class 3 with a release, else `CALL_TARGET_REFUSED`), then the simulation, then the queue, as every door-A request. Every
-other `PqChat` write (a session, an epoch, an exit, a message, a tree write, the unsigned writes) stays a job of a namespace
-with the grant (`token not served` at this door, nothing read). The intake rules of [NODE-GW-01](#NODE-GW-01) apply to these
-as to any door-A request where they are built; a fee-0 topic record is the default the owner allowed. Test:
-`gateway::tests::door_a_takes_a_pqchat_topic_write` (the six queued for a listed instance; a session write and a message
-refused unread; an unlisted address refused by the guard, nothing queued). Clients: the SDK's `AppCore::relay_app_call`
-([scaas-sdk.md](../clients/scaas-sdk.md)).
+besides a registered token's entries: the intake below, then the guard's `pqchat` rule on the target (a contract the chain's
+`token_factory` lists as class 3 with a release, else `CALL_TARGET_REFUSED`), then the simulation, then the queue, as every
+door-A request. Every other `PqChat` write (a session, an epoch, an exit, a message, a tree write, the unsigned writes) stays a
+job of a namespace with the grant (`token not served` at this door, nothing read). **Intake** (the review of 2026-11-28, C-1 =
+E-3, C-2; NODE-GW-01 (c) and (d) for these records): the operator's switch `params.relay_pqchat_topics` (a bool; default
+`true` on a `private` chain, `false` on a `public` one, where a fee-0 door-A intent needs the operator's word;
+`PQCHAT_TOPICS_NOT_RELAYED`), the signing key's hourly bucket `params.pqchat_topics_per_hour` (default 60, counted per
+`sig.keyData`, a single key's UA being its hash; `PQCHAT_TOPICS_RATE`), and a call already queued this hour answered `200
+{"status":"queued"}` without a second queueing (the lane would pay for a revert); in memory, counted once the request is
+queued. A record carries no deadline of its own: `validUntil` is the job's. Test:
+`gateway::tests::door_a_takes_a_pqchat_topic_write` (the six queued for a listed instance; the SDK's body taken and its repeat
+answered queued once; the thirteen other `PqChat` writes refused unread; an unlisted address refused by the guard; the switch
+off, a `public` chain by default, a key past its bucket refused, another key taken; nothing queued on a refusal). Clients: the
+SDK's `AppCore::relay_app_call` ([scaas-sdk.md](../clients/scaas-sdk.md)).
 
 <a id="ua-register"></a><a id="NODE-GW-03"></a>**NODE-GW-03** — **Gateway `call` jobs exist only for the UA
 registry's writes.** `POST /v1/op` is no such door: it takes a registered token's signed `mtx*` entries (typed-signing N1) and

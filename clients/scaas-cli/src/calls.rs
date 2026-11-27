@@ -676,6 +676,8 @@ calls! { cx;
         cx.confirm(json!({"review": review(&call.review), "quote": call.quote}))?;
         named("tx", sdk(cx).wallet().submit_native_send(call.quote).await?)
     };
+    "app-core quote-app-call" "AppCore::quote_app_call" {chain: String, contract: String, entry: String, args: String, payer: KeyRef, signer: KeyRef} => js(cx.app()?.quote_app_call(chain, contract, entry, args, payer, signer).await?);
+    "app-core relay-app-call" "AppCore::relay_app_call" {chain: String, kind: String, contract: String, entry: String, args: String} => js(cx.app()?.relay_app_call(chain, kind, contract, entry, args).await?);
     "app-core read-app" "AppCore::read_app" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app(chain, contract, entry, args).await?));
     "app-core read-app-plain" "AppCore::read_app_plain" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app_plain(chain, contract, entry, args).await?));
     "app-core read-app-agreed" "AppCore::read_app_agreed" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app_agreed(chain, contract, entry, args).await?));
@@ -726,6 +728,8 @@ calls! { cx;
     "app-core pqchat-decode-payload" "AppCore::pqchat_decode_payload" {payload: Vec<u8>} => js(cx.app()?.pqchat_decode_payload(payload)?);
     "app-core pqchat-wrap-hash" "AppCore::pqchat_wrap_hash" {wrap: PqWrap} => named("hash", cx.app()?.pqchat_wrap_hash(wrap)?);
     "app-core pqchat-message-id" "AppCore::pqchat_message_id" {r: PqChatMessage} => named("messageId", cx.app()?.pqchat_message_id(r)?);
+    "app-core pqchat-entry-hash" "AppCore::pqchat_entry_hash" {r: PqTopicEntry} => named("contentHash", cx.app()?.pqchat_entry_hash(r)?);
+    "app-core pqchat-edit-hash" "AppCore::pqchat_edit_hash" {r: PqTopicEdit} => named("contentHash", cx.app()?.pqchat_edit_hash(r)?);
     "app-core pqchat-session-id" "AppCore::pqchat_session_id" {creator: String, nonce: u64} => named("sessionId", cx.app()?.pqchat_session_id(creator, nonce)?);
     "app-core pqchat-epoch-id" "AppCore::pqchat_epoch_id" {session_id: String, author: String, nonce: u64} => named("epochId", cx.app()?.pqchat_epoch_id(session_id, author, nonce)?);
     "app-core prepare-pqchat-session" "AppCore::prepare_pqchat_session" {account: KeyRef, r: PqChatSession} @sign => {

@@ -1002,6 +1002,12 @@ async fn nothing_is_signed_before_the_confirm() {
     let writes = w.net.writes();
     drop(rekey!().await.unwrap());
     assert_eq!((signs(), w.net.writes()), (1, writes), "an epoch dropped");
+    // review A-6: a review whose parent slot another child took since is refused at the confirm, before the signature
+    let stale = rekey!().await.unwrap();
+    child(&w.net, HOME, &o.e.id, &hex(&[0x77; 32]));
+    assert_eq!(code(w.pq.confirm(stale).await.map(|_| ())), "EpochTaken");
+    assert_eq!(signs(), 1, "nothing signed");
+    child(&w.net, HOME, &o.e.id, ZERO32);
     w.pq.confirm(rekey!().await.unwrap()).await.unwrap();
     assert_eq!(signs(), 2, "the epoch's confirm");
     // a leave and a removal: their confirm signs and sends nothing; `dispatch` prepares the call

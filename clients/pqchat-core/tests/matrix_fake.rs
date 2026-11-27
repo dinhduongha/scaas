@@ -116,8 +116,10 @@ fn event_bounds() {
     }
 }
 
-/// A room alice's client creates has no Matrix encryption and is bound to the session her `create` names it in; a room it
-/// did not create is refused there (`MatrixRoom`) before anything is signed or written.
+/// A room alice's client creates has no Matrix encryption and is bound to the session her `create` names it in, at the
+/// confirm after the signature; a room it did not create is refused there (`MatrixRoom`) before anything is written. A
+/// creation whose first write cannot be prepared releases its room for the next session (review A-1, E-7), and accepts no
+/// session.
 #[tokio::test(flavor = "multi_thread")]
 async fn created_room_unencrypted_and_bound_by_create() {
     let _one = ONE.lock().await;
@@ -158,6 +160,23 @@ async fn created_room_unencrypted_and_bound_by_create() {
         code(confirmed(&w.pq, w.pq.create(req(&room, 3)).await).await),
         "MatrixRoom"
     );
+    // a creation whose call is refused: its room released, its session not accepted; the next creation binds the room
+    let free = w.pq.create_room().await.unwrap();
+    let p = w.pq.create(req(&free, 4)).await.unwrap();
+    let sid = p.facts().session_id.clone();
+    w.net
+        .accept
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    assert!(w.pq.confirm(p).await.is_err());
+    assert_eq!(w.pq.room_session(&free).unwrap(), None, "released");
+    assert_eq!(w.pq.consent(&sid).unwrap(), None, "not accepted");
+    w.net
+        .accept
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let b = confirmed(&w.pq, w.pq.create(req(&free, 5)).await)
+        .await
+        .unwrap();
+    assert_eq!(w.pq.room_session(&free).unwrap(), Some(b.session_id));
 }
 
 /// Every `Bound` answer is told to the transport (`bound`), the first bind and each later use alike: a fresh device or a new

@@ -2,12 +2,13 @@
 //! The chain port (spec §5 R1–R3, W1): every read and write the crate makes, by the contract item's name. Each read's trust
 //! mark is in [`READS`], once (CLI-PQC-13): a read of a session's state at an instance, of a registry key or membership, or of
 //! the factory's listing feeds a decryption or chooses a key, a recipient or an epoch, so it is made under
-//! `Purpose::FeedsDecryption`; the discovery and topic views choose nothing. The gate `pqc-reads` holds every call site to the
+//! `Purpose::FeedsDecryption`, and so is a topic view a signed record's `seq` or `version` comes from (CLI-PQC-21); the
+//! discovery and the other topic views choose nothing. The gate `pqc-reads` holds every call site to the
 //! table. [`SdkNet`] is the port over the SDK (`read_app` at the profile's final block, `prepare_app_call`, the wallet's send);
 //! the tests put recording fakes in its place.
 use crate::PqChatError;
 use async_trait::async_trait;
-use scaas_sdk::app_core::{AppCall, AppCore, AppQuote, AppUaSig};
+use scaas_sdk::app_core::{AppCall, AppCore, AppQuote, AppRelay, AppUaSig};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::pqchat_records::{PqChatPrepared, PqChatSigned};
 use scaas_sdk::pqchat_tree::{PqTreeCommit, PqTreeCommitSigned, PqTreeExit};
@@ -33,7 +34,7 @@ pub const READS: &[(&str, Trust)] = &[
     ("IOpenFactory.infoOf", Trusted),
     ("IPqChat.byAuthor", Plain),
     ("IPqChat.childOf", Trusted),
-    ("IPqChat.entryOf", Plain),
+    ("IPqChat.entryOf", Trusted),
     ("IPqChat.entryRows", Plain),
     ("IPqChat.epochComplete", Trusted),
     ("IPqChat.epochCount", Trusted),
@@ -62,13 +63,13 @@ pub const READS: &[(&str, Trust)] = &[
     ("IPqChat.sigStore", Trusted),
     ("IPqChat.storedCount", Trusted),
     ("IPqChat.storedRange", Trusted),
-    ("IPqChat.topicOf", Plain),
+    ("IPqChat.topicOf", Trusted),
     ("IPqChat.topics", Plain),
     ("IPqChat.topicsByAdmin", Plain),
     ("IPqChat.versionAt", Plain),
-    ("IPqChat.voteOf", Plain),
+    ("IPqChat.voteOf", Trusted),
     ("IPqChat.wrapAt", Trusted),
-    ("IPqChat.writerOf", Plain),
+    ("IPqChat.writerOf", Trusted),
     ("IPqChat.writersOf", Plain),
     ("IPqChatTreeViews.commitOf", Trusted),
     ("IPqChatTreeViews.goneKeyOf", Trusted),
@@ -230,14 +231,14 @@ pub trait Net: Send + Sync {
         sign_now(u).await
     }
     /// A signed topic write relayed by the chain's gateways, fee 0 (CLI-PQC-18 F3; the SDK's `relay_app_call`): whether a
-    /// gateway queued it. A port without gateways answers `RelayUnavailable`.
+    /// gateway queued it, each refusal, the gateways unreachable. A port or chain without gateways answers `RelayUnavailable`.
     async fn relay(
         &self,
         chain: &str,
         contract: &str,
         item: &'static str,
         args: Value,
-    ) -> Result<bool, PqChatError> {
+    ) -> Result<AppRelay, PqChatError> {
         let _ = (chain, contract, item, args);
         Err(PqChatError::RelayUnavailable)
     }
@@ -355,7 +356,7 @@ impl Net for SdkNet {
         contract: &str,
         item: &'static str,
         args: Value,
-    ) -> Result<bool, PqChatError> {
+    ) -> Result<AppRelay, PqChatError> {
         if !RELAYED.contains(&item) {
             return Err(PqChatError::Internal);
         }
@@ -481,7 +482,7 @@ impl Net for AgreedNet {
         contract: &str,
         item: &'static str,
         args: Value,
-    ) -> Result<bool, PqChatError> {
+    ) -> Result<AppRelay, PqChatError> {
         self.0.relay(chain, contract, item, args).await
     }
 
