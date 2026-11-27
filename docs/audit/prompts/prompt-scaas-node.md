@@ -250,7 +250,7 @@ n. **The whole-set guard and path-less commits** (added 2026-11-28; `T/docs/node
    check before any send (`TREE_SET_REFUSED`, zero sends); the parts sent in C37's order, each only after the one before is
    in state at the final block, the job `queued` under `TREE_SET_SENDING` meanwhile and never `dead` while a part may land; a
    path-less commit (no path list) passes the same guard with the rows the contract accepts and no more.
-o. **PENDING LANDING (`pqchat-core-confirm`): door A takes the six signed `PqChat` topic records** (NODE-GW-09, CLI-PQC-18 F3):
+o. **Door A takes the six signed `PqChat` topic records** (NODE-GW-09, CLI-PQC-18 F3; landed from `pqchat-core-confirm`):
    `gateway.rs` and `guard.rs`: only `createTopic`, `updateTopic`, `setTopicWriter`, `postEntry`, `editEntry`, `voteEntry`,
    each with its `UASig` and `validUntil`, on a target the chain's `token_factory` lists as class 3 with a release
    (`CALL_TARGET_REFUSED` otherwise); every other `PqChat` write stays a job of a namespace with the grant; the intake (the
@@ -277,7 +277,7 @@ o. **PENDING LANDING (`pqchat-core-confirm`): door A takes the six signed `PqCha
 - `T/docs/research/security-review-record.md` (part 3, the node relay, not done before this unit)
 - added 2026-11-28 (local, `STATUS.md` in each): the TreeKEM client round's review `scratchpad/treekem-t4-t9-review-20261126-1808/`
   and re-check `scratchpad/treekem-t4-t9-recheck-20261126-2332/` (the node's whole-set guard); the path-less review
-  `scratchpad/treekem-pathless-review-20261127-1527/`; pending landing: `scratchpad/pqchat-core-confirm-review-20261128-0133/`
+  `scratchpad/treekem-pathless-review-20261127-1527/`; `scratchpad/pqchat-core-confirm-review-20261128-0133/`
   (NODE-GW-09: C-1 = E-3, C-2)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
@@ -290,7 +290,7 @@ o. **PENDING LANDING (`pqchat-core-confirm`): door A takes the six signed `PqCha
   `2026-11-24-review-fix-contract-mutants.py`), `2026-11-26-review-fix4-contract-summary.txt`, and the round's closing
   matrix (`2026-11-26-round-matrix.sh` and its summary)
 - added 2026-11-28: `T/runs/2026-11-27-treekem-pathless-combined-summary.txt`, `-matrix-summary.txt`,
-  `-nethermind-rows.txt`; pending landing: the `pqchat-core-confirm` rows of `T/clients/pqchat-core/runs/2026-11-17-pqchat-core-summary.txt`
+  `-nethermind-rows.txt`; the `pqchat-core-confirm` rows of `T/clients/pqchat-core/runs/2026-11-17-pqchat-core-summary.txt`
   and `2026-11-28-pqchat-core-confirm-mutants.txt` (the gateway's door-A rows)
 
 **Also accepted or known for this unit (do not report as such):**

@@ -190,7 +190,7 @@ i. **The new crates in CI and the supply chain** (added 2026-11-28): `clients/sc
    temp-path checks; **PENDING LANDING:** `clients/scaas-profile/` (branch `user-profiles`) and `clients/scaas-tui/` (branch
    `scaas-tui`): their CI jobs, `ci_changes.py` and `format.sh` rows, `scripts/check_test_features.py`'s refusal of the
    test-only features (`test-hooks`, `dev-profiles`) in a release build; `clients/scaas-cli/src/calls.rs`'s topic calls
-   (branch `pqchat-core-confirm`): built from named fields, signed only after the review, sent to door A as NODE-GW-09
+   (landed from `pqchat-core-confirm`): built from named fields, signed only after the review, sent to door A as NODE-GW-09
    takes them. The crates themselves are units `scaas-matrix`, `scaas-profile`, `scaas-tui`.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**

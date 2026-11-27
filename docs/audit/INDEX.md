@@ -33,7 +33,7 @@ reviewer's model; Codex today: GPT-6.2-astra, high).
 | 18 | `scaas-node` | 2.5 | [prompt-scaas-node.md](prompts/prompt-scaas-node.md) | SND | the open relayer and indexer: allow-lists both ways, decode bounds, rebuilt job bytes, never `dead` while a tx may land, no keys, no oracle, RPC lists, gateway, indexer, adapters, store (added 2026-11-22; ready) |
 | 19 | `scaas-sdk` | 2.6 | [prompt-scaas-sdk.md](prompts/prompt-scaas-sdk.md) | SDK | `scaas-sdk`, its FFI and bindings, `scaas-rpc`: decryption reads by majority, digests, refusals before signing, no oracle, handles across the FFI, profiles, hand-off, Arweave payer path (added 2026-11-22; ready; the uniffi bindings by `<BINDING_SHA>` if `sdk-binding` is not merged at the tag) |
 | 20 | `evm-pqvault` | 3.4 | [prompt-evm-pqvault.md](prompts/prompt-evm-pqvault.md) | PQV | `PqVault` (PR #27): admin model (b), membership and wraps, `sealedInfo` bounds, ciphertexts in state, relayable writes, NET-ALL-25, pins, the share box; `PqGroupBase` audited in unit 9 (added 2026-11-22; ready) |
-| 21 | `app-cores` | 4.5 | [prompt-app-cores.md](prompts/prompt-app-cores.md) | APC | `pqchat-core` and `pqvault-core` (added 2026-11-22; final 2026-11-24, both built on `ua-rs-sign`; 2026-11-28: the TreeKEM layer in scope, pqvault-core's sign-after-confirm and item layer, pqchat-core's sign-after-confirm **pending landing**; **FRAME** only for the biometric unlock) |
+| 21 | `app-cores` | 4.5 | [prompt-app-cores.md](prompts/prompt-app-cores.md) | APC | `pqchat-core` and `pqvault-core` (added 2026-11-22; final 2026-11-24, both built on `ua-rs-sign`; 2026-11-28: the TreeKEM layer in scope, pqvault-core's sign-after-confirm and item layer, pqchat-core's sign-after-confirm; **FRAME** only for the biometric unlock) |
 | 22 | `clientkeys-vectors` | 2.7 | [prompt-clientkeys-vectors.md](prompts/prompt-clientkeys-vectors.md) | CKV | layer unit: `clients/clientkeys` (the JS reference) and every vector generator, with the vector files: generator correctness, frozen rows, canonical forms, the `relayer` / `feeRecipient` zeroing (added 2026-11-24; `ua-group.js`, the group kinds, 2026-11-26) |
 | 23 | `pqz-verifier-deploy` | 4.6 | [prompt-pqz-verifier-deploy.md](prompts/prompt-pqz-verifier-deploy.md) | PVD | layer unit: `scaas-pqz-verifier` (key handling, typed `PqzVerdict` signing, the three-key model) and `smartcontracts/evm/script/` with the factory catalogue and the deployment books (addresses, parameters, immutability, init-code hash) (added 2026-11-24) |
 | 24 | `bindings-cli-ci` | 4.7 | [prompt-bindings-cli-ci.md](prompts/prompt-bindings-cli-ci.md) | BCC | layer unit: the `ua-*` bindings over `libscaas_ua_c` beyond their FFI edge, `clients/scaas-cli`, CI (`ci.yml`, `ci_changes.py`) and the supply chain (`cargo deny` / `npm audit`, pins, `evm_libs.sh`, `format.sh`, the secret and temp-path checks) (added 2026-11-24) |
@@ -70,10 +70,10 @@ as not covered ([plan](README.md#pending-landing)). The crypto and cross-cutting
 | The app-core key handles (no layer unit held them) | `clients/ua-rs/src/wallet/appkey.rs` | `dev` | 15 `ua-rs-custody` | BUILT, UNAUDITED |
 | The constant-time secret multiplication (no unit held it) | `clients/scaas-ct/` | `dev` | 25 `crypto-signatures` | BUILT, UNAUDITED |
 | Files no prompt named | `clients/ua-rs/src/wallet/{soroban_tx,app_refusals}.rs`; `src/facade/pqz_pack.rs` | `dev` | 14 `ua-rs-sign`; 16 `ua-rs-digests` | BUILT, UNAUDITED |
-| pqchat-core sign-after-confirm, relayed topic writes, window sorts, pinned `contentHash` (CLI-PQC-18, -21) | `clients/pqchat-core/src/{confirm,session,topics,tree,net,matrix,error}.rs` | `pqchat-core-confirm` | 21 `app-cores` | pending landing |
-| The SDK's relay of a signed app record | `clients/scaas-sdk/src/{app_core,pqchat_records}.rs` `AppCore::relay_app_call` | `pqchat-core-confirm` | 19 `scaas-sdk` | pending landing |
-| The node's door A for the six topic records (the gateway rule of that branch) | `scaas-node/src/{gateway,guard}.rs` | `pqchat-core-confirm` | 18 `scaas-node` | pending landing |
-| The CLI's topic calls | `clients/scaas-cli/src/calls.rs` | `pqchat-core-confirm` | 24 `bindings-cli-ci` | pending landing |
+| pqchat-core sign-after-confirm, relayed topic writes, window sorts, pinned `contentHash` (CLI-PQC-18, -21) | `clients/pqchat-core/src/{confirm,session,topics,tree,net,matrix,error}.rs`, `tests/sign_sites.rs` | `dev` (from `pqchat-core-confirm`) | 21 `app-cores` | BUILT, UNAUDITED |
+| The SDK's relay of a signed app record | `clients/scaas-sdk/src/{app_core,pqchat_records}.rs` `AppCore::relay_app_call` | `dev` (from `pqchat-core-confirm`) | 19 `scaas-sdk` | BUILT, UNAUDITED |
+| The node's door A for the six topic records (NODE-GW-09) | `scaas-node/src/{gateway,guard}.rs` | `dev` (from `pqchat-core-confirm`) | 18 `scaas-node` | BUILT, UNAUDITED |
+| The CLI's topic calls | `clients/scaas-cli/src/calls.rs` | `dev` (from `pqchat-core-confirm`) | 24 `bindings-cli-ci` | BUILT, UNAUDITED |
 | `PqChat` declared views, no `fallback()`, the linked library (the no-fallback rules of that branch) | `smartcontracts/evm/src/pqchat/{PqChat,PqChatRecordLib,PqChatTreeViews}.sol` | `pqchat-no-fallback` | 9 `evm-pqchat` | pending landing |
 | The library's deploy and link | `smartcontracts/evm/script/{Deploy.s.sol,DeployBase.sol,onchain/PqChat.s.sol,onchain/groups.json}`, `smartcontracts/scripts/deploy.sh` | `pqchat-no-fallback` | 23 `pqz-verifier-deploy` | pending landing |
 | The user profiles' store | `clients/scaas-profile/` | `user-profiles` | 34 `scaas-profile` | pending landing |
@@ -217,12 +217,12 @@ is cut from the run copy if the branch did not land in the tag ([plan](README.md
   existing unit holds `clients/` crates beyond the SDK, the RPC layer and the two app cores. Each prompt names its areas
   (layer, cross-layer, cryptography, adversarial) and gives the 13 dimensions in the form of `T/docs/review.md` §5.
 - `app-cores` (21): pqchat-core's TreeKEM layer no longer FRAME (invariant l); pqvault-core's sign-after-confirm and item
-  layer (m); pqchat-core's sign-after-confirm pending landing (n). FRAME only for the biometric unlock.
-- `scaas-sdk` (19): the tree calls (l), `quote_app_call` and, pending landing, `relay_app_call` (m); the profile layer,
+  layer (m); pqchat-core's sign-after-confirm (n; marked pending, then landed on `dev` the same day). FRAME only for the biometric unlock.
+- `scaas-sdk` (19): the tree calls (l), `quote_app_call` and `relay_app_call` (m; the latter landed with `pqchat-core-confirm`); the profile layer,
   pending landing (n).
 - `evm-pqchat` (9): path-less Adds (12), G1 / G2 / G5 (13), and, pending landing, the declared views and
   `PqChatRecordLib` (14).
-- `scaas-node` (18): `tree_set.rs` and path-less commits (n); the gateway door for topic records, pending landing (o).
+- `scaas-node` (18): `tree_set.rs` and path-less commits (n); NODE-GW-09, landed with `pqchat-core-confirm` (o).
 - `ua-rs-custody` (15): `wallet/appkey.rs` (held by no layer unit before) and the profile arena, pending landing (8);
   path-less and F-1 in `wallet/tree.rs` (9).
 - `clientkeys-vectors` (22): path-less and F-1 rows, the resume rows, `canonicalJson`'s key order (i); the profile rows,

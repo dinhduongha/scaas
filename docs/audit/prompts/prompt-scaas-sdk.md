@@ -132,7 +132,7 @@ layer, the confidential reads, the app-core surface.
   `surface.rs`, `text.rs`, `vault/`, `wallet/`, `watch.rs`, and `binding.rs`, `binding_list.rs` once merged)
 - additions of 2026-11-28 (invariants l to n): `src/pqchat_tree.rs` and `gas/pqchat-tree.json` (the SDK's tree calls,
   TreeKEM plan T5, the batch split; landed), `AppCore::quote_app_call` in `src/app_core.rs` (CLI-SDK-36; landed);
-  **PENDING LANDING (`pqchat-core-confirm`):** `AppCore::relay_app_call` and the `pqchat_records.rs` changes;
+  `AppCore::relay_app_call` and the `pqchat_records.rs` changes (landed from `pqchat-core-confirm`);
   **PENDING LANDING (`user-profiles`):** `src/user_profile/` (`UserProfiles`, `UserProfile`), `Sdk::close` in `src/lib.rs`, the
   `vault/` changes (`store.rs`, `unlock.rs`), the `user-profile` feature in `Cargo.toml`, the FFI rows in `ffi/`
 - `clients/scaas-sdk/ffi/` (the flutter_rust_bridge crate; `frb_generated.rs` is generated: read the surface it exposes),
@@ -241,8 +241,8 @@ l. **The tree calls** (added 2026-11-28; CTR-CHAT-27's Changes of 2026-11-26 / -
    (owner 2026-11-27), each part within EIP-8037 and 2^24; path-less commits as the delta spec allows them (R17-R20).
 m. **Sign after confirm** (added 2026-11-28; CLI-SDK-36): `AppCore::quote_app_call` quotes an app call before its record is
    signed: the payer checked first, the app row counted from the arguments and not from the record's signature (review
-   A-1, A-2, R-1), the review's signature field empty; nothing in the quote path signs or holds a key. **PENDING LANDING
-   (`pqchat-core-confirm`):** `AppCore::relay_app_call` sends a signed app record (a PqChat topic write) to the node's door A
+   A-1, A-2, R-1), the review's signature field empty; nothing in the quote path signs or holds a key. `AppCore::relay_app_call`
+   (landed from `pqchat-core-confirm`) sends a signed app record (a PqChat topic write) to the node's door A
    (NODE-GW-09) with fee 0 allowed; what it sends is exactly the signed record, and a refusal is named, never retried with
    other bytes.
 n. **PENDING LANDING (`user-profiles`): the profile layer** (CLI-UPR-02, -07, -22, -29): `UserProfiles` / `UserProfile` over
@@ -254,7 +254,7 @@ n. **PENDING LANDING (`user-profiles`): the profile layer** (CLI-UPR-02, -07, -2
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - added 2026-11-28 (local, `STATUS.md` in each): `scratchpad/treekem-t4-t9-review-20261126-1808/`,
   `scratchpad/treekem-t4-t9-recheck-20261126-2332/`, `scratchpad/pqvault-ui-rules-review-20261127-1556/`,
-  `scratchpad/pqvault-ui-rules-recheck-20261127-1918/`; pending landing: `scratchpad/pqchat-core-confirm-review-20261128-0133/`,
+  `scratchpad/pqvault-ui-rules-recheck-20261127-1918/`; `scratchpad/pqchat-core-confirm-review-20261128-0133/`; pending landing:
   `scratchpad/user-profiles-code-review-20261128-0230/`
 - the T26 review: `scratchpad/sdk-review-20261123-0621/` (`BRIEF.md`, `fable-A.md`, `fable-A2.md`, `fable-B.md`,
   `fable-B2.md`, `fable-C.md`, `STATUS.md` with the fix commits and the controller decisions (103)-(161), of which (150) and
@@ -274,7 +274,7 @@ n. **PENDING LANDING (`user-profiles`): the profile layer** (CLI-UPR-02, -07, -2
 - added 2026-11-28: `T/clients/pqvault-core/runs/2026-11-27-pqvault-ui-rules-summary.txt` (the SDK's quote rows and
   mutants), `T/runs/2026-11-27-pqchat-treekem-split-mutants.txt`, `T/runs/2026-11-27-treekem-pathless-combined-summary.txt`;
   pending landing: `T/clients/scaas-sdk/runs/2026-11-27-user-profiles-summary.txt` with its `-up1-` to `-up10-`, `-kh-`
-  and `2026-11-28-user-profiles-r1-` to `-r3-mutants.txt`, and `T/clients/pqchat-core/runs/2026-11-28-pqchat-core-confirm-mutants.txt`
+  and `2026-11-28-user-profiles-r1-` to `-r3-mutants.txt`; landed: `T/clients/pqchat-core/runs/2026-11-28-pqchat-core-confirm-mutants.txt`
 - `T/clients/scaas-sdk/runs/2026-11-17-scaas-sdk-summary.txt`, `2026-11-20-m20-nethermind-summary.txt`;
   `T/clients/scaas-rpc/runs/2026-11-17-scaas-rpc-summary.txt`, `2026-11-22-evm-probes-summary.txt`;
   `T/smartcontracts/evm/runs/2026-11-19-pr-a-matrix-summary.txt`, and the tag's own client gate summary (bindings included)

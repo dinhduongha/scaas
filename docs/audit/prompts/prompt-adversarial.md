@@ -187,8 +187,8 @@ g. **The roles added 2026-11-28.** A member who signs one path-less record with 
    device warn and fail closed?); a removed party that reads path-less epochs until the next path commit; a member who
    exceeds `pathRefreshBound` by splitting Adds across commits. A Matrix homeserver or user against `scaas-matrix` (room kinds
    mixed, ephemeral signals forced, a flood); a front-end that signs before the confirm or after a quote that changed
-   (CLI-SDK-36, CLI-PQV-18). **Pending landing:** a spammer of relayed topic writes against the node's door A at fee 0
-   (NODE-GW-09's bucket and switch, `pqchat-core-confirm`); a local attacker against the user profiles (rollback, a lowered
+   (CLI-SDK-36, CLI-PQV-18); a spammer of relayed topic writes against the node's door A at fee 0
+   (NODE-GW-09's bucket and switch). **Pending landing:** a local attacker against the user profiles (rollback, a lowered
    KDF cost, a hidden profile's existence, a crafted export; `user-profiles`); text controlled by others against the TUI's
    review (`scaas-tui`); a caller that reaches a `PqChat` module by a selector not in its ABI (ARCH-POS-29,
    `pqchat-no-fallback`).

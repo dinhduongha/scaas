@@ -61,7 +61,7 @@ added); the rows changed on 2026-11-26 and unit 32: at `b202a6fa2`; units 33-35:
 | `ua-rs-boundary` | `clients/ua-rs/src/{json,lib}.rs`, `src/bin/`, `clients/ua-c/`, the wrappers at their FFI boundary (`ua-cxx`, `ua-qt`, `ua-cs`, `ua-py`, `ua-go`, `ua-dart-frb`), `Cargo.lock`, `deny.toml`, `fuzz/` | ~5 K + wrappers |
 | `scaas-node` | `scaas-node/src/` (gateway, job API, lanes, indexer, mesh, DEX venue, adapters per family), `migrations/`, `node.example.toml` | ~102 K with in-file tests |
 | `scaas-sdk` | `clients/scaas-sdk/src/` (incl. `line.rs`, `app_core/`), `ffi/`, `bindings/`, `clients/scaas-rpc/src/` | ~53 K + FFI (mostly generated) |
-| `app-cores` | `clients/pqchat-core/` (with its Dart binding `ffi/`; its TreeKEM layer `src/tree.rs` in scope since 2026-11-28; pending landing: `src/confirm.rs` and the topic changes), `clients/pqvault-core/` (with `src/item.rs`, sign after confirm) | ~14 K + ~1 K pending |
+| `app-cores` | `clients/pqchat-core/` (with its Dart binding `ffi/`; its TreeKEM layer `src/tree.rs` and `src/confirm.rs` in scope since 2026-11-28), `clients/pqvault-core/` (with `src/item.rs`, sign after confirm) | ~15 K |
 | `clientkeys-vectors` | `clients/clientkeys/src/`, `scripts/` (the generators), the generators beside `smartcontracts/vectors/`, `pqz-core/ffi/src/bin/pqz-vectors.rs`, `clients/zether-prover/src/vectors.rs`; the vector files `smartcontracts/vectors/`, `smartcontracts/evm/test/vectors/` | ~13 K + ~15 K generators + data |
 | `pqz-verifier-deploy` | `scaas-pqz-verifier/`; `smartcontracts/evm/script/` (deploy scripts, release list, books), the factory catalogue as the scripts use it, `release-data/`; the git-ignored books `deployments/<key>.json` (local) | ~2 K + ~33 K scripts |
 | `bindings-cli-ci` | the `ua-*` bindings over `libscaas_ua_c` beyond their FFI edge (`ua-c`, `ua-cxx`, `ua-qt`, `ua-cs`, `ua-py`, `ua-go`, `ua-dart`, `ua-dart-frb`), `clients/scaas-cli/`, `.github/workflows/ci.yml`, `.github/ci_changes.py`, every `deny.toml` / lockfile, `scripts/{evm_libs.sh,vendor.sh,mutant_guard.py,format.sh,capped,check_test_features.py,docs_check.py,size_gate.py}` | ~32 K bindings + ~7 K CLI, CI, scripts |
@@ -148,12 +148,13 @@ the [audit-rounds table](../decisions.md#audit-rounds) updated (target and statu
 
 Code that the audit must cover but that is on a branch, not on `dev`, when a prompt was written is marked **PENDING
 LANDING (`<branch>`)** in its prompt: a whole unit (`scaas-profile`: `user-profiles`; `scaas-tui`: `scaas-tui`) or a part of
-a unit (`pqchat-core-confirm`: `app-cores`, `scaas-sdk`, `scaas-node`, `bindings-cli-ci`; `pqchat-no-fallback`:
+a unit (`pqchat-no-fallback`:
 `evm-pqchat`, `pqz-verifier-deploy`; `user-profiles`: `ua-rs-custody`, `scaas-sdk`, `clientkeys-vectors`,
 `crypto-kem-seal`, `bindings-cli-ci`). No prompt pins a commit: the round's one pin is the tag's SHA. When the tag is cut,
 the controller checks each marked branch: landed in the tag, the mark is dropped in the run copy of the prompts; not landed,
 the marked part (or the whole unit) is cut from the run copy, its ledger rows say `not landed`, and the round's summary lists
-it as not covered. The [index](INDEX.md#code-added-after-unit-32) lists every such path with its unit.
+it as not covered. `pqchat-core-confirm` was marked so and landed on `dev` on 2026-11-28 (its parts in `app-cores`,
+`scaas-sdk`, `scaas-node`, `bindings-cli-ci` are now ordinary scope). The [index](INDEX.md#code-added-after-unit-32) lists every such path with its unit.
 
 ## Running order
 
