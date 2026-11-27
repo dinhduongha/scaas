@@ -63,8 +63,9 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 
 - **Repo public.** Before any push: scan the outgoing diff for secrets, including JSON and `runs/`, read the hits, then push as a separate
   step, by explicit SHA. No gitleaks in CI. A pushed secret is burned: rotate it, do not just delete it.
-- Never commit `.env`, keys, keystores, mnemonics, passwords, machine paths or email addresses. No built binaries on GitHub: source and
-  build scripts only.
+- Never commit `.env`, keys, keystores, mnemonics, passwords, machine paths or email addresses. No built binaries on GitHub
+  ([ARCH-POS-27](docs/decisions.md#ARCH-POS-27)): source, build and verify scripts only; CI publishes text and JSON. Stores and
+  channels outside GitHub are allowed.
 - No `/tmp` path or other machine path in a committed file: scripts make temp dirs at run time (`mktemp -d`, `tempfile`),
   logs and notes write `<tmp>`. CI refuses a temp path outside `legacy/` and `docs/history/`.
 - Never `git add -f`: an ignored file is ignored on purpose, and a forced report stays in public history.
