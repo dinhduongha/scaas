@@ -105,7 +105,8 @@ abstract class Vault implements RustOpaqueInterface {
   /// terminal come back (none are followed in memory before plan T10).
   Future<List<String>> lock({required String seed});
 
-  /// Locks every seed.
+  /// Locks every seed: each seed with an open main set or a hidden set (one `lock` each), so a hidden set opened on a locked
+  /// seed is locked too.
   Future<List<String>> lockAll();
 
   /// The memory protection of an unlocked seed's key arena now (`mlock`, no-dump; best effort, closing review P3): an app can

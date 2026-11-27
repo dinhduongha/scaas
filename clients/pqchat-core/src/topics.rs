@@ -1,24 +1,42 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Public topics (topics spec P33–P46, CTR-CHAT-15 to CTR-CHAT-18): create (with `openReplies` true, D19), update, writers,
-//! post, reply, edit, vote, each signed by the SDK's `prepare_pqchat_topic*` entries and their `sign()` (S6) from named fields and prepared as the
-//! SDK's operation (W1); a record that replaces a value is built at `seq == stored + 1` and an edit at `versionCount + 1`,
-//! both read from the instance's state. Rights are the contract's: the crate checks none of its own and the quote (a
-//! simulation) refuses what the contract refuses. Every list is paged from state. A `ref` is shown unverified until
-//! [`PqChat::resolve_ref`] reads its chain: the factory lists its instance, the referenced entry's topic names that instance
-//! as its home (Fable P3-4), and `contentHash` is zero; a pinned `contentHash` stays unverified (`HashUnchecked`): the views
-//! now give each version's nonce (CTR-CHAT-31), the digest check itself is not built here yet. An `msig` author:
-//! `MsigAuthorPlanned`.
+//! post, reply, edit, vote, each built from named fields by the SDK's `prepare_pqchat_topic*` entries for the user's review and
+//! signed only on the confirm (CLI-SDK-36, [`crate::confirm`]); relayed by the chain's gateways by default, fee 0, or the
+//! payer's own transaction (CLI-PQC-18 F3, [`Path`]). A record that replaces a value is built at `seq == stored + 1` and an
+//! edit at `versionCount + 1`, both read from the instance's state. Rights are the contract's: the crate checks none of its
+//! own and the simulation refuses what the contract refuses. Every list is paged from state, newest first by
+//! [`PqChat::page_newest`] (G7), its rows read by `entryRows` and ranked over a window of 256 ids by [`rank`] (F6), each
+//! folded at the user's threshold, never dropped. A `ref` is shown unverified until [`PqChat::resolve_ref`] reads its chain:
+//! the factory lists its instance, the referenced entry's topic names that instance as its home (Fable P3-4), and a pinned
+//! `contentHash` is the typed digest of one of its versions rebuilt from state by the SDK (G5, CTR-CHAT-31). An `msig`
+//! author: `MsigAuthorPlanned`.
 //! Nothing here is encrypted; bodies are public, untrusted Markdown (rendered by the front-end, P46).
+use crate::confirm::{Path, Prepared, RecordWrite};
 use crate::model::{self, at, ZERO32};
-use crate::session::{seed_of, sig_json, Me};
+use crate::net::Unsigned;
+use crate::session::{seed_of, Me};
 use crate::{PqChat, PqChatError};
-use scaas_sdk::app_core::AppCall;
-use scaas_sdk::op::KeyRef;
 use scaas_sdk::pqchat_records::{
-    PqChatSigned, PqEntryRef, PqTopic, PqTopicEdit, PqTopicEntry, PqTopicUpdate, PqTopicVote,
+    PqChatPrepared, PqEntryRef, PqTopic, PqTopicEdit, PqTopicEntry, PqTopicUpdate, PqTopicVote,
     PqTopicWriter,
 };
 use serde_json::{json, Value};
+
+/// The most versions of a referenced entry [`PqChat::resolve_ref`] reads to find a pinned `contentHash`, newest first.
+pub const REF_VERSIONS_MAX: u64 = 64;
+/// The ids a window sort scores (CLI-PQC-18 F6): the newest 256 of a list (Top, Controversial), the first 256 replies of a
+/// parent (Best).
+pub const WINDOW: u64 = 256;
+/// The fold's default (F6): an entry whose `down − up` is 5 or more is folded, never dropped; the user's setting replaces it.
+pub const FOLD_DEFAULT: u64 = 5;
+/// The most ids one `entryRows` call takes (`PqChat.ENTRY_ROWS_MAX`, CTR-CHAT-30).
+pub const ROWS_MAX: usize = 64;
+
+/// The review line of every topic record (review E-2): once signed it may land whenever a relayer or anyone sends it, until
+/// its nonce or `seq` is used.
+pub const NO_DEADLINE: &str =
+    "a signed topic record carries no deadline: once it leaves this device it may land later, \
+     until its nonce or seq is used; it cannot be withdrawn";
 
 /// The media type the crate writes (RFC 7763, CommonMark).
 pub const MARKDOWN: &str = "text/markdown";
@@ -33,11 +51,9 @@ pub struct At {
     pub instance: String,
 }
 
-/// A signed, prepared topic write: the record's id (a topic's or an entry's; `None` for the others) and the operation.
-pub struct TopicWrite {
-    pub id: Option<String>,
-    pub call: AppCall,
-}
+/// A topic write built for the review, unsigned (CLI-SDK-36): [`PqChat::confirm`] signs it into a
+/// [`crate::confirm::SignedWrite`], [`PqChat::dispatch`] sends it by its path.
+pub type TopicWrite = Prepared<RecordWrite>;
 
 /// A vote's value (P40): up, down, or withdrawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,8 +97,10 @@ pub enum RefFault {
     Unreadable,
     /// the entry's topic names another instance as its home (Fable P3-4)
     OtherHome,
-    /// `contentHash` is pinned and cannot be rebuilt from state
+    /// `contentHash` is pinned and none of the newest [`REF_VERSIONS_MAX`] versions read is it: an older version may be
     HashUnchecked,
+    /// `contentHash` is pinned and no version of the entry is it (every version read, CTR-CHAT-31)
+    HashMismatch,
 }
 
 /// A `ref`'s standing.
@@ -90,7 +108,11 @@ pub enum RefFault {
 pub enum RefState {
     /// not read yet: shown as unverified
     Unresolved,
+    /// listed, at its home, no `contentHash` pinned
     Verified,
+    /// listed, at its home, and the pinned `contentHash` is this version's (G5): the front-end shows that version, or says
+    /// the entry was edited after it (reviews D-1, E-4)
+    VerifiedVersion(u64),
     Unverified(RefFault),
 }
 
@@ -138,6 +160,53 @@ pub struct Page {
     pub total: u64,
 }
 
+/// One feed row as `entryRows` gives it (CTR-CHAT-30): an entry without its body, its votes, the viewer's vote and its direct
+/// reply count; `folded` by the caller's threshold (F6: shown as "hidden by your filter", never dropped).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EntryRow {
+    pub id: String,
+    pub topic_id: String,
+    pub author: String,
+    pub parent_id: String,
+    pub depth: u64,
+    pub entry_ref: Option<PqEntryRef>,
+    pub media_type: String,
+    pub sig_hash: String,
+    pub version_count: u64,
+    pub posted_at: u64,
+    pub edited_at: u64,
+    pub nonce: u64,
+    pub body_length: u64,
+    pub up: u128,
+    pub down: u128,
+    /// the viewer's vote: 1, -1 or 0
+    pub vote: i8,
+    /// direct replies only (the contract keeps no total of a thread)
+    pub replies: u64,
+    pub folded: bool,
+}
+
+/// A window sort (CLI-PQC-18 F6), each deterministic: the same rows give the same order on every client, ties by the lower
+/// list index. New and Old are no window: [`PqChat::page_newest`] and [`PqChat::page`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rank {
+    /// `up − down`, highest first, over the newest [`WINDOW`] ids
+    Top,
+    /// Reddit's controversy `(up + down)^(min / max)`, 0 when either is 0, highest first, over the newest [`WINDOW`] ids
+    Controversial,
+    /// the Wilson score's lower bound of `up / (up + down)` at z = 1.2816, highest first, over the first [`WINDOW`] ids
+    Best,
+}
+
+/// A window ranked: its rows with their list index, in order; the snapshot's total and whether the window covered the whole
+/// list (else the front-end says "scored among the latest 256", or the first 256 for Best).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ranked {
+    pub rows: Vec<(u64, EntryRow)>,
+    pub total: u64,
+    pub whole: bool,
+}
+
 /// A topic list of P42.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum List {
@@ -167,23 +236,45 @@ fn no_ref() -> PqEntryRef {
 }
 
 impl PqChat {
+    /// `record` (the argument `name` of `item`) prepared for `me`'s signature on the user's confirm: its review, and on the
+    /// payer's path the SDK's quote of the call before the signature; nothing signed (CLI-SDK-36).
+    #[allow(clippy::too_many_arguments)]
     async fn topic_write(
         &self,
         on: &At,
+        me: &Me,
         item: &'static str,
-        name: &str,
+        name: &'static str,
         record: Value,
-        signed: PqChatSigned,
-        payer: &KeyRef,
+        prepared: PqChatPrepared,
+        path: &Path,
     ) -> Result<TopicWrite, PqChatError> {
-        let a = json!({ name: record, "sig": sig_json(&signed.sig) });
-        let call = self
-            .net
-            .prepare(&on.chain, &on.instance, item, a, payer)
-            .await?;
-        Ok(TopicWrite {
-            id: signed.id,
-            call,
+        let quote = match path {
+            Path::Relayed => None,
+            Path::Payer(p) => Some(
+                self.quote_unsigned(on, item, json!({ name: record }), p, &me.key)
+                    .await?,
+            ),
+        };
+        let mut review = prepared.review.clone();
+        // review E-2: a topic record has no deadline (`validUntil` is a relayer's job field, not signed)
+        review.push(scaas_sdk::op::ReviewField {
+            name: "noDeadline".into(),
+            value: NO_DEADLINE.into(),
+            display: NO_DEADLINE.into(),
+            source: scaas_sdk::op::Source::Derived,
+        });
+        Ok(Prepared {
+            review,
+            unsigned: Unsigned::Record(prepared),
+            quote,
+            then: RecordWrite {
+                at: on.clone(),
+                item,
+                name,
+                record,
+                path: path.clone(),
+            },
         })
     }
 
@@ -195,7 +286,7 @@ impl PqChat {
         nonce: u64,
         name: &str,
         about: &[u8],
-        payer: &KeyRef,
+        path: &Path,
     ) -> Result<TopicWrite, PqChatError> {
         seed_of(&me.key)?;
         self.require_listed(&on.chain, &on.instance).await?;
@@ -212,13 +303,8 @@ impl PqChat {
         };
         let r = json!({"admin": admin, "nonce": nonce.to_string(), "homeChain": t.home_chain,
             "homeChatContract": home, "name": name, "about": model::hex(about), "openReplies": true});
-        let signed = self
-            .app
-            .prepare_pqchat_topic(me.key.clone(), t)
-            .await?
-            .sign()
-            .await?;
-        self.topic_write(on, "IPqChat.createTopic", "t", r, signed, payer)
+        let prepared = self.app.prepare_pqchat_topic(me.key.clone(), t).await?;
+        self.topic_write(on, me, "IPqChat.createTopic", "t", r, prepared, path)
             .await
     }
 
@@ -232,7 +318,7 @@ impl PqChat {
         name: &str,
         about: &[u8],
         open_replies: bool,
-        payer: &KeyRef,
+        path: &Path,
     ) -> Result<TopicWrite, PqChatError> {
         seed_of(&me.key)?;
         let seq = self.topic(on, topic_id).await?.seq + 1;
@@ -246,13 +332,11 @@ impl PqChat {
         };
         let r = json!({"topicId": tid, "seq": seq.to_string(), "name": name, "about": model::hex(about),
             "openReplies": open_replies});
-        let signed = self
+        let prepared = self
             .app
             .prepare_pqchat_topic_update(me.key.clone(), u)
-            .await?
-            .sign()
             .await?;
-        self.topic_write(on, "IPqChat.updateTopic", "u", r, signed, payer)
+        self.topic_write(on, me, "IPqChat.updateTopic", "u", r, prepared, path)
             .await
     }
 
@@ -264,7 +348,7 @@ impl PqChat {
         me: &Me,
         writer: &str,
         granted: bool,
-        payer: &KeyRef,
+        path: &Path,
     ) -> Result<TopicWrite, PqChatError> {
         seed_of(&me.key)?;
         let (tid, wr) = (topic_id.to_ascii_lowercase(), writer.to_ascii_lowercase());
@@ -285,13 +369,11 @@ impl PqChat {
             seq,
         };
         let r = json!({"topicId": tid, "writer": wr, "granted": granted, "seq": seq.to_string()});
-        let signed = self
+        let prepared = self
             .app
             .prepare_pqchat_topic_writer(me.key.clone(), w)
-            .await?
-            .sign()
             .await?;
-        self.topic_write(on, "IPqChat.setTopicWriter", "w", r, signed, payer)
+        self.topic_write(on, me, "IPqChat.setTopicWriter", "w", r, prepared, path)
             .await
     }
 
@@ -307,7 +389,7 @@ impl PqChat {
         parent: Option<String>,
         entry_ref: Option<PqEntryRef>,
         body: &[u8],
-        payer: &KeyRef,
+        path: &Path,
     ) -> Result<TopicWrite, PqChatError> {
         seed_of(&me.key)?;
         let (tid, author) = (topic_id.to_ascii_lowercase(), me.ua.to_ascii_lowercase());
@@ -326,13 +408,11 @@ impl PqChat {
             media_type: MARKDOWN.into(),
             body: body.to_vec(),
         };
-        let signed = self
+        let prepared = self
             .app
             .prepare_pqchat_topic_entry(me.key.clone(), e)
-            .await?
-            .sign()
             .await?;
-        self.topic_write(on, "IPqChat.postEntry", "e", r, signed, payer)
+        self.topic_write(on, me, "IPqChat.postEntry", "e", r, prepared, path)
             .await
     }
 
@@ -344,7 +424,7 @@ impl PqChat {
         me: &Me,
         nonce: u64,
         body: &[u8],
-        payer: &KeyRef,
+        path: &Path,
     ) -> Result<TopicWrite, PqChatError> {
         seed_of(&me.key)?;
         let version = self.entry(on, entry_id).await?.version_count + 1;
@@ -360,13 +440,11 @@ impl PqChat {
             media_type: MARKDOWN.into(),
             body: body.to_vec(),
         };
-        let signed = self
+        let prepared = self
             .app
             .prepare_pqchat_topic_edit(me.key.clone(), d)
-            .await?
-            .sign()
             .await?;
-        self.topic_write(on, "IPqChat.editEntry", "e", r, signed, payer)
+        self.topic_write(on, me, "IPqChat.editEntry", "e", r, prepared, path)
             .await
     }
 
@@ -377,7 +455,7 @@ impl PqChat {
         entry_id: &str,
         me: &Me,
         vote: Vote,
-        payer: &KeyRef,
+        path: &Path,
     ) -> Result<TopicWrite, PqChatError> {
         seed_of(&me.key)?;
         let (eid, voter) = (entry_id.to_ascii_lowercase(), me.ua.to_ascii_lowercase());
@@ -389,13 +467,11 @@ impl PqChat {
             value: vote.value(),
             seq,
         };
-        let signed = self
+        let prepared = self
             .app
             .prepare_pqchat_topic_vote(me.key.clone(), v)
-            .await?
-            .sign()
             .await?;
-        self.topic_write(on, "IPqChat.voteEntry", "v", r, signed, payer)
+        self.topic_write(on, me, "IPqChat.voteEntry", "v", r, prepared, path)
             .await
     }
 
@@ -570,15 +646,18 @@ impl PqChat {
     }
 
     /// The standing of `r` (P35) on its own chain: that chain served, its factory listing the instance, the referenced
-    /// entry's topic naming that instance as its home, `contentHash` zero. Reads only; nothing is written or sent.
+    /// entry's topic naming that instance as its home, and a pinned `contentHash` the typed digest of one of its versions,
+    /// the newest [`REF_VERSIONS_MAX`] read (G5; up to 3 + 64 reads with bodies: a front-end resolves a `ref` when it is
+    /// shown and keeps the answer). Reads only; nothing is written or sent.
     pub async fn resolve_ref(&self, r: &PqEntryRef) -> RefState {
         match self.resolve(r).await {
-            Ok(()) => RefState::Verified,
+            Ok(None) => RefState::Verified,
+            Ok(Some(v)) => RefState::VerifiedVersion(v),
             Err(f) => RefState::Unverified(f),
         }
     }
 
-    async fn resolve(&self, r: &PqEntryRef) -> Result<(), RefFault> {
+    async fn resolve(&self, r: &PqEntryRef) -> Result<Option<u64>, RefFault> {
         let uid = r.chain_uid.to_ascii_lowercase();
         let chain = self
             .conf
@@ -610,9 +689,264 @@ impl PqChat {
         if t.home_chain != uid || t.home_chat_contract != on.instance {
             return Err(RefFault::OtherHome);
         }
-        if !r.content_hash.eq_ignore_ascii_case(ZERO32) {
-            return Err(RefFault::HashUnchecked);
+        if r.content_hash.eq_ignore_ascii_case(ZERO32) {
+            return Ok(None);
         }
-        Ok(())
+        // G5 (CTR-CHAT-31): the version the hash pins, rebuilt from state, newest first
+        let want = r.content_hash.to_ascii_lowercase();
+        let first = e.version_count.saturating_sub(REF_VERSIONS_MAX - 1).max(1);
+        for v in (first..=e.version_count).rev() {
+            let x = self
+                .version_at(&on, &e.id, v)
+                .await
+                .map_err(|_| RefFault::Unreadable)?;
+            if self
+                .content_hash(&e, v, x)
+                .map_err(|_| RefFault::Unreadable)?
+                == want
+            {
+                return Ok(Some(v));
+            }
+        }
+        Err(match first {
+            1 => RefFault::HashMismatch,
+            _ => RefFault::HashUnchecked,
+        })
     }
+
+    /// The `contentHash` a `ref` pins for version `version` of `entry_id` at `on` (G5): the version's typed digest rebuilt
+    /// from state by the SDK (its `PqTopicEntry` for 1, its `PqTopicEdit` after).
+    pub async fn content_hash_at(
+        &self,
+        on: &At,
+        entry_id: &str,
+        version: u64,
+    ) -> Result<String, PqChatError> {
+        let e = self.entry(on, entry_id).await?;
+        let x = self.version_at(on, &e.id, version).await?;
+        self.content_hash(&e, version, x)
+    }
+
+    /// The typed digest of version `v` of `e` (its `PqTopicEntry` for 1, its `PqTopicEdit` after), by the SDK.
+    fn content_hash(&self, e: &Entry, v: u64, x: Version) -> Result<String, PqChatError> {
+        let h = match v {
+            1 => self.app.pqchat_entry_hash(PqTopicEntry {
+                topic_id: e.topic_id.clone(),
+                author: e.author.clone(),
+                nonce: x.nonce,
+                parent_id: e.parent_id.clone(),
+                entry_ref: e.entry_ref.clone().unwrap_or_else(no_ref),
+                media_type: x.media_type,
+                body: x.body,
+            })?,
+            _ => self.app.pqchat_edit_hash(PqTopicEdit {
+                entry_id: e.id.clone(),
+                author: e.author.clone(),
+                nonce: x.nonce,
+                version: u32::try_from(v).map_err(|_| bad())?,
+                media_type: x.media_type,
+                body: x.body,
+            })?,
+        };
+        Ok(h.to_ascii_lowercase())
+    }
+
+    /// The newest page of `list` before `before` (G7): at most `count` (≤ [`PAGE_MAX`]) ids below index `before`, newest first,
+    /// and the list's length. Against a snapshot total a new post never shifts a page.
+    pub async fn page_newest(
+        &self,
+        on: &At,
+        list: &List,
+        before: u64,
+        count: u64,
+    ) -> Result<Page, PqChatError> {
+        let start = before.saturating_sub(count.min(PAGE_MAX));
+        let mut p = self.page(on, list, start, before - start).await?;
+        p.ids.reverse();
+        Ok(p)
+    }
+
+    /// `entryRows(ids, viewer)` (CTR-CHAT-30) in calls of at most [`ROWS_MAX`] ids: one row per id in the order given, each
+    /// folded when its `down − up` reaches `fold_at` (the user's setting; `None`: nothing folds). An answer with another number
+    /// of rows is refused.
+    pub async fn entry_rows(
+        &self,
+        on: &At,
+        ids: &[String],
+        viewer: &str,
+        fold_at: Option<u64>,
+    ) -> Result<Vec<EntryRow>, PqChatError> {
+        let mut out = Vec::with_capacity(ids.len());
+        for chunk in ids.chunks(ROWS_MAX) {
+            let v = self
+                .net
+                .read(
+                    &on.chain,
+                    &on.instance,
+                    "IPqChat.entryRows",
+                    json!({"entryIds": chunk, "viewer": viewer.to_ascii_lowercase()}),
+                )
+                .await?;
+            let rows = at(&v, "rows").as_array().ok_or_else(bad)?;
+            if rows.len() != chunk.len() {
+                return Err(bad());
+            }
+            for (id, r) in chunk.iter().zip(rows) {
+                out.push(row_of(id, r, fold_at)?);
+            }
+        }
+        Ok(out)
+    }
+
+    /// `list` ranked by `sort` over its window against the snapshot total `snapshot` (F6): the window's ids read by pages, each
+    /// id once (a repeat is dropped), their rows by `entryRows` folded at `fold_at`, then [`rank`].
+    pub async fn ranked(
+        &self,
+        on: &At,
+        list: &List,
+        sort: Rank,
+        snapshot: u64,
+        viewer: &str,
+        fold_at: Option<u64>,
+    ) -> Result<Ranked, PqChatError> {
+        let (start, end) = match sort {
+            Rank::Best => (0, snapshot.min(WINDOW)),
+            Rank::Top | Rank::Controversial => (snapshot.saturating_sub(WINDOW), snapshot),
+        };
+        let mut ids: Vec<(u64, String)> = vec![];
+        let mut i = start;
+        while i < end {
+            let p = self.page(on, list, i, (end - i).min(PAGE_MAX)).await?;
+            if p.ids.is_empty() {
+                break;
+            }
+            for id in p.ids {
+                if !ids.iter().any(|(_, x)| *x == id) {
+                    ids.push((i, id));
+                }
+                i += 1;
+            }
+        }
+        let names: Vec<String> = ids.iter().map(|(_, x)| x.clone()).collect();
+        let rows = self.entry_rows(on, &names, viewer, fold_at).await?;
+        // whole only when every index of the list was read, each a distinct id (reviews A-9, E-8)
+        let read = ids.len() as u64;
+        let rows = rank(ids.into_iter().map(|(i, _)| i).zip(rows).collect(), sort);
+        Ok(Ranked {
+            rows,
+            total: snapshot,
+            whole: start == 0 && end == snapshot && read == snapshot,
+        })
+    }
+}
+
+fn row_of(id: &str, r: &Value, fold_at: Option<u64>) -> Result<EntryRow, PqChatError> {
+    let f = &at(r, "ref");
+    let er = PqEntryRef {
+        chain_uid: model::h(at(f, "chainUid"))?,
+        pqchat: model::h(at(f, "pqchat"))?,
+        entry_id: model::h(at(f, "entryId"))?,
+        content_hash: model::h(at(f, "contentHash"))?,
+    };
+    let (up, down) = (big(at(r, "up"))?, big(at(r, "down"))?);
+    let vote = at(r, "vote")
+        .as_str()
+        .and_then(|s| s.parse::<i8>().ok())
+        .filter(|v| (-1..=1).contains(v))
+        .ok_or_else(bad)?;
+    Ok(EntryRow {
+        id: id.to_ascii_lowercase(),
+        topic_id: model::h(at(r, "topicId"))?,
+        author: model::h(at(r, "author"))?,
+        parent_id: model::h(at(r, "parentId"))?,
+        depth: model::num(at(r, "depth"))?,
+        entry_ref: (er != no_ref()).then_some(er),
+        media_type: at(r, "mediaType").as_str().ok_or_else(bad)?.into(),
+        sig_hash: model::h(at(r, "sigHash"))?,
+        version_count: model::num(at(r, "versionCount"))?,
+        posted_at: model::num(at(r, "postedAt"))?,
+        edited_at: model::num(at(r, "editedAt"))?,
+        nonce: model::num(at(r, "nonce"))?,
+        body_length: model::num(at(r, "bodyLength"))?,
+        up,
+        down,
+        vote,
+        replies: model::num(at(r, "replies"))?,
+        folded: fold_at.is_some_and(|t| down >= up.saturating_add(u128::from(t))),
+    })
+}
+
+/// A `uint128` as the SDK's named JSON gives it (a decimal string).
+fn big(v: &Value) -> Result<u128, PqChatError> {
+    v.as_str().and_then(|s| s.parse().ok()).ok_or_else(bad)
+}
+
+/// `rows` (each with its list index) in `sort`'s order, highest first, ties by the lower index (F6). Integer arithmetic only
+/// but Best's: `+ − × ÷ √` on `f64`, correctly rounded under IEEE 754 on every target, so every client orders alike. By
+/// value: the bindings take no mutable slice.
+pub fn rank(mut rows: Vec<(u64, EntryRow)>, sort: Rank) -> Vec<(u64, EntryRow)> {
+    match sort {
+        Rank::Top => rows.sort_by(|a, b| net(&b.1).cmp(&net(&a.1)).then(a.0.cmp(&b.0))),
+        Rank::Controversial => rows.sort_by(|a, b| {
+            controversy(&b.1)
+                .cmp(&controversy(&a.1))
+                .then(a.0.cmp(&b.0))
+        }),
+        Rank::Best => {
+            rows.sort_by(|a, b| wilson(&b.1).total_cmp(&wilson(&a.1)).then(a.0.cmp(&b.0)))
+        }
+    }
+    rows
+}
+
+/// `up − down` as an ordered pair: the sign (up ≥ down), then the magnitude, larger better when positive.
+fn net(r: &EntryRow) -> (bool, i128) {
+    match r.up >= r.down {
+        true => (true, i128::try_from(r.up - r.down).unwrap_or(i128::MAX)),
+        false => (false, -i128::try_from(r.down - r.up).unwrap_or(i128::MAX)),
+    }
+}
+
+/// `(up + down)^(min / max)` as `log2` in Q32 fixed point: `min · log2(up + down) / max`, 0 when either is 0.
+fn controversy(r: &EntryRow) -> u128 {
+    let (lo, hi) = (r.up.min(r.down), r.up.max(r.down));
+    if lo == 0 {
+        return 0;
+    }
+    // ponytail: past 2^64 votes both sides lose their low bits alike (deterministic, the order kept to 2^-64)
+    let shift = (128 - hi.leading_zeros()).saturating_sub(64);
+    let l = log2_q32(r.up.saturating_add(r.down));
+    l * (lo >> shift) / (hi >> shift)
+}
+
+/// `log2(n)` in Q32 (n ≥ 1), by repeated squaring of the mantissa: integer operations only.
+fn log2_q32(n: u128) -> u128 {
+    let ip = u128::from(127 - n.leading_zeros());
+    let one: u128 = 1 << 63;
+    let mut m = if ip >= 63 {
+        n >> (ip - 63)
+    } else {
+        n << (63 - ip)
+    };
+    let mut frac = 0u128;
+    for i in (0..32).rev() {
+        m = (m * m) >> 63;
+        if m >= 2 * one {
+            m >>= 1;
+            frac |= 1 << i;
+        }
+    }
+    (ip << 32) | frac
+}
+
+/// The Wilson score interval's lower bound of `up / (up + down)` at z = 1.2816 (Reddit's `confidence`); 0 without votes.
+fn wilson(r: &EntryRow) -> f64 {
+    // no up-vote: the bound is 0 exactly, never rounding noise (reviews A-5, D-2); the sum in f64: no saturation
+    if r.up == 0 {
+        return 0.0;
+    }
+    let (n, z) = (r.up as f64 + r.down as f64, 1.2816_f64);
+    let p = r.up as f64 / n;
+    let z2 = z * z;
+    (p + z2 / (2.0 * n) - z * ((p * (1.0 - p) + z2 / (4.0 * n)) / n).sqrt()) / (1.0 + z2 / n)
 }

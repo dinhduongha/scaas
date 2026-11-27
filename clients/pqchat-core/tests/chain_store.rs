@@ -11,6 +11,7 @@
     clippy::indexing_slicing
 )]
 mod common;
+use common::confirmed;
 
 use common::chain::*;
 use pqchat_core::content::Content;
@@ -73,8 +74,9 @@ async fn chain_store_post_and_read() {
         topic: "plan T7".into(),
         matrix: Default::default(),
     };
-    let b = pa
-        .create(CreateSession {
+    let b = confirmed(
+        &pa,
+        pa.create(CreateSession {
             me: alice.clone(),
             chain: CHAIN.into(),
             home: l.home.clone(),
@@ -84,8 +86,10 @@ async fn chain_store_post_and_read() {
             info,
             payer: l.payer.clone(),
         })
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     assert_eq!(b.sent, 2);
     land(&l, b.call.clone()).await;
     let sid = b.session_id.clone();

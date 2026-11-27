@@ -940,7 +940,9 @@ pays the lane through `RelayFeeRouter` (an `mtxRelayFee` job with `call`).
 signature, so anyone could make a lane pay for them (and the tree commit's three pieces, [below](#pqchat-tree-calls)). A lane relays one only as a relay fee's inner call (paid through
 `RelayFeeRouter`, under the relay-fee rules) or when the chain's `params.relay_unsigned_pqchat = true` (the operator's lane policy,
 default `false`); otherwise the job is refused `UNSIGNED_WRITE_NOT_PAID` (on the legacy pull path `dead`, nothing read or sent). The fourteen
-signed writes need neither. An unpaid one may find no relayer; its author can send it from its own account.
+signed writes need neither. An unpaid one may find no relayer; its author can send it from its own account. The six topic
+records are also taken at the gateway's door A, fee 0, under the operator's switch and an hourly bucket per signing key
+([NODE-GW-09](gateway.md#NODE-GW-09)); the other `PqChat` writes are jobs of a namespace only.
 
 <a id="pqchatstore-calls"></a>**`PqChatStore`** (BUILT on branch `chains-arweave`, plan T9;
 [CTR-CHAT-22](../contracts/pqchat.md#CTR-CHAT-22), [CTR-CHAT-19](../contracts/pqchat.md#CTR-CHAT-19)). The standalone store of

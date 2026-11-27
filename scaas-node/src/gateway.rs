@@ -342,6 +342,25 @@ async fn post_ua_metatx(State(s): State<AppState>, Json(r): Json<UaReq>) -> Repl
     }
 }
 
+/// NODE-GW-09: the six signed `PqChat` topic records door A takes besides a token's entries (CLI-PQC-18 F3: a topic write is
+/// relayed by default, fee 0 allowed). Every other `PqChat` write stays a job of a namespace with the grant.
+pub const PQCHAT_TOPIC_ENTRIES: [&str; 6] = [
+    "createTopic",
+    "updateTopic",
+    "setTopicWriter",
+    "postEntry",
+    "editEntry",
+    "voteEntry",
+];
+
+fn pqchat_topic(op: &Value) -> bool {
+    op.get("contract").and_then(Value::as_str) == Some("pqchat")
+        && op
+            .get("entry")
+            .and_then(Value::as_str)
+            .is_some_and(|e| PQCHAT_TOPIC_ENTRIES.contains(&e))
+}
+
 async fn post_op(State(s): State<AppState>, Json(r): Json<OpReq>) -> Reply {
     let c = match open_chain(&s, r.chain) {
         Ok(c) => c,
@@ -351,10 +370,14 @@ async fn post_op(State(s): State<AppState>, Json(r): Json<OpReq>) -> Reply {
         Ok(x) => x,
         Err(e) => return bad(format!("{e:#}")),
     };
-    // door A: a registered token (NODE-GW-01, NODE-GW-03), its merged entries (`auth` a `UASig`, R44) and the address ones left.
+    // door A: a registered token (NODE-GW-01, NODE-GW-03), its merged entries (`auth` a `UASig`, R44) and the address ones left;
+    // and a `PqChat` topic record (NODE-GW-09, CLI-PQC-18 F3), its instance judged by the guard (a class-3 factory listing).
     // A deploy, a registry write, a DEX settlement, a wallet, a relay fee or a router op goes as a job of a namespace with the grant
-    if let Err(e) = chain_of(&s, r.chain, w.to) {
-        return e;
+    let topic = pqchat_topic(&r.op);
+    if !topic {
+        if let Err(e) = chain_of(&s, r.chain, w.to) {
+            return e;
+        }
     }
     // the bound of `/v1/metatx` on an address entry's `signature`
     if let Some(Err(e)) = r.op.get("signature").and_then(Value::as_str).map(sig_bytes) {
@@ -363,7 +386,20 @@ async fn post_op(State(s): State<AppState>, Json(r): Json<OpReq>) -> Reply {
     if let Err(e) = fresh(U256::from(w.valid_until)) {
         return e;
     }
-    relay(c, w).await
+    // NODE-GW-09: the operator's switch, the signing key's hourly bucket, a call taken this hour answered as queued
+    if topic {
+        match c.guard.topic_intake(&r.op, &w.data, now(), false) {
+            Ok(true) => {}
+            Ok(false) => return (StatusCode::OK, Json(json!({"status": "queued"}))),
+            Err(e) => return bad(e),
+        }
+    }
+    let (op, data) = (r.op, w.data.clone());
+    let out = relay(c, w).await;
+    if topic && out.0 == StatusCode::ACCEPTED {
+        let _ = c.guard.topic_intake(&op, &data, now(), true);
+    }
+    out
 }
 
 // ------------------------------------------------------------------- `/v1/ops` (plan T28, gateway.md)
@@ -1448,6 +1484,150 @@ mod tests {
                 "{contract}: no chain read"
             );
         }
+    }
+
+    /// NODE-GW-09 (CLI-PQC-18 F3): door A takes the six signed `PqChat` topic records on an instance the chain's factory lists
+    /// as class 3, fee 0, through the guard and the simulation, and queues them; the body the SDK's `relay_app_call` posts
+    /// (its test's literal: an `int8` as a JSON number, a `uint64` as a string, `sig.members` empty) is taken; every other
+    /// `PqChat` write stays a namespace's job ("token not served", nothing read); a topic record on an address the factory
+    /// does not list is the guard's `CALL_TARGET_REFUSED`. The intake (review C-1 = E-3, C-2): the operator's switch
+    /// (`params.relay_pqchat_topics`, off: `PQCHAT_TOPICS_NOT_RELAYED`; default off on a `public` chain), the signing key's
+    /// hourly bucket (`params.pqchat_topics_per_hour`: `PQCHAT_TOPICS_RATE` past it, another key still taken), and a call
+    /// queued this hour answered `200 queued` without a second queueing. Nothing queued on a refusal.
+    #[tokio::test]
+    async fn door_a_takes_a_pqchat_topic_write() {
+        let (uid, factory, chat, other) = (
+            B256::repeat_byte(0x31),
+            Address::repeat_byte(0xfa),
+            Address::repeat_byte(0xc3),
+            Address::repeat_byte(0xb0),
+        );
+        let (cfg, _) = crate::guard::tests::factory_rpc(uid, factory, vec![(chat, 3, 1)]).await;
+        let door = |cfg: &crate::config::ChainCfg| {
+            let (tx, rx) = mpsc::channel(16);
+            let gw = GwChain {
+                chain: Arc::new(
+                    Chain::with_signer(cfg, alloy::signers::local::PrivateKeySigner::random())
+                        .unwrap(),
+                ),
+                tx,
+                tokens: Default::default(),
+                dex: None,
+                breaker: None,
+                fee_recipient: None,
+                guard: Arc::new(crate::guard::Guard::new(cfg, Default::default()).unwrap()),
+            };
+            (
+                router(AppState {
+                    chains: Arc::new([(cfg.evm_chain_number, gw)].into_iter().collect()),
+                    ..Default::default()
+                }),
+                rx,
+            )
+        };
+        let with = |k: &str, v: toml::Value| {
+            let mut c = cfg.clone();
+            c.params.insert(k.into(), v);
+            c
+        };
+        let op = |entry: &str, to: Address| {
+            let mut o = crate::typed::testkit::pqchat_op(entry, to);
+            o["validUntil"] = json!((now() + 300).to_string());
+            o
+        };
+        let n = cfg.evm_chain_number;
+        for entry in PQCHAT_TOPIC_ENTRIES {
+            let (app, mut rx) = door(&cfg);
+            let (st, body) = post_op_body(app, n, &op(entry, chat)).await;
+            assert_eq!(st, StatusCode::ACCEPTED, "{entry}: {body}");
+            let w = rx.try_recv().unwrap();
+            assert_eq!(w.to, chat, "{entry}: queued for the instance");
+        }
+        // the SDK's body (scaas-sdk tests/app_core.rs `relay_app_call_posts_the_job_to_the_gateways`), one router for the rest
+        let (app, mut rx) = door(&cfg);
+        let sdk = json!({"entry": "voteEntry", "contract": "pqchat", "token": format!("{chat:#x}"),
+            "validUntil": (now() + 300).to_string(),
+            "args": {"v": {"entryId": format!("0x{}", "11".repeat(32)), "voter": format!("0x{}", "a1".repeat(32)),
+                "value": -1, "seq": "3"}, "sig": {"keyData": "0x01", "signature": "0xabcd", "members": []}}});
+        let (st, body) = post_op_body(app.clone(), n, &sdk).await;
+        assert_eq!(st, StatusCode::ACCEPTED, "the SDK's body: {body}");
+        assert!(rx.try_recv().is_ok());
+        // the same call again within the hour: answered queued, not queued twice (C-2)
+        let (st, body) = post_op_body(app, n, &sdk).await;
+        assert_eq!(
+            (st, body.contains("queued")),
+            (StatusCode::OK, true),
+            "{body}"
+        );
+        assert!(rx.try_recv().is_err(), "queued once");
+        // every other PqChat write: a namespace's job, refused unread
+        let others: Vec<&str> = crate::typed::rows()
+            .iter()
+            .filter(|r| r.contracts.contains(&"pqchat") && !PQCHAT_TOPIC_ENTRIES.contains(&r.entry))
+            .map(|r| r.entry)
+            .collect();
+        assert_eq!(others.len(), 13, "the nineteen less the six");
+        for e in others {
+            let (app, mut rx) = door(&cfg);
+            let (st, body) = post_op_body(app, n, &op(e, chat)).await;
+            assert_eq!(st, StatusCode::BAD_REQUEST, "{e}: {body}");
+            assert!(body.contains("token not served"), "{e}: {body}");
+            assert!(rx.try_recv().is_err(), "{e}: nothing queued");
+        }
+        // an unlisted instance; the switch off; a public chain by default; a key past its hourly bucket
+        let public = crate::config::ChainCfg {
+            profile: "public".into(),
+            ..cfg.clone()
+        };
+        for (what, c, o, why) in [
+            (
+                "an unlisted instance",
+                cfg.clone(),
+                op("postEntry", other),
+                "CALL_TARGET_REFUSED",
+            ),
+            (
+                "the switch off",
+                with("relay_pqchat_topics", toml::Value::Boolean(false)),
+                op("postEntry", chat),
+                "PQCHAT_TOPICS_NOT_RELAYED",
+            ),
+            (
+                "a public chain",
+                public,
+                op("postEntry", chat),
+                "PQCHAT_TOPICS_NOT_RELAYED",
+            ),
+        ] {
+            let (app, mut rx) = door(&c);
+            let (st, body) = post_op_body(app, n, &o).await;
+            assert_eq!(st, StatusCode::BAD_REQUEST, "{what}: {body}");
+            assert!(body.contains(why), "{what}: {body}");
+            assert!(rx.try_recv().is_err(), "{what}: nothing queued");
+        }
+        let (app, mut rx) = door(&with("pqchat_topics_per_hour", toml::Value::Integer(2)));
+        let keyed = |entry: &str, key: &str| {
+            let mut o = op(entry, chat);
+            o["args"]["sig"]["keyData"] = json!(key);
+            o
+        };
+        for (i, entry) in ["postEntry", "editEntry", "voteEntry"]
+            .into_iter()
+            .enumerate()
+        {
+            let (st, body) = post_op_body(app.clone(), n, &keyed(entry, "0x0101")).await;
+            if i < 2 {
+                assert_eq!(st, StatusCode::ACCEPTED, "{entry}: {body}");
+                assert!(rx.try_recv().is_ok());
+            } else {
+                assert_eq!(st, StatusCode::BAD_REQUEST, "{entry}: {body}");
+                assert!(body.contains("PQCHAT_TOPICS_RATE"), "{body}");
+                assert!(rx.try_recv().is_err(), "past the bucket: nothing queued");
+            }
+        }
+        // another signing key: its own bucket
+        let (st, body) = post_op_body(app, n, &keyed("voteEntry", "0x0102")).await;
+        assert_eq!(st, StatusCode::ACCEPTED, "another key: {body}");
     }
 
     /// The pre-merge `/v1/metatx` body: an address `MetaTransfer` with a placeholder signature.

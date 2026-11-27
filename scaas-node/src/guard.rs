@@ -1452,6 +1452,15 @@ pub struct Guard {
     /// `params.relay_unsigned_pqvault` (default false): the lane relays `PqVault`'s unsigned `addVaultWraps` at its own gas
     /// (CTR-PQV-11).
     relay_unsigned_pqvault: bool,
+    /// NODE-GW-09: `params.relay_pqchat_topics` (default true on a `private` chain, false on a `public` one, NODE-GW-01 (c)):
+    /// door A takes the six `PqChat` topic records, fee 0.
+    relay_pqchat_topics: bool,
+    /// NODE-GW-09: `params.pqchat_topics_per_hour` (default 60, NODE-GW-01 (d)): the topic records door A takes per signing
+    /// key per hour.
+    pqchat_topics_per_hour: u32,
+    /// The topic records taken this hour: per signing key `(hour, count)`, and each call's hash with its hour (a duplicate is
+    /// answered queued, never queued twice). In memory.
+    topic_intake: Mutex<TopicIntake>,
     /// The runtime code hash a `pqchatstore` target must have ([`PQCHATSTORE_RUNTIME_HASH`]).
     chatstore_code_hash: B256,
     /// The one `pqchatstore` target ([`PQCHATSTORE_ADDRESS`]).
@@ -1473,6 +1482,9 @@ pub struct Guard {
     /// The same services as read from the chain at startup ([`Guard::load_services`]): entries equal both ways, domain.
     services: RwLock<HashMap<Address, Arc<crate::service::Service>>>,
 }
+
+/// NODE-GW-09's intake memory: per signing key `(hour, count)`, per call hash its hour.
+type TopicIntake = (HashMap<B256, (u64, u32)>, HashMap<B256, u64>);
 
 impl Guard {
     pub fn new(cfg: &ChainCfg, tokens: Arc<RwLock<Vec<Address>>>) -> anyhow::Result<Self> {
@@ -1500,6 +1512,19 @@ impl Guard {
                 Some(v) => anyhow::bail!("params.relay_unsigned_pqvault must be a bool (relay PqVault's unsigned addVaultWraps \
                     at the lane's gas), not {v}"),
             },
+            relay_pqchat_topics: match cfg.params.get("relay_pqchat_topics") {
+                None => cfg.profile == "private",
+                Some(toml::Value::Boolean(b)) => *b,
+                Some(v) => anyhow::bail!("params.relay_pqchat_topics must be a bool (door A takes PqChat's six topic records, \
+                    fee 0), not {v}"),
+            },
+            pqchat_topics_per_hour: match cfg.params.get("pqchat_topics_per_hour") {
+                None => 60,
+                Some(toml::Value::Integer(n)) if (0..=i64::from(u32::MAX)).contains(n) => *n as u32,
+                Some(v) => anyhow::bail!("params.pqchat_topics_per_hour must be a whole number (topic records per signing key \
+                    per hour at door A), not {v}"),
+            },
+            topic_intake: Default::default(),
             chatstore_code_hash: *PQCHATSTORE_RUNTIME_HASH,
             chatstore_address: *PQCHATSTORE_ADDRESS,
             chatstore_recheck: CHATSTORE_RECHECK,
@@ -1515,6 +1540,55 @@ impl Guard {
             svc: crate::service::Types::from_cfg(&cfg.services, cfg.relay_params()?.max_service_op_bytes)?,
             services: Default::default(),
         })
+    }
+
+    /// NODE-GW-09's intake of a `PqChat` topic record at door A, before the guard and the simulation (`take`: false) and
+    /// once it is queued (`take`: true, which counts it): the operator's switch (`PQCHAT_TOPICS_NOT_RELAYED`), the signing
+    /// key's hourly bucket (`PQCHAT_TOPICS_RATE`; the key is `sig.keyData`, a single key's UA being its hash), and the call
+    /// already queued this hour (`Ok(false)`: answered queued, not queued again). `now` in seconds.
+    pub fn topic_intake(
+        &self,
+        op: &serde_json::Value,
+        data: &[u8],
+        now: u64,
+        take: bool,
+    ) -> Result<bool, String> {
+        if !self.relay_pqchat_topics {
+            return Err("PQCHAT_TOPICS_NOT_RELAYED: this node does not relay PqChat topic records on this chain \
+                (params.relay_pqchat_topics); send it from the payer's own account"
+                .into());
+        }
+        let key = op
+            .pointer("/args/sig/keyData")
+            .and_then(serde_json::Value::as_str)
+            .ok_or("BAD_PAYLOAD: args.sig.keyData")?;
+        let (key, call) = (
+            alloy::primitives::keccak256(key.to_ascii_lowercase().as_bytes()),
+            alloy::primitives::keccak256(data),
+        );
+        let hour = now / 3600;
+        let mut g = self
+            .topic_intake
+            .lock()
+            .map_err(|_| "PQCHAT_TOPICS_RATE: intake unavailable".to_string())?;
+        let (keys, calls) = &mut *g;
+        keys.retain(|_, (h, _)| *h == hour);
+        calls.retain(|_, h| *h == hour);
+        if calls.contains_key(&call) {
+            return Ok(false);
+        }
+        let n = keys.entry(key).or_insert((hour, 0));
+        if n.1 >= self.pqchat_topics_per_hour {
+            return Err(format!(
+                "PQCHAT_TOPICS_RATE: {} topic records this hour from this key (params.pqchat_topics_per_hour)",
+                n.1
+            ));
+        }
+        if take {
+            n.1 += 1;
+            calls.insert(call, hour);
+        }
+        Ok(true)
     }
 
     /// A job's `Work`, with this chain's services ([`crate::submit::work_from_job_with`]).
@@ -2464,7 +2538,7 @@ pub async fn settle_gas(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     /// D2-5 (plan T4): an exit refused `PqChatTreeBacklog` / `PqChatIncomplete` / `PqVaultIncomplete` waits queued; past the lag
     /// (`PqChatExitLag`) or on another refusal it does not; another entry refused the same way does not wait either. The
     /// reasons are the decoded errors (`abi::decode_revert`).
@@ -6183,7 +6257,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     /// T93 (UA-7 P32, topics P45): an RPC whose `factory` lists `instances` as `(address, contractClass, version)` through `infoOf`
     /// (the reads counted), every other address unlisted; a listed address answers no `chainUid()` (a `PqChat` record is portable),
     /// every other `eth_call` `uid`; `eth_getCode` empty.
-    async fn factory_rpc(
+    pub(crate) async fn factory_rpc(
         uid: B256,
         factory: Address,
         instances: Vec<(Address, u16, u64)>,
@@ -6254,6 +6328,8 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                         }
                         "eth_call" => Some(uid.to_vec()),
                         "eth_getCode" => Some(vec![]),
+                        // a gateway's simulation (NODE-GW-09's test): the estimate
+                        "eth_estimateGas" => Some(vec![0x52, 0x08]),
                         _ => None,
                     };
                     let result = out.map_or(serde_json::Value::Null, |b| {

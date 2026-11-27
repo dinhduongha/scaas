@@ -192,6 +192,21 @@ impl PqChat {
         self.index_bound(room)
     }
 
+    /// `room` released from `session` when that session's first write could not be prepared (review A-1): the room stays
+    /// this client's, free for its next session.
+    pub(crate) fn release_created(&self, room: &str, session: &str) -> Result<(), PqChatError> {
+        let sid = session.to_ascii_lowercase();
+        Items(&*self.store).update::<RoomBind, _>(&room_key(room), |b| match b {
+            Some(b) if b.created && b.session.as_deref() == Some(sid.as_str()) => Ok(RoomBind {
+                session: None,
+                created: true,
+            }),
+            Some(b) => Ok(b),
+            None => Err(PqChatError::MatrixRoom),
+        })?;
+        Ok(())
+    }
+
     /// The Matrix ids `ua` asserted (each by its contact card or an envelope signed by `ua` received from that sender), at
     /// most [`MXIDS_MAX`].
     pub fn matrix_ids_of(&self, ua: &str) -> Result<Vec<String>, PqChatError> {

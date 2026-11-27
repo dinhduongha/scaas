@@ -10,6 +10,7 @@
     clippy::indexing_slicing
 )]
 mod common;
+use common::{called, confirmed};
 #[path = "e2e/harness.rs"]
 mod harness;
 #[path = "hostile/e2e.rs"]
@@ -223,7 +224,7 @@ async fn run() {
         (a.ua.clone(), ta.user.clone()),
         (b.ua.clone(), tb.user.clone()),
     ]);
-    let s1b = pa.create(req).await.unwrap();
+    let s1b = confirmed(&pa, pa.create(req).await).await.unwrap();
     let kem_reads = w
         .net
         .read_items()
@@ -356,7 +357,9 @@ async fn run() {
         (a.ua.clone(), ta.user.clone()),
         (b.ua.clone(), tb.user.clone()),
     ]);
-    let s2b = w.land_all(&pa, pa.create(req).await.unwrap()).await;
+    let s2b = w
+        .land_all(&pa, confirmed(&pa, pa.create(req).await).await.unwrap())
+        .await;
     let sid2 = s2b.session_id.clone();
     let s2 = w.sref(&sid2);
     let ea2 = creator_uses(&w, &pa, &sid2, &sid2, s2b.k.clone()).await;
@@ -408,10 +411,13 @@ async fn run() {
     // --- group S3 (A admin; B, C), H's chain store
     let pc = w.device();
     pc.start_device(Some("c-1".into())).unwrap();
-    let s3b = pa
-        .create(create(&w, &a, 3, &[&b, &c], vec![h.clone()], "s3"))
-        .await
-        .unwrap();
+    let s3b = confirmed(
+        &pa,
+        pa.create(create(&w, &a, 3, &[&b, &c], vec![h.clone()], "s3"))
+            .await,
+    )
+    .await
+    .unwrap();
     let (s3b, s3_calls) = w.land_all_calls(&pa, s3b).await;
     let sid3 = s3b.session_id.clone();
     let s3 = w.sref(&sid3);
@@ -431,8 +437,9 @@ async fn run() {
     );
     let ec0 = oc.epoch.clone();
     // the hostile harness's fixtures, built while C is a member: C's plain rekey of e0 and C's postMessage under e0
-    let c_rekey = pc
-        .rekey(
+    let c_rekey = confirmed(
+        &pc,
+        pc.rekey(
             &s3,
             &ec0,
             Rekey {
@@ -444,8 +451,10 @@ async fn run() {
                 payer: w.l.payer.clone(),
             },
         )
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     let c_out = pc.seal(&s3, &c, &txt("C under e0"), Some(4)).await.unwrap();
     let c_post = w
         .net
@@ -461,15 +470,20 @@ async fn run() {
         .unwrap();
     // A removes C, then rekeys without C; A sends under e1
     w.land(
-        pa.remove(
-            &s3,
-            &ea3.epoch,
-            &a,
-            4,
-            std::slice::from_ref(&c.ua),
-            &w.l.payer,
+        called(
+            &pa,
+            pa.remove(
+                &s3,
+                &ea3.epoch,
+                &a,
+                4,
+                std::slice::from_ref(&c.ua),
+                &w.l.payer,
+            )
+            .await,
         )
         .await
+        .map(|x| x.1)
         .unwrap(),
     )
     .await;
@@ -480,8 +494,9 @@ async fn run() {
         Err(not_member),
         "C's rekey"
     );
-    let r1 = pa
-        .rekey(
+    let r1 = confirmed(
+        &pa,
+        pa.rekey(
             &s3,
             &ea3,
             Rekey {
@@ -493,8 +508,10 @@ async fn run() {
                 payer: w.l.payer.clone(),
             },
         )
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         r1.epoch
             .members
@@ -748,31 +765,43 @@ async fn run() {
     println!("[e2e] replicas: S1 read at R1 equal to H's; the conflicting record in R2 not counted (replica)");
 
     // --- public topic at H; an entry of R1 referenced; one in U unlisted
-    let p = &w.l.payer;
+    let p = &pqchat_core::confirm::Path::Payer(w.l.payer.clone());
     let on = At {
         chain: CHAIN.into(),
         instance: w.l.home.clone(),
     };
-    let t = pa
-        .create_topic(&on, &a, 1, "pqchat e2e", b"# e2e", p)
-        .await
-        .unwrap();
-    let tid = t.id.clone().unwrap();
-    w.land(t.call).await;
-    let x = pa
-        .post(&on, &tid, &a, 1, None, None, b"A's post", p)
-        .await
-        .unwrap();
-    let a1 = x.id.clone().unwrap();
-    w.land(x.call).await;
-    let x = pb
-        .post(&on, &tid, &b, 1, Some(a1.clone()), None, b"B's reply", p)
-        .await
-        .unwrap();
-    let b1 = x.id.clone().unwrap();
-    w.land(x.call).await;
-    w.land(pb.vote(&on, &a1, &b, Vote::Up, p).await.unwrap().call)
-        .await;
+    let t = called(
+        &pa,
+        pa.create_topic(&on, &a, 1, "pqchat e2e", b"# e2e", p).await,
+    )
+    .await
+    .unwrap();
+    let tid = t.0.clone().unwrap();
+    w.land(t.1).await;
+    let x = called(
+        &pa,
+        pa.post(&on, &tid, &a, 1, None, None, b"A's post", p).await,
+    )
+    .await
+    .unwrap();
+    let a1 = x.0.clone().unwrap();
+    w.land(x.1).await;
+    let x = called(
+        &pb,
+        pb.post(&on, &tid, &b, 1, Some(a1.clone()), None, b"B's reply", p)
+            .await,
+    )
+    .await
+    .unwrap();
+    let b1 = x.0.clone().unwrap();
+    w.land(x.1).await;
+    w.land(
+        called(&pb, pb.vote(&on, &a1, &b, Vote::Up, p).await)
+            .await
+            .unwrap()
+            .1,
+    )
+    .await;
     assert_eq!(pa.score(&on, &a1).await.unwrap(), (1, 0));
     assert_eq!(
         pa.page(&on, &List::Posts(tid.clone()), 0, 10)
@@ -792,18 +821,20 @@ async fn run() {
         chain: CHAIN.into(),
         instance: w.r1.clone(),
     };
-    let t1 = pa
-        .create_topic(&on1, &a, 2, "at R1", b"# r1", p)
+    let t1 = called(&pa, pa.create_topic(&on1, &a, 2, "at R1", b"# r1", p).await)
         .await
         .unwrap();
-    let tid1 = t1.id.clone().unwrap();
-    w.land(t1.call).await;
-    let x = pa
-        .post(&on1, &tid1, &a, 2, None, None, b"an entry of R1", p)
-        .await
-        .unwrap();
-    let e1 = x.id.clone().unwrap();
-    w.land(x.call).await;
+    let tid1 = t1.0.clone().unwrap();
+    w.land(t1.1).await;
+    let x = called(
+        &pa,
+        pa.post(&on1, &tid1, &a, 2, None, None, b"an entry of R1", p)
+            .await,
+    )
+    .await
+    .unwrap();
+    let e1 = x.0.clone().unwrap();
+    w.land(x.1).await;
     let r = PqEntryRef {
         chain_uid: w.l.uid.clone(),
         pqchat: w.r1.clone(),
@@ -811,14 +842,20 @@ async fn run() {
         content_hash: pqchat_core::model::ZERO32.into(),
     };
     assert_eq!(pb.resolve_ref(&r).await, RefState::Verified);
-    // a pinned contentHash stays unchecked (no view gives a version's nonce, T10)
+    // G5 (CTR-CHAT-31): a pinned contentHash is checked against the version rebuilt from state: its version 1's digest
+    // verifies, another hash is no version of it
+    let pinned = PqEntryRef {
+        content_hash: pb.content_hash_at(&on1, &e1, 1).await.unwrap(),
+        ..r.clone()
+    };
+    assert_eq!(pb.resolve_ref(&pinned).await, RefState::VerifiedVersion(1));
     let pinned = PqEntryRef {
         content_hash: format!("0x{}", "c4".repeat(32)),
         ..r.clone()
     };
     assert_eq!(
         pb.resolve_ref(&pinned).await,
-        RefState::Unverified(RefFault::HashUnchecked)
+        RefState::Unverified(RefFault::HashMismatch)
     );
     let in_u = PqEntryRef {
         pqchat: w.u.clone(),
@@ -903,8 +940,9 @@ async fn run() {
     let tc = Arc::new(hs.login("carol").await);
     pc.attach_matrix(tc.clone());
     let room_c = pc.create_room().await.unwrap();
-    let cb = pc
-        .create(create(
+    let cb = confirmed(
+        &pc,
+        pc.create(create(
             &w,
             &c,
             14,
@@ -912,8 +950,10 @@ async fn run() {
             vec![StoreEntry::Matrix { room: room_c }, h.clone()],
             "from C",
         ))
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     let cb = w.land_all(&pc, cb).await;
     let sc = w.sref(&cb.session_id);
     let ep = pb2
@@ -1006,7 +1046,7 @@ async fn run() {
     pad_.start_device(Some("a-d".into())).unwrap();
     let mut req = create(&w, &a, 15, &[&b], vec![h.clone()], "s15");
     req.chain = DISC.into();
-    let b15 = pad_.create(req).await.unwrap();
+    let b15 = confirmed(&pad_, pad_.create(req).await).await.unwrap();
     *w.proxy.swap.lock().unwrap() = None;
     let wb = b15.wraps.iter().find(|x| x.member == b.ua).unwrap().clone();
     assert!(
@@ -1044,8 +1084,9 @@ async fn run() {
     );
     let snap = rpc("anvil_snapshot", &[]);
     let landed = w.txs.lock().unwrap().len();
-    let ch = pa
-        .rekey(
+    let ch = confirmed(
+        &pa,
+        pa.rekey(
             &s2,
             &ea2,
             Rekey {
@@ -1057,8 +1098,10 @@ async fn run() {
                 payer: w.l.payer.clone(),
             },
         )
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     let ch = w.land_all(&pa, ch).await;
     assert_eq!(w.l.call("childOf(bytes32)(bytes32)", &[&sid2]), ch.epoch_id);
     let fin = txt("B under the final epoch");

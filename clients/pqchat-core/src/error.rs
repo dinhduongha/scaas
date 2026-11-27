@@ -116,6 +116,9 @@ codes! {
     /// a path commit while leaves are under review (a compromise warning or an author that did not hold the epoch names
     /// them), not acknowledged by the caller: nothing signed (the path-less delta §6.2, F-3)
     TreeLeavesUnderReview,
+    /// a relayed write on a port or chain with no gateway to relay it (CLI-PQC-18 F3: the payer's own transaction is the
+    /// option)
+    RelayUnavailable,
 }
 
 impl fmt::Display for PqChatError {
