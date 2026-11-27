@@ -596,14 +596,15 @@ call per command.
 ## 12. User profiles
 
 Status: **SPECIFIED**, nothing built; the design is the [user-profiles spec](../superpowers/specs/2026-11-27-user-profiles.md)
-(a frame; open points in its §16). A **user profile** ("Profile" on screen, `UserProfile` / `user_profile` in code) is one local
+(a frame; the owner's rulings on its open points, 2026-11-27, in its §16). A **user profile** ("Profile" on screen, `UserProfile` / `user_profile` in code) is one local
 identity with its own keystore, app-core state and settings; a **chain profile** (`ChainProfile`, §10) is a chain's pinned data.
 UNAUDITED.
 
 <a id="CLI-UPR-01"></a>**CLI-UPR-01** — **"Profile" on screen, `UserProfile` in code; a chain's pinned data is a "chain profile"**
 (owner 2026-11-27; SPECIFIED). The per-chain profile of §10, the CLI's and the TUI's profile files and their default, caps and
 features are called chain profiles (`ChainProfile`) in docs and code. The rename touches no on-chain byte and is a later task,
-listed in the spec §15; it lands before the CLI's `--profile` flag.
+listed in the spec §15, the stable code `ProfileMismatch` becoming `ChainProfileMismatch` with it (owner 2026-11-27); it lands
+before the CLI's `--profile` flag.
 
 <a id="CLI-UPR-02"></a>**CLI-UPR-02** — **User profiles live in the SDK layer and every client uses them** (owner 2026-11-27;
 SPECIFIED): scaas-app desktop and mobile, `scaas-tui` and the CLI `scaas` open, lock and switch profiles through one SDK surface
@@ -649,23 +650,40 @@ after (every chain is test-only).
 passphrase** (controller call; SPECIFIED). Per-profile parameters recorded in its envelope (default 64 MiB / 3 / 4, bounded both
 ways), the passphrase in OpaqueString form and never kept; every item sealed with its name and revision bound; an unprotected profile
 holds no secret (`ProfilePassphraseRequired`) and a protected one never becomes unprotected; the biometric wrap per device, off by
-default; every KDF, AEAD and draw in `ua-rs` (CLI-SDK-01), the data key a handle in its arena.
+default; every KDF, AEAD and draw in `ua-rs` (CLI-SDK-01), the data key a handle in its arena. Owner 2026-11-27: the default is
+64 MiB / 3 / 4, stronger allowed within the bounds, no timing run; at the first secret the profile passphrase and the seed's vault
+passphrase are two entries.
 
 <a id="CLI-UPR-13"></a>**CLI-UPR-13** — **A hidden profile is found by trying every unlisted directory, padded, with one error;
 it is hidden from the list, not deniable on disk** (controller call; SPECIFIED). Name and passphrase both secret inputs; no early
-exit; at least four KDF runs; `ProfileOpen` for every failure; nothing outside its directory names it.
+exit; at least four KDF runs; `ProfileOpen` for every failure; nothing outside its directory names it. Owner 2026-11-27: the name
+is a label, not key material; nothing stronger than hidden from the list is offered (deniability a non-goal).
 
 <a id="CLI-UPR-14"></a>**CLI-UPR-14** — **The instance lock is an OS advisory lock held for the open profile's life** (controller
 call; SPECIFIED). Non-blocking, released by the OS at any process end, nothing written into it, so no stale lock exists to detect;
 local filesystems only; Web Locks in a browser. When built it replaces, for a profile, the shared-directory sentence of
-[CLI-SDK-17](#CLI-SDK-17) and the SDK spec §6.3: clients share the root and the index, never an open profile.
+[CLI-SDK-17](#CLI-SDK-17) and the SDK spec §6.3: clients share the root and the index, never an open profile. Owner 2026-11-27: a second instance is refused even when it only
+reads, and an app extension is refused while the app has the profile open.
 
-<a id="CLI-UPR-15"></a>**CLI-UPR-15** — **Create, rename, hide and delete are atomic and confirmed; a profile export is a named gap**
-(controller call; SPECIFIED). Delete needs the profile open and its name typed, shows how many seeds lack a backup and asks a second
-confirmation for them, and removes the envelope before the data. The SDK has no profile-level sealed backup; seeds move with their
-sealed backups and the device link (CLI-SDK-06).
+<a id="CLI-UPR-15"></a>**CLI-UPR-15** — **Create, rename, hide and delete are atomic and confirmed** (controller call; SPECIFIED).
+Delete needs the profile open and its name typed, shows how many seeds lack a backup and asks a second confirmation for them, and
+removes the envelope before the data. A whole profile exports and imports by [CLI-UPR-17](#CLI-UPR-17); a seed also by its own
+sealed backup and the device link (CLI-SDK-06).
 
 <a id="CLI-UPR-16"></a>**CLI-UPR-16** — **Clients open a profile by name, a hidden one only through a prompt** (controller call;
 SPECIFIED). The CLI and the TUI take `--profile <name>` and `--profile-hidden` (name and passphrase from the terminal without echo
 or a file descriptor, never the command line or the environment); the apps a picker that always offers "Open another profile"; a
-hidden profile's name is never drawn.
+hidden profile's name is never drawn. The idle lock locks the seeds, as today, not the profile (owner 2026-11-27).
+
+<a id="CLI-UPR-17"></a>**CLI-UPR-17** — **A whole profile exports and imports as one sealed file** (owner 2026-11-27; SPECIFIED).
+Inside: the profile's store items (seed vaults sealed as today), its index entry and its settings, its chain-profile settings
+included. Never inside: the OS lock, caches. Sealed under a passphrase the user types at export, with the profile envelope's
+Argon2id bounds; a typed confirm; the integrity of the whole file bound in the seal. Import makes a new profile with a new UUIDv7; a
+file never overwrites an existing profile. Vectors in clientkeys and `ua-rs` before code (spec §10, export and import).
+
+<a id="CLI-UPR-18"></a>**CLI-UPR-18** — **The export file holds no id, so an import is always a new profile; one tag covers it all;
+nothing is written before it validates** (controller call; SPECIFIED). The index entry in the file is the name and the hidden flag
+([CLI-UPR-10](#CLI-UPR-10)); also never inside: the envelope and data key, keychain items (anchor, biometric key, PqChat's device
+anchor), the Matrix store, temporary files. The header is the AEAD's associated data; every item is read by its own reader and the
+settings by CLI-TUI-06; a wrong passphrase, a changed byte and a refused item are one error `ProfileImportOpen`; the imported
+profile takes a new profile passphrase at once and a new PqChat device id.

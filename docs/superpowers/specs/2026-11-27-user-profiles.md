@@ -1,10 +1,10 @@
 # User profiles: many protected local profiles in the SDK layer: design
 
 **Status:** SPECIFIED, nothing built. A **frame**: the owner's rulings of 2026-11-27 (§1) are fixed; the means are controller
-calls (`owner: no`) and the points the owner has not ruled are in §16. Branch `user-profiles-spec` (from `dev` `644ea61a8`),
+calls (`owner: no`); the owner's rulings of the same day on the open points are §16 (O10), the profile export (§10.1) among them. Branch `user-profiles-spec` (from `dev` `644ea61a8`),
 worktree `.claude/worktrees/user-profiles-spec`. Rule ids introduced here (SPECIFIED, defined once in
 [clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12, recorded in [decisions.md](../../decisions.md) §41): CLI-UPR-01 to
-CLI-UPR-16. No contract, signed byte format, vector, chain profile or node rule changes; no on-chain byte changes. The
+CLI-UPR-18. No contract, signed byte format, vector, chain profile or node rule changes; no on-chain byte changes. The
 cryptographic calls asked of `ua-rs` (§7) are new and need vectors before code. UNAUDITED.
 
 **Reads** (as at `644ea61a8`): the SDK's vault and store code (`clients/scaas-sdk/src/vault/`: `store.rs` `SecureStore`,
@@ -28,6 +28,7 @@ ARCH-POS-13 (no decryption oracle), ARCH-POS-15 (RPC lists). Order of sources: A
 | O7 | 2026-11-27 | Switching locks the current profile (its secrets forgotten exactly as a seed lock forgets them) and opens the other, on desktop and mobile. | CLI-UPR-07 |
 | O8 | 2026-11-27 | The profile list shows only the user-given names; an option hides a profile from the list, after which it opens only by typing its name, as a hidden set opens only by typing its passphrase. | CLI-UPR-08 |
 | O9 | 2026-11-27 | A profile's id is a UUIDv7. | CLI-UPR-09 |
+| O10 | 2026-11-27 | The spec's open points Q-UP1 to Q-UP9 (§16): Q-UP5, export and import of a whole profile as one sealed file, is in scope now with the content, seal, confirm and id rule of §10.1; the other eight as recommended. | CLI-UPR-17; §16 |
 
 Standing rules applied: secrets never leave the SDK and every KDF, AEAD and random draw runs in `ua-rs` (CLI-SDK-01, CLI-SDK-02);
 fail closed with named errors; no decryption oracle (ARCH-POS-13); every RPC consumer takes a list of nodes (ARCH-POS-15); the node
@@ -50,13 +51,14 @@ is open and knows nothing of profiles.
 
 - **Deniability.** A hidden profile is hidden from the list, not from the disk: its directory exists, its id (a UUIDv7) gives its
   creation time, its items have sizes and revisions (§8, §14). Nothing here makes a hidden profile deniable to someone who reads
-  the disk; that would need a fixed-size container with decoys, which this spec does not offer (§16 Q-UP9).
+  the disk; that would need a fixed-size container with decoys, which this spec does not offer (owner 2026-11-27, Q-UP9: a non-goal).
 - Separation from the OS account's own malware or administrator: a process of the same OS user can read the files and, while a
   profile is open, the process memory. Profiles separate people who share an OS account by passphrase, not by OS privilege.
 - Anonymity between profiles on one machine: the RPC nodes, gateways, Matrix homeserver and any network observer see one IP
   address and one timing pattern for all profiles of a machine (§14).
-- A server-side account: nothing about a profile leaves the device (CLI-UPR-10). No sync of profiles between devices beyond what
-  exists per seed (sealed backup, device link; SDK spec §6.11).
+- A server-side account: nothing about a profile leaves the device except a profile export the user makes (§10.1), and that holds
+  no id (CLI-UPR-10). No live sync of profiles between devices: a profile moves as an export file, a seed also by its own sealed
+  backup or device link (SDK spec §6.11).
 - The chain-profile rename itself (CLI-UPR-01): a later task, §15.
 
 ## 3. Terms (SPECIFIED)
@@ -175,7 +177,7 @@ exactly as a seed vault's data key is held (CLI-SDK-06). `profile.envelope` is c
 
 - **KDF parameters per profile.** The parameters are recorded in each profile's envelope, so profiles may differ and a profile's
   parameters may be raised at a passphrase change. The default is PqVault's pinned set (64 MiB / 3 / 4; CLI-PQV-10's Change, O8),
-  reused here as a controller call (§16 Q-UP2). A reader refuses parameters below the default or above the bounds (m ≤ 1 GiB,
+  as the default (owner 2026-11-27, Q-UP2: stronger allowed within the bounds, no timing run). A reader refuses parameters below the default or above the bounds (m ≤ 1 GiB,
   t ≤ 16, p ≤ 8) as `ProfileFormat` before any KDF runs, so a tampered envelope can neither weaken nor stall an open. Every Argon2id
   run goes through `Limits::max_concurrent_heavy`.
 - **The passphrase.** User-chosen, never generated (CLI-SDK-04); RFC 8265 OpaqueString before the KDF (CLI-PQV-07's Change, one
@@ -192,7 +194,8 @@ exactly as a seed vault's data key is held (CLI-SDK-06). `profile.envelope` is c
   `pqvault/`) seal through the same adapter; the Matrix store keeps its own encryption, its key a sealed item.
 - **Two layers for seeds.** The seed vaults keep their own passphrases, envelopes and KDF (vault v2, scrypt, CLI-SDK-03, CLI-SDK-06)
   inside the sealed keystore: store encryption as today, under the profile's seal. Unlocking the profile does not unlock a seed;
-  each seed unlocks as today. Whether one passphrase entry may serve both at the first secret is §16 Q-UP1.
+  each seed unlocks as today. At the first secret the client asks for the two as two entries, neither suggesting nor refusing equal
+  text (owner 2026-11-27, Q-UP1).
 - **Unprotected until the first secret** (O5). A new profile, "default" included, is `unprotected`: no passphrase, no `DEK_p`, its
   items (settings only) in plain form. Every call that would create a secret (`generate`, `import_words`, `derive_child`,
   `derive_from_signature`, `derive_from_key`, `import_key`, `create_passkey_key`, `create_se_key`, an app core's first key or record)
@@ -225,14 +228,16 @@ exactly as a seed vault's data key is held (CLI-SDK-06). `profile.envelope` is c
   4. returns the one match, or `ProfileOpen` for every failure: no such name, a wrong passphrase, no hidden profile at all, an
      unreadable envelope. A match whose directory another instance holds is `ProfileInUse`, which only someone who knew the name and
      passphrase can provoke.
+- The name is a label, not key material (owner 2026-11-27, Q-UP7): it is not bound into the KDF, and a rename re-wraps nothing.
 - With more than four unlisted directories the time grows by one KDF run per directory; it then tells an observer of the screen
-  how many unlisted directories exist, which the disk tells anyway. The name is a label, not key material: the passphrase is the
-  protection (a name like "work" adds nothing to guess).
+  how many unlisted directories exist, which the disk tells anyway. The passphrase is the protection (a name like "work" adds
+  nothing to guess).
 - The prompt "Open another profile" is always offered, whether or not hidden profiles exist.
 - A hidden profile writes nothing that names it outside its directory: not `last`, not a recent-files list, not the OS's recent
   documents; its name is never drawn in a status line (the TUI and the app show "Hidden profile").
 - **Limit, stated plainly:** hidden from the list, **not deniable on disk**. Its directory, its UUIDv7 (creation time), its item
   sizes and revisions, and its keychain items (named by the id) are visible to whoever reads the disk or lists the keychain.
+  Nothing stronger is offered (owner 2026-11-27, Q-UP9).
 
 ## 9. One instance per profile (CLI-UPR-06, CLI-UPR-14; SPECIFIED)
 
@@ -247,11 +252,11 @@ exactly as a seed vault's data key is held (CLI-SDK-06). `profile.envelope` is c
   guarantee (stated; the SDK does not try to detect it).
 - **Browser:** the Web Locks API (`navigator.locks.request(id, {ifAvailable: true})`), released when the tab closes (PLANNED with the
   wasm store).
-- **Mobile:** one app process holds the lock; an app extension (iOS AutoFill, an Android autofill service) is a second instance
-  (§16 Q-UP4).
+- **Mobile:** one app process holds the lock; an app extension (iOS AutoFill, an Android autofill service) is a second instance and
+  is refused while the app has the profile open (owner 2026-11-27, Q-UP4, for now).
 - **Existing rule changed when built.** SDK spec §6.3 and CLI-SDK-17 say the CLI, `scaas-tui` and the app may share one data
   directory under the keystore's lock. With profiles they share the profile root and the index, never an open profile: a CLI
-  command on a profile the TUI has open is `ProfileInUse` (§16 Q-UP3). The keystore's store lock, `rev` compare and `keystore.prev`
+  command on a profile the TUI has open is `ProfileInUse`, a command that only reads included (owner 2026-11-27, Q-UP3). The keystore's store lock, `rev` compare and `keystore.prev`
   stay, as defence in depth.
 - **Instances of different profiles** share no memory, socket, pipe, D-Bus name, shared file or cache: each has its own `Sdk`, its
   own runtime, its own Matrix login and store, its own PqChat device id, its own RPC pools. They meet only where two machines would:
@@ -273,9 +278,59 @@ exactly as a seed vault's data key is held (CLI-SDK-06). `profile.envelope` is c
 | **hide / show** | open, protected | §8 |
 | **set / change passphrase, platform unlock** | open | §7 |
 | **delete** | open (so its seeds' backup state can be read) and the profile's name typed again | `delete_preview()` lists the seeds and how many are `backup: pending`, and says that PqChat history recovers from state on another device (CLI-PQC-09) while seeds without a backup are lost; `delete(ConfirmDeleteProfile { typed_name })`, and with any seed `backup: pending` also `ConfirmDeleteUnbacked` (`ConfirmationMissing` without; the pattern of `ConfirmRemoveUnbacked`); order: the profile's keychain items, then `profile.envelope` (from then on the sealed items open with nothing), then the index row, then the directory; a crash part-way leaves a directory without an envelope, which the next start removes. Residual: a flash disk may keep old blocks; they are sealed |
-| **export / import** | — | **gap:** the SDK has no profile-level sealed backup. What exists is per seed: `backup_seal` / `restore_backup` (`scaas/backup/v1`, CLI-UAL-12) and the device link (SDK spec §6.11). A profile moves to another device today as a new profile plus each seed's sealed backup restored, settings set again, PqChat recovered from contract state (new device id, CLI-PQC-09), PqVault read from chain. A one-file sealed profile backup is §16 Q-UP5 |
+| **export / import** | export: open, protected, the name typed; import: the file, its passphrase, a new profile passphrase | §10.1 (owner 2026-11-27, Q-UP5) |
 
 The last profile may be deleted; the next start creates "default" again (O5).
+
+### 10.1 Export and import of a whole profile (CLI-UPR-17, CLI-UPR-18; SPECIFIED; owner 2026-11-27, Q-UP5)
+
+One sealed file holds a whole profile, so a profile moves to another machine or is kept as a backup in one step. The per-seed
+sealed backup and the device link (SDK spec §6.11) stay as they are.
+
+**Inside the file** (all of it under the seal):
+
+| Part | Content |
+|---|---|
+| the index entry | the profile's name and whether it is hidden, **not its id** (CLI-UPR-10: the id never leaves the device) |
+| the store items | `keystore`, `keystore.prev`, `sdk.state`, `settings`, the `pqchat/` store items: each item's bytes as the profile's reader reads them, so every seed vault inside the keystore stays sealed as today under its own vault passphrase (vault v2, CLI-SDK-03), its MAC and `rev` unchanged |
+| the settings | the profile's chain-profile settings (named endpoints and credential references, a stronger policy, lowered caps, the default chain profile), its idle lock and clipboard choices |
+
+**Never inside:** the instance lock and every `*.lock`; `profile.envelope`, `DEK_p` and the profile passphrase; keychain items (the
+rollback anchor, the platform-secret and biometric keys, PqChat's device anchor); caches (PqVault's offline cache, the Matrix store
+and login, which the imported profile makes again by a new Matrix login); temporary files; the profile id; the release chain
+profiles (the build's, CLI-TUI-11).
+
+**The file** (proposal for the bytes; vectors in `smartcontracts/vectors/` read by clientkeys and `ua-rs` before code):
+
+```json
+{"format":"scaas.profile-export","v":1,"kdf":{"alg":"argon2id","v":1,"m":65536,"t":3,"p":4,"salt":"<16 bytes, base64>"},"sealed":"<base64 of nonce ‖ ciphertext ‖ tag>"}
+```
+
+- **The seal.** `K_x = Argon2id(OpaqueString(export passphrase), salt; m, t, p)`, the same bounds as the profile envelope (§7:
+  default 64 MiB / 3 / 4, stronger allowed, below the default or above the bounds refused before any KDF runs); one AEAD over the
+  whole payload under `K_x` with the header (`format`, `v`, `kdf`, canonical bytes) as associated data. The integrity of every
+  part, the header included, is the one tag: any changed byte fails the whole file. Built in `ua-rs` (CLI-SDK-01); the payload is
+  canonical JSON, bounded in size (the sum of its items' bounds) and depth, checked on the file's length before the KDF runs.
+- **The export passphrase** is typed at export, twice, with the profile passphrase's rule (§7); never stored. The client neither
+  suggests nor refuses the profile's own passphrase, and says that the file is meant to leave the device, so a passphrase of its own
+  is the better choice.
+- **Export** needs the profile open and protected, and a typed confirm: the profile's name typed again (`ConfirmExportProfile {
+  typed_name }`, `ConfirmationMissing` otherwise). The SDK writes the file through the caller's path (native) or returns its bytes
+  (mobile, wasm); nothing is sent anywhere. A hidden profile exports like a visible one; its file says it is hidden.
+- **Import always makes a new profile with a new UUIDv7.** The file holds no id, so it can neither overwrite nor be matched to an
+  existing profile: the simplest rule that is safe, with no "same id on an empty machine" case to check. The user gives the export
+  passphrase and a new profile passphrase (the imported profile holds secrets, so it is protected from its first write, O5); its name
+  is the file's unless a visible profile has it (`ProfileNameTaken`: the user gives another). A hidden profile is imported hidden.
+- **Import validates before it writes.** Every item is read by its own reader with its bounds (the keystore by SDK spec §6.1, the
+  settings by CLI-TUI-06's rules: a weaker policy, a changed `chain_uid` or contract, a credential value are refused); any refusal,
+  a wrong passphrase and a changed byte are one error `ProfileImportOpen`, and nothing is written. The new profile is built under a
+  temporary name and renamed into place, as at create. The rollback anchor is written fresh from the imported keystore.
+- **After import.** The seeds unlock with their own vault passphrases as before; PqChat makes a new device id, since the device
+  anchor is not in the file (CLI-PQC-09's Change: no counter is reused); PqVault rebuilds its cache from chain; the Matrix login is
+  new. Operations in flight in `sdk.state` are followed again; resends stay the user's (CLI-SDK-18).
+- **Residual, stated.** Importing a profile that still exists elsewhere makes two profiles holding the same seeds; the client says
+  so at import. A file sealed under a weak export passphrase is open to an offline guesser; the file is as strong as that passphrase,
+  and the seed vaults inside keep their own.
 
 ## 11. SDK surface (CLI-UPR-02; SPECIFIED; a sketch for the plan)
 
@@ -303,14 +358,18 @@ impl UserProfile {
     pub async fn hide(&self) -> Result<(), SdkError>;  pub async fn show(&self) -> Result<(), SdkError>;
     pub async fn delete_preview(&self) -> Result<DeletePreview, SdkError>;
     pub async fn delete(self: Arc<Self>, confirm: ConfirmDeleteProfile, unbacked: Option<ConfirmDeleteUnbacked>) -> Result<(), SdkError>;
+    pub async fn export(&self, confirm: ConfirmExportProfile, passphrase: Arc<SecretBytes>, kdf: Option<KdfParams>) -> Result<Vec<u8>, SdkError>;
     pub async fn lock(self: Arc<Self>) -> Vec<String>;    // the seed lock's abandoned hidden operations
+}
+impl UserProfiles {
+    pub async fn import(&self, file: Vec<u8>, export_passphrase: Arc<SecretBytes>, profile_passphrase: Arc<SecretBytes>, name: Option<String>) -> Result<UserProfileInfo, SdkError>;
 }
 ```
 
 New codes (CLI-SDK-13's naming): `ProfileInUse`, `ProfileOpen`, `ProfileNameTaken`, `ProfileNameInvalid`, `ProfileLimit`,
-`ProfilePassphraseRequired`, `ProfilePassphraseWeak`, `ProfileFormat`, `ProfileVersion`, `ProfileLocked` (a call on a locked
+`ProfilePassphraseRequired`, `ProfilePassphraseWeak`, `ProfileFormat`, `ProfileVersion`, `ProfileImportOpen`, `ProfileLocked` (a call on a locked
 profile's handle); event `ProfileIndexMismatch`. No code, event or `Debug` carries an id, a name, a passphrase or a path. The
-`ua-rs` calls behind §7 (UUIDv7 draw, Argon2id wrap and unwrap, item seal and open, the arena handle of `DEK_p`, the dummy KDF run)
+`ua-rs` calls behind §7 (UUIDv7 draw, Argon2id wrap and unwrap, item seal and open, the arena handle of `DEK_p`, the dummy KDF run, the export seal and open)
 are new and need rows in `smartcontracts/vectors/` read by clientkeys and `ua-rs` before code (AGENTS.md: byte formats everywhere at
 once).
 
@@ -337,15 +396,16 @@ A migrated "default" holds secrets while unprotected, the one case of it: every 
   second window or launch on an open profile shows "This profile is open in another window" (`ProfileInUse`). Several instances on
   different profiles may run side by side (O6).
 - **scaas-app mobile.** One process; the profile switcher in settings; biometric unlock opt-in per profile on this device (§7); the
-  seeds' auto-lock on background as today. App extensions: §16 Q-UP4.
+  seeds' auto-lock on background as today. App extensions are refused while the app has the profile open (Q-UP4). Export
+  through the platform's share sheet or file picker; import from a file picked by the user.
 - **scaas-tui.** `--profile <name>` opens a visible profile; `--profile-hidden` asks for the name and the passphrase on the terminal
   without echo (CLI-TUI-16's means); with neither, a picker screen when there are several, else the one profile. An action
   `profile` (lock and switch) on every screen; the status line shows the visible name, or "Hidden profile". The idle lock locks the
-  seeds as today (§16 Q-UP6).
+  seeds as today, not the profile (owner 2026-11-27, Q-UP6); the same holds in the apps and the CLI has no idle state.
 - **CLI `scaas`.** A global `--profile <name>`; `--profile-hidden` reads the name and the passphrase from the terminal without echo
   or from file descriptors, never from the command line or the environment (CLI-SDK-17's rule for secrets). Without either: `last`,
-  else "default". Commands `scaas profile list | create | rename | hide | show | passphrase | platform-unlock | delete`, the last
-  asking for the typed name. Each command is one instance: it takes the instance lock and releases it at exit (`ProfileInUse` while
+  else "default". Commands `scaas profile list | create | rename | hide | show | passphrase | platform-unlock | export <file> | import <file> |
+  delete`; `export` and `delete` ask for the typed name, `export` and `import` read their passphrases as every secret. Each command is one instance: it takes the instance lock and releases it at exit (`ProfileInUse` while
   the TUI or the app has the profile open). **The chain-profile rename (§15) lands first**: today's `--profiles <file>` (a chain
   profile file in a `dev-profiles` build) and the new `--profile <name>` must never sit one letter apart.
 - **Browser (wasm), PLANNED.** One IndexedDB database per profile named by its id, the index in its own database, the lock by Web
@@ -363,7 +423,9 @@ A migrated "default" holds secrets while unprotected, the one case of it: every 
 | someone who edits the index | a wrong label or row before unlock | after unlock `ProfileIndexMismatch` and the row rewritten from the sealed envelope (§6) |
 | someone who puts back an older copy of a profile | as today for the keystore: the anchor (`keystore.head`, keychain) raises `KeystoreRollback`; an item swapped across names or revisions fails its associated data | SDK spec §6.3; §7 |
 | a network observer, an RPC node, a gateway, the Matrix homeserver | that several identities use one IP address and timing; never a profile id or name | non-goal (§2); profile ids never leave the device (§4) |
-| a decryption-oracle attacker (ARCH-POS-13) | nothing: the profile layer opens only envelopes and items in the user's own directories with the user's own passphrase, and answers only the local user; it decrypts no ciphertext that arrives from the network and takes no action from a decrypted value | the hidden search opens only local directories, every failure one code |
+| a holder of an export file (a lost USB key, a cloud copy) | the format, the KDF parameters and the file's length; nothing else without the export passphrase | Argon2id at the file's parameters per guess; inside, the seed vaults behind their own passphrases (§10.1) |
+| someone who alters an export file or hands the user a crafted one | a wrong file fails as one error, nothing written; a crafted file under the crafter's own passphrase can only carry what each item's reader accepts (settings under CLI-TUI-06, chain profiles staying the build's) | §10.1: one tag over all, validation before writing, one code |
+| a decryption-oracle attacker (ARCH-POS-13) | nothing: the profile layer opens only envelopes and items in the user's own directories, and export files the user picks, with passphrases the user types, and answers only the local user; it decrypts no ciphertext that arrives from the network, sends nothing before a whole import has opened and been written, and takes no action from a decrypted value | the hidden search opens only local directories; every failure of an open or an import is one code |
 
 The id's creation time (O9) is stated in §4: a reader of the root learns when each profile, hidden included, was made.
 
@@ -376,7 +438,7 @@ across every place below (no on-chain byte, no vector, no EIP-712 domain, no nod
 | Kind | Today | After |
 |---|---|---|
 | SDK config field | `SdkConfig.profiles` (`config.rs:867`), `BindingConfig.profiles` (`binding.rs:926`), so every generated binding | `chain_profiles`; bindings regenerated |
-| SDK error code | `ProfileMismatch` (stable code, CLI-SDK-13; about 50 lines in `src` and tests, every binding's error enum, docs) | `ChainProfileMismatch` (§16 Q-UP8) |
+| SDK error code | `ProfileMismatch` (stable code, CLI-SDK-13; about 50 lines in `src` and tests, every binding's error enum, docs) | `ChainProfileMismatch` (owner 2026-11-27, Q-UP8) |
 | SDK internals | `Chain.profile` and locals `profile` / `profiles` of `ChainProfile` type in `src/**` | `chain_profile` / `chain_profiles` |
 | Cargo features | `dev-profiles` (`clients/scaas-sdk/Cargo.toml`, `clients/scaas-cli/Cargo.toml`) | `dev-chain-profiles` |
 | SDK test file | `tests/evm_profiles.rs` (`[[test]] name = "evm_profiles"`) | `tests/evm_chain_profiles.rs` |
@@ -429,19 +491,21 @@ API and stay; "profiling".
 
 The rename task re-runs the count at its own base and checks it to zero for the renamed identifiers (a grep gate in its commit).
 
-## 16. Open questions
+## 16. Owner rulings on the open points (owner 2026-11-27, O10)
 
-| # | Question | Options | Recommendation |
+Every point the frame left open was ruled on 2026-11-27: Q-UP5 in scope now (§10.1), the other eight as recommended.
+
+| # | Question | Ruling | Where |
 |---|---|---|---|
-| Q-UP1 | At the first secret the client asks for the profile passphrase (O5) and the seed's vault passphrase (CLI-SDK-04): one entry or two? | (a) two entries; (b) one entry used for both; (c) the profile passphrase replaces seed vault passphrases in this profile | (a): the seed's own passphrase is the owner's rule of 2026-11-11 and protects the seed in every copy of the keystore; the client neither suggests nor refuses equal text |
-| Q-UP2 | The profile envelope's KDF parameters | (a) PqVault's pinned set, 64 MiB / 3 / 4, as default, stronger allowed within the bounds of §7; (b) another set (low-memory phones, app extensions) | (a), no timing run without the owner's leave |
-| Q-UP3 | A second instance only reading (the CLI's `balance` while the TUI has the profile open) | (a) refused (`ProfileInUse`), as O6 reads; (b) a read-only open beside the writer | (a): the ruling as stated; (b) would need a second lock class and every write path audited |
-| Q-UP4 | An app extension (iOS AutoFill, Android autofill) reading PqVault entries while the app has the profile open | (a) refused as a second instance; (b) the extension asks the app over the platform's extension channel | (a) for now; (b) is a local side channel O6 excludes, so it is the owner's |
-| Q-UP5 | Profile export / import as one sealed file | (a) none: per-seed sealed backups and the device link as today (§10); (b) a new `ua-rs` sealed profile backup holding each seed's `scaas/backup/v1` and the settings, with vectors | (a) now; (b) as a later task if the owner wants one-file moves |
-| Q-UP6 | What the idle lock locks | (a) the seeds (today); (b) the whole profile | (a): (b) asks the profile and the seed passphrase after each idle period |
-| Q-UP7 | Whether a hidden profile's name is key material (bound into the KDF) | (a) no, a label compared after unwrap (§8); (b) yes | (a): names are short and guessable; (b) changes nothing but forces a re-wrap at rename |
-| Q-UP8 | Rename the stable code `ProfileMismatch` to `ChainProfileMismatch` in the rename task | (a) yes; (b) keep the code, rename prose only | (a): all chains are test-only, no compatibility is owed, and O1 says code too |
-| Q-UP9 | Anything stronger than "hidden from the list" (decoy directories, a fixed-size container) | (a) no, a non-goal (§2); (b) yes | (a) |
+| Q-UP1 | At the first secret, the profile passphrase (O5) and the seed's vault passphrase (CLI-SDK-04): one entry or two? | two entries; the client neither suggests nor refuses equal text | §7; CLI-UPR-12 |
+| Q-UP2 | The profile envelope's KDF parameters | 64 MiB / 3 / 4 as the default, stronger allowed within the bounds of §7, no timing run | §7; CLI-UPR-12 |
+| Q-UP3 | A second instance only reading (the CLI's `balance` while the TUI has the profile open) | refused (`ProfileInUse`), read-only too | §9; CLI-UPR-14 |
+| Q-UP4 | An app extension (iOS AutoFill, Android autofill) while the app has the profile open | refused as a second instance, for now | §9, §13; CLI-UPR-14 |
+| Q-UP5 | Profile export / import as one sealed file | in scope now: the profile's store items, its index entry and its settings (chain-profile settings included) in one file; never the OS lock or caches; sealed under a passphrase typed at export with the same Argon2id bounds; a typed confirm; import makes a new profile with a new UUIDv7 (the simplest safe rule, §10.1); a file never overwrites an existing profile; integrity bound in the seal; vectors in clientkeys and `ua-rs` before code | §10.1; CLI-UPR-15, CLI-UPR-17, CLI-UPR-18 |
+| Q-UP6 | What the idle lock locks | the seeds, as today | §13; CLI-UPR-16 |
+| Q-UP7 | Whether a hidden profile's name is key material | no: a label compared after unwrap | §8; CLI-UPR-13 |
+| Q-UP8 | Rename the stable code `ProfileMismatch` | yes, to `ChainProfileMismatch`, in the rename task | §15; CLI-UPR-01 |
+| Q-UP9 | Anything stronger than "hidden from the list" | nothing: a non-goal | §2, §8; CLI-UPR-13 |
 
 ## 17. Tests (SPECIFIED; for the plan)
 
@@ -462,13 +526,16 @@ Each negative test has its positive control and is run against a mutant (AGENTS.
   test);
 - migration: today's layout moves into "default", a crash at each step resumes, the old root holds no item after;
 - no id, name or path in any error, event, log line or `Debug` (the existing redaction tests extended);
+- export then import: the new profile has a new id, the same seeds (fingerprints) and settings, and a new PqChat device id; one byte changed anywhere in the file, the header included, is `ProfileImportOpen` with nothing written
+  (control: the unchanged file imports); a file never carries an id, a lock, a keychain item or a cache (checked on the payload);
+  a name taken is `ProfileNameTaken`; KDF parameters out of bounds are refused before any KDF runs;
 - end-to-end: two instances on one machine, two profiles, a PqChat 1:1 session over a local Matrix homeserver and a local chain.
 
 ## 18. Rule ids
 
 | Id | Rule | Owner |
 |---|---|---|
-| CLI-UPR-01 | "Profile" on screen, `UserProfile` in code; "chain profile" / `ChainProfile` for a chain's data; the rename a later task | yes (O1) |
+| CLI-UPR-01 | "Profile" on screen, `UserProfile` in code; "chain profile" / `ChainProfile` for a chain's data; the rename a later task, `ChainProfileMismatch` included | yes (O1, Q-UP8) |
 | CLI-UPR-02 | in the SDK layer, used by every client | yes (O2) |
 | CLI-UPR-03 | many profiles per machine, each its own directory with its store, chat and vault state and settings | yes (O3) |
 | CLI-UPR-04 | each protected separately, own passphrase and KDF parameters, biometric opt-in; one opens nothing of another | yes (O4) |
@@ -479,8 +546,10 @@ Each negative test has its positive control and is run against a mutant (AGENTS.
 | CLI-UPR-09 | the profile id is a UUIDv7 | yes (O9) |
 | CLI-UPR-10 | the id: stable, names the directory, the name a label, never leaves the device, not derived | no |
 | CLI-UPR-11 | layout, index (names and ids only, no previous copy, untrusted), migration into "default" | no |
-| CLI-UPR-12 | protection: `DEK_p`, the envelope, Argon2id per profile, sealed items, unprotected until the first secret, platform wrap | no |
-| CLI-UPR-13 | the hidden search: every unlisted directory, padded, one error; not deniable on disk | no |
-| CLI-UPR-14 | the instance lock: OS advisory lock, no stale state; the shared-directory sentence of SDK §6.3 changed when built | no |
-| CLI-UPR-15 | lifecycle: create, rename, hide, delete with typed name and backup reminder; export a named gap | no |
-| CLI-UPR-16 | client surfaces: `--profile`, `--profile-hidden`, pickers, the rename before `--profile` | no |
+| CLI-UPR-12 | protection: `DEK_p`, the envelope, Argon2id per profile, sealed items, unprotected until the first secret, platform wrap | no; two entries and the default parameters yes (Q-UP1, Q-UP2) |
+| CLI-UPR-13 | the hidden search: every unlisted directory, padded, one error; not deniable on disk | no; name not key material, nothing stronger yes (Q-UP7, Q-UP9) |
+| CLI-UPR-14 | the instance lock: OS advisory lock, no stale state; the shared-directory sentence of SDK §6.3 changed when built | no; read-only and extensions refused yes (Q-UP3, Q-UP4) |
+| CLI-UPR-15 | lifecycle: create, rename, hide, delete with typed name and backup reminder; export and import by §10.1 | no |
+| CLI-UPR-16 | client surfaces: `--profile`, `--profile-hidden`, pickers, the rename before `--profile`; the idle lock locks the seeds | no; the idle lock yes (Q-UP6) |
+| CLI-UPR-17 | a whole profile exports and imports as one sealed file: content, exclusions, seal, typed confirm, a new profile at import | yes (O10, Q-UP5) |
+| CLI-UPR-18 | the export file's means: no id inside, so always a new UUIDv7; one tag over all; validation before writing; one error | no |
