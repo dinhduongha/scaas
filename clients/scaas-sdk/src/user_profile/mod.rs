@@ -557,6 +557,14 @@ impl UserProfile {
         Ok(PartStore::new(self.open.core().clone(), part)?)
     }
 
+    /// Accepts the item `name` of `part` as it is stored after `Event::ProfileRollback` (spec §7.2: it reads, and writes to
+    /// it are refused until the user accepts, as the keystore's `accept_rollback`): its manifest entry re-anchored at its
+    /// current rev. An item not rolled back: nothing.
+    pub async fn accept_rollback(&self, part: ProfilePart, name: String) -> Result<(), SdkError> {
+        let core = self.open.core().clone();
+        run(move || core.accept_rollback(part, &name)).await
+    }
+
     /// The Matrix store's directory and key (CLI-UPR-29).
     pub fn matrix_store(&self) -> Result<MatrixStore, SdkError> {
         Ok(self.open.matrix_store()?)

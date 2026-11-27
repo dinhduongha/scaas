@@ -12,9 +12,10 @@
 //! - A write takes the store write lock (at most 120 s, then `ProfileBusy`, nothing written), writes the item (`put_if`), the
 //!   manifest (`put_if` at its read rev, three tries, then `StoreConflict`), then the anchor; a delete writes the tombstone
 //!   first, then removes the file.
-//! - A read below its manifest, or at or below its tombstone, is `ProfileRollback` (writes to it too; the event is the
-//!   caller's); above it, a crash between the two writes, and the manifest is brought forward; listed but missing is
-//!   `ProfileDamaged`. At open the anchor (`profile.head`, and the keychain's `scaas.profile.<id>.head`) is compared with
+//! - A read below its manifest, or at or below its tombstone, is rolled back: it reads, `ProfileRollback` is reported, and
+//!   writes to it are `ProfileRollback` until [`Core::accept_rollback`]; above it, a crash between the two writes, and the
+//!   manifest is brought forward; listed but missing is `ProfileDamaged` (reported) for reads and writes until a delete. A
+//!   file left at its tombstone's rev (a delete cut short) is removed at open. At open the anchor (`profile.head`, and the keychain's `scaas.profile.<id>.head`) is compared with
 //!   what is stored: `follow` rewrites it, `rollback` refuses the open (`ProfileRollback`).
 //! - The unprotected `g0/` has no key: plain names, part `sdk`, `settings` only (`keystore`, `keystore.prev`, `sdk.state` as
 //!   well under `migration: pending`), no manifest; a sealed item in it is `ProfileFormat`, a write of anything else
@@ -27,7 +28,7 @@
 //! The core's codes are [`Error`]s, each the SDK's code of the same name; the SDK's face gives the store's (CLI-UPR-22).
 use crate::anchor::{Anchor, Head, Verdict};
 use crate::file::{self, lock_file, rev_of, sealed_form, MAX_BYTES, REV_MAX, SEALED_MAX};
-use crate::{keychain_name, Error, ProfileKeychain};
+use crate::{keychain_name, Error, ProfileEvent, ProfileKeychain};
 use base64::Engine;
 use scaas_ua::wallet::ProfileKeys;
 use std::collections::BTreeMap;
@@ -301,6 +302,8 @@ pub struct Core {
     lock: Arc<WriteLock>,
     /// set at the profile's lock: every later call is `ProfileLocked`
     closed: AtomicBool,
+    /// where a read's rollback and damage go (the profiles' events, set by `Profiles` at open)
+    pub(crate) events: Arc<Mutex<Vec<ProfileEvent>>>,
     #[cfg(feature = "test-hooks")]
     hook: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     #[cfg(feature = "test-hooks")]
@@ -336,12 +339,14 @@ impl Core {
                 wait_ms: AtomicU64::new(WAIT.as_secs() * 1000),
             }),
             closed: AtomicBool::new(false),
+            events: Arc::default(),
             #[cfg(feature = "test-hooks")]
             hook: Mutex::new(None),
             #[cfg(feature = "test-hooks")]
             calls: AtomicU64::new(0),
         };
         core.check_anchor()?;
+        core.finish_deletes()?;
         Ok(core)
     }
 
@@ -417,7 +422,8 @@ impl Core {
             let m = self.read_manifest(&g, keys, part)?.0;
             match self.item(&g, keys, part, name, &m)? {
                 None => return Ok(None),
-                Some((rev, pt)) if m.items.get(name) == Some(&rev) => {
+                // a rolled-back item reads (spec §7.2: shown, not fatal; the event is reported)
+                Some((rev, pt, rolled)) if rolled || m.items.get(name) == Some(&rev) => {
                     let caller = rev_of(&pt);
                     return Ok(Some((pt, caller)));
                 }
@@ -430,10 +436,10 @@ impl Core {
         let g = self.cur();
         let keys = g.keys.as_ref().ok_or(Error::ProfileFormat)?;
         let m = self.read_manifest(&g, keys, part)?.0;
-        let Some((rev, pt)) = self.item(&g, keys, part, name, &m)? else {
+        let Some((rev, pt, rolled)) = self.item(&g, keys, part, name, &m)? else {
             return Ok(None);
         };
-        if m.items.get(name) != Some(&rev) {
+        if !rolled && m.items.get(name) != Some(&rev) {
             self.update_manifest(&g, keys, part, |m| {
                 m.tombstones.remove(name);
                 let r = m.items.entry(name.to_string()).or_insert(rev);
@@ -465,11 +471,15 @@ impl Core {
         };
         let (m, _) = self.read_manifest(&g, keys, part)?;
         let cur = self.item(&g, keys, part, name, &m)?;
-        if cur.as_ref().map(|(_, pt)| rev_of(pt)) != prev {
+        // spec §7.2: writes to a rolled-back item are refused until it is accepted
+        if cur.as_ref().is_some_and(|(_, _, rolled)| *rolled) {
+            return Err(Error::ProfileRollback);
+        }
+        if cur.as_ref().map(|(_, pt, _)| rev_of(pt)) != prev {
             return Err(Error::StoreConflict);
         }
         let base = match &cur {
-            Some((rev, pt)) => rev.checked_sub(rev_of(pt)).ok_or(Error::VaultFormat)?,
+            Some((rev, pt, _)) => rev.checked_sub(rev_of(pt)).ok_or(Error::VaultFormat)?,
             None => m.tombstones.get(name).copied().unwrap_or(0),
         };
         let rev = base.checked_add(caller).ok_or(Error::Argument)?;
@@ -478,7 +488,7 @@ impl Core {
         }
         let p = g.file(keys, part.name(), name)?;
         let sealed = keys.seal_item(part.name(), name, rev, bytes).map_err(ua)?;
-        put_file_if(&g.gdir, &p, cur.map(|(r, _)| r), &item_json(rev, &sealed)?)?;
+        put_file_if(&g.gdir, &p, cur.map(|(r, _, _)| r), &item_json(rev, &sealed)?)?;
         self.update_manifest(&g, keys, part, |m| {
             m.tombstones.remove(name);
             m.items.insert(name.to_string(), rev);
@@ -516,6 +526,26 @@ impl Core {
             self.write_anchor(&g)?;
         }
         remove(&p)
+    }
+
+    /// Accepts the item `name` of `part` as it is stored after a rollback (spec §7.2: writes to it are refused until the user
+    /// accepts, as the keystore's `accept_rollback`): its manifest entry re-anchored at its current rev, its tombstone
+    /// dropped, the anchor written. An item not rolled back (or an unprotected profile): nothing.
+    pub fn accept_rollback(&self, part: ProfilePart, name: &str) -> Result<(), Error> {
+        let _w = self.write_lock()?;
+        let g = self.cur();
+        let Some(keys) = &g.keys else {
+            return Ok(());
+        };
+        let m = self.read_manifest(&g, keys, part)?.0;
+        let Some((rev, _, true)) = self.item(&g, keys, part, name, &m)? else {
+            return Ok(());
+        };
+        self.update_manifest(&g, keys, part, |m| {
+            m.tombstones.remove(name);
+            m.items.insert(name.to_string(), rev);
+        })?;
+        self.write_anchor(&g)
     }
 
     /// Part `part`'s manifest as stored (an unprotected profile has none: empty).
@@ -619,9 +649,13 @@ impl Core {
                         ..Manifest::default()
                     };
                     for name in m.items.keys() {
-                        let (rev, pt) = self
+                        let (rev, pt, rolled) = self
                             .item(&g, old, part, name, &m)?
                             .ok_or(Error::ProfileDamaged)?;
+                        // a rolled-back item is never sealed into the new generation as if accepted
+                        if rolled {
+                            return Err(Error::ProfileRollback);
+                        }
                         put(part.name(), name, rev, &pt)?;
                         n.items.insert(name.clone(), rev);
                     }
@@ -660,7 +694,9 @@ impl Core {
         self.write_anchor(&self.cur())
     }
 
-    /// The item as stored (its rev and plaintext) after spec §7.2's read rules against its manifest `m`.
+    /// The item as stored (its rev, its plaintext, whether it is rolled back) after spec §7.2's read rules against its
+    /// manifest `m`: below its manifest's rev, or at or below its tombstone, it is rolled back (`ProfileRollback` reported);
+    /// listed but missing is `ProfileDamaged` (reported).
     fn item(
         &self,
         g: &Gen,
@@ -668,21 +704,51 @@ impl Core {
         part: ProfilePart,
         name: &str,
         m: &Manifest,
-    ) -> Result<Option<(u64, Plain)>, Error> {
+    ) -> Result<Option<(u64, Plain, bool)>, Error> {
         let Some((rev, sealed)) = read_sealed(&g.file(keys, part.name(), name)?)? else {
             return match m.items.contains_key(name) {
-                true => Err(Error::ProfileDamaged),
+                true => {
+                    self.event(ProfileEvent::ProfileDamaged);
+                    Err(Error::ProfileDamaged)
+                }
                 false => Ok(None),
             };
         };
         let below = m.items.get(name).is_some_and(|l| rev < *l);
-        if below || m.tombstones.get(name).is_some_and(|t| rev <= *t) {
-            return Err(Error::ProfileRollback);
-        }
+        let rolled = below || m.tombstones.get(name).is_some_and(|t| rev <= *t);
         let pt = keys
             .open_item(part.name(), name, rev, &sealed)
             .map_err(ua)?;
-        Ok(Some((rev, pt)))
+        if rolled {
+            self.event(ProfileEvent::ProfileRollback);
+        }
+        Ok(Some((rev, pt, rolled)))
+    }
+
+    fn event(&self, e: ProfileEvent) {
+        self.events
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(e);
+    }
+
+    /// Open-time, after the anchor check (review A-9): a file at its tombstone's rev is a delete cut between its manifest
+    /// and its unlink (the anchor is current, so the manifest is), removed.
+    fn finish_deletes(&self) -> Result<(), Error> {
+        let g = self.cur();
+        let Some(keys) = &g.keys else {
+            return Ok(());
+        };
+        for part in ProfilePart::ALL {
+            let (m, _) = self.read_manifest(&g, keys, part)?;
+            for (name, t) in &m.tombstones {
+                let p = g.file(keys, part.name(), name)?;
+                if file::read(&p)?.is_some_and(|(rev, _)| rev == *t) {
+                    remove(&p)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Part `part`'s manifest and its stored rev (`None`: no manifest yet, an empty one).

@@ -177,7 +177,8 @@ fn store_files_temporaries_locks_others() {
     assert_eq!(code(open(&d, &k)), "VaultFormat", "a directory");
 }
 
-/// G5: an old copy of an item put back is `ProfileRollback` for reads and writes; control: the current copy reads.
+/// G5: an old copy of an item put back reads (rolled back, spec §7.2, review C-3) and refuses writes (`ProfileRollback`) until
+/// `accept_rollback`; control: the current copy reads.
 #[test]
 fn g5_old_item_put_back() {
     let (d, k) = (tmp(), keys());
@@ -189,14 +190,21 @@ fn g5_old_item_put_back() {
     let (pt, rev) = c.get(SDK, "settings").unwrap().unwrap();
     assert_eq!((&pt[..], rev), (&item(2, "new")[..], 2), "control");
     std::fs::write(&f, &old).unwrap();
-    assert_eq!(code(c.get(SDK, "settings")), "ProfileRollback");
+    assert_eq!(
+        &c.get(SDK, "settings").unwrap().unwrap().0[..],
+        &item(1, "old")[..]
+    );
     assert_eq!(
         code(c.put_if(SDK, "settings", Some(1), &item(2, "again"))),
         "ProfileRollback"
     );
+    c.accept_rollback(SDK, "settings").unwrap();
+    c.put_if(SDK, "settings", Some(1), &item(2, "again"))
+        .unwrap();
 }
 
-/// G5: a deleted item put back (at its tombstone) is `ProfileRollback`; control: after the delete it reads as absent.
+/// G5: a deleted item put back (at its tombstone) reads as rolled back and refuses writes (`ProfileRollback`; spec §7.2,
+/// review C-3; the next open removes it, review A-9); control: after the delete it reads as absent.
 #[test]
 fn g5_deleted_item_put_back() {
     let (d, k) = (tmp(), keys());
@@ -212,7 +220,14 @@ fn g5_deleted_item_put_back() {
         Some(&1)
     );
     std::fs::write(&f, &old).unwrap();
-    assert_eq!(code(c.get(SDK, "settings")), "ProfileRollback");
+    assert_eq!(
+        &c.get(SDK, "settings").unwrap().unwrap().0[..],
+        &item(1, "a")[..]
+    );
+    assert_eq!(
+        code(c.put_if(SDK, "settings", None, &item(1, "b"))),
+        "ProfileRollback"
+    );
 }
 
 /// G5: an item its manifest lists whose file is missing is `ProfileDamaged`; control: it reads before.

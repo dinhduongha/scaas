@@ -449,7 +449,7 @@ fn g3_unprotected_refuses_sealed() {
     assert_eq!(code(o.matrix_store()), "ProfilePassphraseRequired");
 }
 
-/// G10: two envelopes with one visible `name_key` are both listed after a rebuild, with `ProfileIndexMismatch`.
+/// G10: two envelopes with one visible `name_key` are both listed, with `ProfileIndexMismatch` at each read.
 #[test]
 fn g10_duplicate_names_both_listed() {
     let root = tmp();
@@ -467,7 +467,14 @@ fn g10_duplicate_names_both_listed() {
             ("default".to_string(), false)
         ]
     );
-    assert_eq!(p.drain_events(), [ProfileEvent::ProfileIndexMismatch]);
+    // reported at each read of the index while both are there (review G-10): the start's and the list's
+    assert_eq!(
+        p.drain_events(),
+        [
+            ProfileEvent::ProfileIndexMismatch,
+            ProfileEvent::ProfileIndexMismatch
+        ]
+    );
 }
 
 /// G12 paths (spec §5 "Modes"): a missing root is made `0700`; an existing `0755` root holding `p/` is tightened; a `0755`

@@ -136,8 +136,17 @@ async fn secure_store_face() {
         .await
         .unwrap();
     std::fs::write(&f, old).unwrap();
+    // review C-3 (spec §7.2): a rolled-back item reads; a write to it is `ProfileRollback` until it is accepted
     assert_eq!(
-        s.get("settings".into(), String::new()).await,
+        s.get("settings".into(), String::new())
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        item(1, "a")
+    );
+    assert_eq!(
+        s.put_if("settings".into(), Some(1), item(2, "c"), p).await,
         Err(StoreError::ProfileRollback)
     );
     core.set_write_wait(Duration::from_millis(50));
@@ -201,7 +210,8 @@ fn plant_protected(root: &Path, name: &str) -> String {
         )
         .unwrap();
     let d = root.join("p").join(&id);
-    std::fs::create_dir_all(&d).unwrap();
+    // its generation too: a protected profile without its `g<gen>/` is `ProfileDamaged` (review G-11)
+    std::fs::create_dir_all(d.join("g1")).unwrap();
     std::fs::write(
         d.join("profile.envelope"),
         format!(
@@ -226,6 +236,37 @@ async fn open_protected() -> (Arc<UserProfiles>, Arc<UserProfile>, PathBuf) {
         .await
         .unwrap();
     (ups, up, root)
+}
+
+/// Review C-3 through the SDK: an old copy of an item put back reads, `Event::ProfileRollback` reaches
+/// `UserProfiles::events()`, and a write to it is `ProfileRollback` until `UserProfile::accept_rollback`; then it writes.
+#[tokio::test(flavor = "multi_thread")]
+async fn c3_accept_rollback_through_sdk() {
+    let (ups, up, _root) = open_protected().await;
+    let s = up.part_store(ProfilePart::PqVault).unwrap();
+    let p = StorePolicy::default();
+    s.put_if("a".into(), None, item(1, "old"), p).await.unwrap();
+    let core = up.core();
+    let f = file_of(core.dir(), &core.keys().unwrap(), "pqvault", "a");
+    let old = std::fs::read(&f).unwrap();
+    s.put_if("a".into(), Some(1), item(2, "new"), p)
+        .await
+        .unwrap();
+    std::fs::write(&f, old).unwrap();
+    ups.events();
+    let got = s.get("a".into(), String::new()).await.unwrap().unwrap();
+    assert_eq!(got.bytes, item(1, "old"));
+    assert!(ups.events().contains(&Event::ProfileRollback));
+    assert_eq!(
+        s.put_if("a".into(), Some(1), item(2, "again"), p).await,
+        Err(StoreError::ProfileRollback)
+    );
+    up.accept_rollback(ProfilePart::PqVault, "a".into())
+        .await
+        .unwrap();
+    s.put_if("a".into(), Some(1), item(2, "again"), p)
+        .await
+        .unwrap();
 }
 
 fn sdk_config(chain_profiles: Vec<ChainProfile>) -> ProfileSdkConfig {

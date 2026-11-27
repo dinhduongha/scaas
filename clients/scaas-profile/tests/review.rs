@@ -495,3 +495,108 @@ fn a3_create_committed_reports_success() {
     let p = Profiles::new(cfg(&root, None)).unwrap();
     assert!(p.list().unwrap().iter().any(|i| i.name == "New"));
 }
+
+/// The file of item `name` of part `sdk` in generation 1 of the open profile `o`.
+fn item_file(o: &OpenProfile, name: &str) -> PathBuf {
+    o.core()
+        .dir()
+        .join("g1")
+        .join(o.keys().unwrap().item_file("sdk", name).unwrap())
+}
+
+/// C-3: an item read below its manifest (an old copy put back) is readable, with `ProfileRollback` reported; writes to it are
+/// refused until `accept_rollback`, which re-anchors it at its current rev; then it writes. Control: the current copy reads
+/// with no event.
+#[test]
+fn c3_item_rollback_readable_until_accepted() {
+    let _k = kdf_lock();
+    let (p, o, ..) = protected(&tmp(), None);
+    let c = o.core();
+    c.put_if(SDK, "a", None, &item(1, "old")).unwrap();
+    let f = item_file(&o, "a");
+    let old = std::fs::read(&f).unwrap();
+    c.put_if(SDK, "a", Some(1), &item(2, "new")).unwrap();
+    p.drain_events();
+    assert_eq!(c.get(SDK, "a").unwrap().unwrap().1, 2, "control");
+    assert!(p.drain_events().is_empty(), "control");
+    std::fs::write(&f, &old).unwrap();
+    let (pt, rev) = c.get(SDK, "a").unwrap().unwrap();
+    assert_eq!((&pt[..], rev), (&item(1, "old")[..], 1));
+    assert!(p.drain_events().contains(&ProfileEvent::ProfileRollback));
+    assert_eq!(code(c.put_if(SDK, "a", Some(1), &item(2, "again"))), "ProfileRollback");
+    c.accept_rollback(SDK, "a").unwrap();
+    c.put_if(SDK, "a", Some(1), &item(2, "again")).unwrap();
+    assert_eq!(&c.get(SDK, "a").unwrap().unwrap().0[..], &item(2, "again")[..]);
+}
+
+/// C-3: an item its manifest lists whose file is missing is `ProfileDamaged` for reads and writes, the event reported (never
+/// read as absent: a removed `settings` does not fall back to defaults); a delete clears it. Control: it reads before.
+#[test]
+fn c3_listed_item_missing_damaged() {
+    let _k = kdf_lock();
+    let (p, o, ..) = protected(&tmp(), None);
+    let c = o.core();
+    c.put_if(SDK, "a", None, &item(1, "a")).unwrap();
+    assert!(c.get(SDK, "a").unwrap().is_some(), "control");
+    std::fs::remove_file(item_file(&o, "a")).unwrap();
+    p.drain_events();
+    assert_eq!(code(c.get(SDK, "a")), "ProfileDamaged");
+    assert!(p.drain_events().contains(&ProfileEvent::ProfileDamaged));
+    assert_eq!(code(c.put_if(SDK, "a", None, &item(1, "b"))), "ProfileDamaged");
+    c.delete(SDK, "a").unwrap();
+    c.put_if(SDK, "a", None, &item(1, "b")).unwrap();
+}
+
+/// A-9: a file left at its tombstone's rev (a delete cut between its manifest and its unlink) is removed at the next open:
+/// the item reads as absent and is created again. Control: the copy is there before the open.
+#[test]
+fn a9_unfinished_delete_finished_at_open() {
+    let _k = kdf_lock();
+    let (p, o, id, _) = protected(&tmp(), None);
+    o.core().put_if(SDK, "a", None, &item(1, "a")).unwrap();
+    let f = item_file(&o, "a");
+    let old = std::fs::read(&f).unwrap();
+    o.core().delete(SDK, "a").unwrap();
+    std::fs::write(&f, &old).unwrap();
+    o.lock();
+    assert!(f.exists(), "control");
+    let o = p.open(&id, Some(PASS)).unwrap();
+    assert!(!f.exists(), "the delete finished");
+    assert!(o.core().get(SDK, "a").unwrap().is_none());
+    o.core().put_if(SDK, "a", None, &item(1, "b")).unwrap();
+}
+
+/// G-10 / A-7: the index is reconciled with the envelopes at every read: a parsable index missing a visible profile's row
+/// lists it again and its name stays taken; a row naming a hidden profile is dropped from the file; two visible names of one
+/// `name_key` are both listed with `ProfileIndexMismatch`. Control: the intact index lists the visible profiles.
+#[test]
+fn g10_index_reconciled_with_the_envelopes() {
+    let _k = kdf_lock();
+    let root = tmp();
+    let p = Profiles::new(cfg(&root, None)).unwrap();
+    p.create("Two").unwrap();
+    let h = p.create_hidden(b"Hid", PASS, Some(TEST)).unwrap();
+    let hid = h.info().id;
+    h.lock();
+    let list = || -> Vec<String> { p.list().unwrap().into_iter().map(|i| i.name).collect() };
+    assert_eq!(list().len(), 2, "control");
+    let def = p.list().unwrap().into_iter().find(|i| i.name == "default").unwrap().id;
+    std::fs::write(
+        root.join("profiles.json"),
+        format!(
+            r#"{{"format":"scaas.profiles","v":1,"rev":9,"last":null,"profiles":[{{"id":"{def}","name":"default"}},{{"id":"{hid}","name":"Hid"}}]}}"#
+        ),
+    )
+    .unwrap();
+    assert_eq!(code(p.create("two")), "ProfileNameTaken");
+    assert!(list().contains(&"Two".to_string()));
+    assert!(!index_text(&root).contains(&hid), "the hidden profile's row dropped");
+    let twin = uuid7(1, &[3; 10]);
+    let d = root.join("p").join(&twin);
+    std::fs::create_dir_all(&d).unwrap();
+    let env = Envelope::unprotected(&twin, "two").json().unwrap();
+    std::fs::write(d.join("profile.envelope"), env).unwrap();
+    p.drain_events();
+    assert_eq!(list().len(), 3);
+    assert!(p.drain_events().contains(&ProfileEvent::ProfileIndexMismatch));
+}

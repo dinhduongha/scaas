@@ -221,8 +221,9 @@ fn damaged_directory_reported_never_removed() {
     assert_eq!(names(&p), ["default"]);
 }
 
-/// `rebuild_index` on demand (spec §6): a parsable index with a wrong name is listed as it says (the index is a cache), and the
-/// rebuild lists every visible profile from its envelope. Control: an intact index lists as before.
+/// `rebuild_index` on demand (spec §6): the rebuild lists every visible profile from its envelope; a parsable index with a
+/// wrong name is reconciled with the envelopes at its next read (review G-10: the index is a cache, never the truth).
+/// Control: an intact index lists as before.
 #[test]
 fn rebuild_index_on_demand() {
     let (root, kc) = (tmp(), Arc::new(Keychain::default()));
@@ -239,7 +240,7 @@ fn rebuild_index_on_demand() {
         ),
     )
     .unwrap();
-    assert_eq!(names(&p), ["default", "planted"]);
+    assert_eq!(names(&p), ["a", "default"]);
     p.rebuild_index(ConfirmRebuildIndex {}).unwrap();
     assert_eq!(names(&p), ["a", "default"]);
 }

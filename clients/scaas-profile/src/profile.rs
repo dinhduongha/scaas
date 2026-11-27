@@ -143,7 +143,7 @@ pub struct Profiles {
     pub(crate) keychain: Option<Arc<dyn ProfileKeychain>>,
     pub(crate) kdf_max_kib: u32,
     pub(crate) heavy: Arc<Heavy>,
-    events: Mutex<Vec<ProfileEvent>>,
+    events: Arc<Mutex<Vec<ProfileEvent>>>,
     /// the last refused import preview's local reason (spec §10.1: a log line's)
     pub(crate) refusal: Mutex<Option<&'static str>>,
     #[cfg(feature = "test-hooks")]
@@ -275,7 +275,7 @@ impl Profiles {
                 free: Condvar::new(),
                 max: config.max_concurrent_heavy.max(1),
             }),
-            events: Mutex::new(Vec::new()),
+            events: Arc::default(),
             refusal: Mutex::new(None),
             #[cfg(feature = "test-hooks")]
             before_kdf: Mutex::new(None),
@@ -394,9 +394,11 @@ impl Profiles {
         let j = bytes.and_then(|b| serde_json::from_slice::<Journal>(&b).ok());
         if let Some(j) = j.filter(|j| j.op == "create" && is_id(&j.id)) {
             let dir = self.p.join(&j.id);
-            if let Ok(Some((env, _))) = read_envelope(&dir, &j.id) {
+            // the row added to the index as it is (an index that does not parse is rebuilt from the envelopes next)
+            if let (Ok(Some((env, _))), (Some(mut ix), at)) =
+                (read_envelope(&dir, &j.id), self.parsed_index()?)
+            {
                 if let Some(name) = env.name {
-                    let (mut ix, at) = self.index_locked()?;
                     if !ix.profiles.iter().any(|r| r.id == j.id) && ix.profiles.len() < index::ROWS
                     {
                         ix.profiles.push(Row { id: j.id, name });
@@ -417,32 +419,53 @@ impl Profiles {
             .collect())
     }
 
-    /// The index under the root lock and its file's rev for `put_if`: rows of missing directories dropped; rebuilt from the
-    /// envelopes (and written) when it is missing or does not parse while `p/` holds a profile, one row per envelope with a
-    /// public name, protected or not; two with one `name_key` both listed, with `ProfileIndexMismatch`.
-    pub(crate) fn index_locked(&self) -> Result<(Index, Option<u64>), Error> {
+    /// The index file parsed (`None`: missing or not an index) and its rev for `put_if`.
+    fn parsed_index(&self) -> Result<(Option<Index>, Option<u64>), Error> {
         let bytes = read_bounded(&self.root.join(index::FILE), index::MAX)?;
         let at = rev_at(&bytes);
-        let parsed = bytes.flatten().and_then(|b| Index::parse(&b));
-        if let Some(mut ix) = parsed {
-            ix.profiles.retain(|r| self.p.join(&r.id).is_dir());
-            return Ok((ix, at));
-        }
+        Ok((bytes.flatten().and_then(|b| Index::parse(&b)), at))
+    }
+
+    /// The index under the root lock and its file's rev for `put_if`, its rows those of the envelopes (spec §6: a cache,
+    /// never the truth; review G-10, A-7): one row per envelope with a public name, protected or not, by id. An index that
+    /// does not hold exactly these rows (missing, not parsing, a row for a hidden or a missing profile, a visible profile
+    /// without its row) is rewritten with them, its `last` kept while it names one; none is written while `p/` holds no
+    /// profile. Two rows of one `name_key` are both listed, with `ProfileIndexMismatch` at each read.
+    pub(crate) fn index_locked(&self) -> Result<(Index, Option<u64>), Error> {
+        let (parsed, at) = self.parsed_index()?;
         let scan = self.scan()?;
-        if scan.is_empty() {
+        if parsed.is_none() && scan.is_empty() {
             return Ok((Index::new(Vec::new()), at));
         }
-        let mut rows: Vec<Row> = Vec::new();
-        for (id, env) in scan {
-            if let Some(name) = env.and_then(|e| e.name) {
-                if rows.iter().any(|r| same_name(&r.name, &name)) {
-                    self.event(ProfileEvent::ProfileIndexMismatch);
-                }
-                rows.push(Row { id, name });
-            }
-        }
+        let mut rows: Vec<Row> = scan
+            .into_iter()
+            .filter_map(|(id, env)| Some(Row { id, name: env?.name? }))
+            .collect();
         rows.truncate(index::ROWS);
-        let mut ix = Index::new(rows);
+        let twins = rows
+            .iter()
+            .enumerate()
+            .any(|(i, a)| rows.iter().take(i).any(|b| same_name(&a.name, &b.name)));
+        if twins {
+            self.event(ProfileEvent::ProfileIndexMismatch);
+        }
+        let key = |r: &Row| (r.id.clone(), r.name.clone());
+        let mut ix = match parsed {
+            Some(ix) => {
+                let mut held: Vec<_> = ix.profiles.iter().map(key).collect();
+                held.sort();
+                if held == rows.iter().map(key).collect::<Vec<_>>() {
+                    return Ok((ix, at));
+                }
+                let mut ix = ix;
+                ix.profiles = rows;
+                if !ix.profiles.iter().any(|r| ix.last.as_ref() == Some(&r.id)) {
+                    ix.last = None;
+                }
+                ix
+            }
+            None => Index::new(rows),
+        };
         let at = self.write_index(&mut ix, at)?;
         Ok((ix, at))
     }
@@ -686,11 +709,14 @@ impl Profiles {
             envelope: Head::of(env.rev, bytes),
             migration_pending: env.migration.is_some(),
         });
-        let core = Arc::new(core.inspect_err(|_| {
+        let mut core = core.inspect_err(|_| {
             if let Some(k) = &keys {
                 k.lock()
             }
-        })?);
+        })?;
+        // a read's rollback or damage is a profile event (spec §7.2)
+        core.events = self.events.clone();
+        let core = Arc::new(core);
         let opened = OpenProfile {
             info: Mutex::new(ProfileInfo {
                 id: env.id.clone(),
