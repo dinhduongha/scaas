@@ -478,6 +478,9 @@ export function decodeBackup(pt) {
   const entropy = fromB64url(j.entropy);
   if (!ENTROPY.includes(entropy.length)) fail("Argument", "backup entropy: 16, 20, 24, 28 or 32 bytes");
   const secrets = (j.secrets ?? []).map((s) => ({ label: s.label, bytes: fromB64url(s.bytes) }));
+  // the payload has no key-locked form (user-profiles spec §7.4, CLI-UPR-24), as ua-rs reads it
+  if (secrets.some((s) => String(s.label).startsWith("native-import-locked:")))
+    fail("Argument", "backup secret: a key-locked label");
   checkImportedUas(j.manifest, secrets);
   return { generation: j.generation, entropy, secrets, manifest: j.manifest };
 }

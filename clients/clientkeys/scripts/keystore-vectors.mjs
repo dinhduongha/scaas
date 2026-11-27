@@ -17,6 +17,7 @@ import { polkadotKey } from "../src/substrate.js";
 import { parse, serialize } from "../src/keystore.js";
 import { indexMac, indexCanonical } from "../src/keystore-mac.js";
 import { createVault, openVault, resealData } from "../src/vault.js";
+import { encodeBackup, decodeBackup } from "../src/seal.js";
 
 const OUT = process.argv[2] ?? fileURLToPath(new URL("../../../smartcontracts/vectors/keystore", import.meta.url));
 const must = (ok, what) => {
@@ -188,10 +189,11 @@ const entry = async ({
   accounts = [],
   extraVaults = {},
   locked = {},
+  manifest = emptyManifest,
 }) => {
   const vaults = {
     seed: await vaultText("seed", entropy, id),
-    manifest: await vaultText("manifest", emptyManifest, id),
+    manifest: await vaultText("manifest", manifest, id),
   };
   for (const [k, v] of Object.entries(extraVaults)) vaults[k] = await vaultText(k, v, id);
   for (const [k, v] of Object.entries(locked)) vaults[k] = await vaultText(k, v, id, KEY_PASS);
@@ -299,7 +301,12 @@ const polkadot = ordered(
     ],
   }),
 );
-// the same key as "With an import"'s native-import:evm:0, key-locked
+// the same key as "With an import"'s native-import:evm:0, key-locked; its sealed manifest lists it under `imports` and
+// `keyLocked` as ua-rs writes it (review D-10)
+const lockedManifest = utf8ToBytes(
+  '{"v":1,"entries":[],"natives":[],"kem":[],"imports":[{"network":"evm","n":0}],"keyLocked":[{"network":"evm","n":0}],' +
+    '"importedUas":[],"pqzHeld":[],"backupGeneration":0,"backupSenders":[]}',
+);
 const withLock = ordered(
   await entry({
     id: "6a3f7c4d-9c4d-4fa6-b28f-bf6dbdbd8f76",
@@ -309,6 +316,7 @@ const withLock = ordered(
     warnings: ["imported_key"],
     backup: "pending",
     locked: { "native-import-locked:evm:0": imported.privateKey },
+    manifest: lockedManifest,
   }),
 );
 const ks = (rev, seeds) => ({ format: "scaas.keystore", v: 2, rev, seeds });
@@ -609,6 +617,28 @@ must(
   "a key-locked vault with a prf envelope is VaultFormat",
 );
 
+// review D-11: a backup payload has no key-locked form: decodeBackup (and ua-rs's payload reader) refuse a
+// `native-import-locked:` secret; the same payload with the plain label decodes
+const backupPayloads = [
+  ["a plain import secret", "native-import:evm:0", null],
+  ["a key-locked import secret", "native-import-locked:evm:0", "Argument"],
+].map(([id, label, error]) => {
+  const pt = encodeBackup({
+    generation: 1,
+    entropy: ENTROPY,
+    secrets: [{ label, bytes: imported.privateKey }],
+    manifest: { entries: [] },
+  });
+  let code = null;
+  try {
+    decodeBackup(pt);
+  } catch (e) {
+    code = e.code;
+  }
+  must(code === error, `backup payload ${id}: ${code}`);
+  return { id, pt: new TextDecoder().decode(pt), error };
+});
+
 const write = (name, obj) => {
   mkdirSync(OUT, { recursive: true });
   writeFileSync(join(OUT, name), JSON.stringify(obj, null, 1) + "\n");
@@ -642,11 +672,19 @@ write("keystore.json", {
     '12-word "abandon … about"). Only the canonical text is accepted. keyLocked (user-profiles spec §7.4, CLI-UPR-24): ' +
     'the vault native-import-locked:evm:0 of "a seed with a key-locked import vault", sealed under its own passphrase with a ' +
     "pin envelope only, opens by that passphrase to plaintext; the same text with a prf envelope added is refused by a vault " +
-    "reader (clientkeys openVault, ua-rs Vault::from_json) before any KDF.",
+    "reader (clientkeys openVault, ua-rs Vault::from_json) before any KDF: VaultFormat here, Argument in ua-rs's reader " +
+    "(the SDK reports it VaultFormat). keyLockedManifest: the plaintext of that seed's manifest vault (the import under " +
+    "imports and keyLocked). backupPayloads (review D-11): a backup payload (seal.js encodeBackup) with a plain import " +
+    "secret decodes; with a native-import-locked: secret it is Argument (the payload has no key-locked form).",
   passphrase: PASS,
   valid: validRows,
   refused: refusedRows,
   keyLocked: keyLockedRows,
+  keyLockedManifest: {
+    id: "the manifest of a seed with a key-locked import vault",
+    text: new TextDecoder().decode(lockedManifest),
+  },
+  backupPayloads,
 });
 console.log(
   `keystore vectors: ${fingerprints.length} fingerprints, ${macs.length} MACs, ${reseals.length} re-sealed vaults, ${validRows.length} containers, ${refusedRows.length} refused, ${keyLockedRows.length} key-lock rows -> ${OUT}`,

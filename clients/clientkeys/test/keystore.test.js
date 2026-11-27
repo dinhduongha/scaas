@@ -13,6 +13,7 @@ import { shake256 } from "@noble/hashes/sha3.js";
 import { parse, serialize, depthOf } from "../src/keystore.js";
 import { indexMac } from "../src/keystore-mac.js";
 import { openSeedVault, openVault } from "../src/vault.js";
+import { decodeBackup } from "../src/seal.js";
 import { utf8ToBytes, bytesToHex } from "../src/bytes.js";
 
 const DIR = fileURLToPath(new URL("../../../smartcontracts/vectors/keystore/", import.meta.url));
@@ -147,4 +148,25 @@ test("keystore.json keyLocked rows (user-profiles spec §7.4): the pin-only vaul
   // the container holds the label like any other vault key (both container readers accept it)
   const c = parse(K.valid.find((x) => x.id === "a seed with a key-locked import vault").text);
   assert.ok(Object.hasOwn(c.seeds[0].vaults, "native-import-locked:evm:0"));
+  // review D-10: that seed's sealed manifest lists the import under `imports` and `keyLocked` (the text ua-rs writes)
+  const m = new TextDecoder().decode(await openVault(JSON.parse(c.seeds[0].vaults.manifest), { pin: K.passphrase }));
+  assert.equal(m, K.keyLockedManifest.text);
+  assert.ok(m.includes(',"imports":[{"network":"evm","n":0}],"keyLocked":[{"network":"evm","n":0}],'), m);
+});
+
+test("keystore.json backupPayloads (review D-11): a backup payload holds no key-locked secret (Argument); a plain one decodes", () => {
+  assert.deepEqual(
+    K.backupPayloads.map((r) => r.error),
+    [null, "Argument"],
+  );
+  for (const r of K.backupPayloads) {
+    const pt = utf8ToBytes(r.pt);
+    let code = null;
+    try {
+      decodeBackup(pt);
+    } catch (e) {
+      code = e.code;
+    }
+    assert.equal(code, r.error, r.id);
+  }
 });

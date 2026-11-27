@@ -1532,9 +1532,23 @@ fn key_lock_left_out_of_backup_and_link() {
     assert_eq!(r.imported_key(Network::Evm, 0).unwrap().public_key(), pk1);
 }
 
+/// A keystore.json row's code → this crate's (review D-10): the vault reader names a malformed vault `Argument`, which the
+/// SDK's `vault_of` reports `VaultFormat` (clientkeys' name, the row's).
+const CODE_OF_ROW: &[(&str, &str)] = &[("VaultFormat", "Argument")];
+
+fn code_of_row(row: &Value) -> &'static str {
+    CODE_OF_ROW
+        .iter()
+        .find(|(r, _)| row == *r)
+        .map(|(_, ours)| *ours)
+        .unwrap_or_else(|| panic!("no code of the row's {row}"))
+}
+
 /// smartcontracts/vectors/keystore/keystore.json `keyLocked` (clientkeys' rows): the pin-only vault parses and opens with its
-/// own passphrase to its key; the one with a `prf` envelope is refused by the reader (`VaultFormat` there, `Argument` here,
-/// which the SDK's `vault_of` reports `VaultFormat`).
+/// own passphrase to its key; the one with a `prf` envelope is refused by the reader ([`CODE_OF_ROW`]). `keyLockedManifest`
+/// (review D-10): the manifest text with the import under `imports` and `keyLocked` parses and writes back byte for byte.
+/// `backupPayloads` (review D-11, feature `vectors`): the payload with a key-locked secret is refused (`Argument`), the plain
+/// one reads and writes back byte for byte.
 #[test]
 fn keystore_json_key_lock_rows() {
     let p = format!(
@@ -1582,8 +1596,37 @@ fn keystore_json_key_lock_rows() {
                 }]
             );
         } else {
-            assert_eq!(r["error"], "VaultFormat");
-            assert_eq!(code(got), "Argument", "{}", r["id"]);
+            assert_eq!(code(got), code_of_row(&r["error"]), "{}", r["id"]);
+        }
+    }
+    let text = f["keyLockedManifest"]["text"].as_str().unwrap();
+    let m = Manifest::from_json(text.as_bytes()).unwrap();
+    let evm0 = [ImportEntry {
+        network: Network::Evm,
+        n: 0,
+    }];
+    assert_eq!((&m.imports[..], &m.key_locked[..]), (&evm0[..], &evm0[..]));
+    assert_eq!(m.to_json(), text);
+    #[cfg(feature = "vectors")]
+    {
+        let rows = arr(&f, "backupPayloads");
+        assert_eq!(rows.len(), 2);
+        for r in rows {
+            let pt = r["pt"].as_str().unwrap();
+            match r["error"].as_str() {
+                Some(e) => assert_eq!(
+                    code(scaas_ua::wallet::vectors_backup_payload(pt.as_bytes())),
+                    e,
+                    "{}",
+                    r["id"]
+                ),
+                None => assert_eq!(
+                    &scaas_ua::wallet::vectors_backup_payload(pt.as_bytes()).unwrap()[..],
+                    pt,
+                    "{}",
+                    r["id"]
+                ),
+            }
         }
     }
 }
