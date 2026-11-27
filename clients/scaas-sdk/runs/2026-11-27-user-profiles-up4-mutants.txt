@@ -1,0 +1,5 @@
+# up4 mutants (name | outcome | commit | test | first failure line)
+vault::io collapsing every new store code to VaultIo | killed | 3b55304f8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib -- --exact vault::tests::store_codes_map_by_name | panicked at src/vault/tests.rs:697:9:
+rev_of keeping the 16 MiB cap for sealed items | killed | 3b55304f8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib -- --exact vault::store::tests::rev_of_sealed_bound | panicked at src/vault/store.rs:484:9:
+test-hooks missing from the script's test features | killed | 3b55304f8 | python3 -I -c "import subprocess, sys; o = subprocess.run([sys.executable, '-I', 'scripts/check_test_features.py'], capture_output=True, text=True).stdout; assert any('with test-hooks forced' in l and l.endswith('True') for l in o.splitlines()), 'test_hooks_control'" | AssertionError: test_hooks_control
+3 mutants, 3 killed, 0 survived, 0 not loaded, 0 other failure

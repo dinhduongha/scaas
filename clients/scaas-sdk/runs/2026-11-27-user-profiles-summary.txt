@@ -23,3 +23,12 @@ UP3 | sdk keystore_vectors | 8c5eea841 | 0 | 2 pass
 UP3 | fmt rust js | 8c5eea841 | 0 | ok
 UP3 | docs | 8c5eea841 | 0 | 0 errors (8 old warnings); test_docs_check ok
 UP3 | mutants up3 | 4505606cf | 0 | 3 mutants, 3 killed, 0 survived, 0 not loaded, 0 other failure
+UP4 | sdk-reg | 40d09358e | 0 | vault 28, keystore_vectors 2, --lib vault 18: all pass
+UP4 | sdk-clippy (UPF and default, --all-targets -D warnings) | 40d09358e | 0 | 0 warnings
+UP4 | features | 40d09358e | 0 | check_test_features 71 manifests, 0 findings, every control True; feature_tree 5/5 both; config 15/15 both; --lib op:: 102/102
+UP4 | release refusal (ua-rs --release --features test-hooks) | 40d09358e | 0 | compile_error! as expected; control builds
+UP4 | sdk-wasm check | 40d09358e | 0 | ok
+UP4 | bind-gen --check | 3b55304f8 | 0 | ok
+UP4 | fmt rust toml py | 40d09358e | 0 | ok
+UP4 | docs | 40d09358e | 0 | 0 errors, 8 warnings, 16 notes; test_docs_check ok
+UP4 | mutants up4 | 3b55304f8 | 0 | 3 mutants, 3 killed, 0 survived, 0 not loaded, 0 other failure
