@@ -13225,11 +13225,11 @@ It said: a profile's Matrix logins, session, store, crypto keys and device id ar
 ### CLI-UPR-32 — scaas-app's default build links `ua-rs` only with the profile-crypto features; no signing code is compiled into it
 - old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-32 · superseded-by: —
 
-**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-32).) `scaas-profile` takes `ua-rs` without defaults and with `user-profile` and `json` only; `user-profile` is the new feature `key-handles` (arena, key handles, AEAD, HKDF, HMAC, Argon2id, `ProfileKeys`, `ExportKey`), which enables no `wallet`, `pq`, `signers`, `fam-*`, `zether` or `pqz`; `app-core` is `key-handles` and `wallet` and keeps what needs a seed or a UA kind; `mlock` locks either arena. Verify-only code (classical kind verification, FROST/MuSig2 key-data and PoP checks) stays; revisit only for a measured size need (controller call 2026-11-27).
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-32).) `scaas-profile` takes `ua-rs` without defaults and with `user-profile` and `json` only; `user-profile` is the new feature `key-handles` (arena, key handles, AEAD, HKDF, HMAC, Argon2id, `ProfileKeys`, `ExportKey`), which enables no `wallet`, `pq`, `signers`, `fam-*`, `zether` or `pqz`; `app-core` is `key-handles` and `wallet` and keeps what needs a seed or a UA kind; `mlock` locks either arena. Verify-only code (classical kind verification, FROST/MuSig2 key-data and PoP checks) stays; revisit only for a measured size need (owner 2026-11-27).
 **Status.** BUILT (`ua-rs` features `key-handles`, `user-profile`, `app-core`, `mlock`; `clients/ua-rs/runs/2026-11-27-key-handles-nm.py`; CI cell `user-profile`). UNAUDITED.
 **Why.** The app's default build holds a profile without the SDK (CLI-UPR-02's Change); signing code it never calls is attack surface and size it does not need.
 **Cost if wrong.** Signing code, PQ kinds or group signers linked into an app build that signs nothing; a later feature edit pulling `wallet` back in unnoticed.
-**Source.** Owner ruling 2026-11-27 (chat): scaas-app's default build links ua-rs only with the profile-crypto features; no signing code is compiled into it. [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O15, §11.
+**Source.** Owner ruling 2026-11-27 (chat): scaas-app's default build links ua-rs only with the profile-crypto features; no signing code is compiled into it. [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O15, §11. Owner ruling 2026-11-27: the verify-only identity layer stays in the profile build of `ua-rs`.
 
 ## 42. Clients — terminal UI (`scaas-tui`)
 

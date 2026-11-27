@@ -829,4 +829,4 @@ HMAC, Argon2id, `seal_key`, the OS RNG, `passphrase_bytes`, `Nonce`, `ProfileKey
 the app root key, the KEM wrap, the PqChat keys, the tree) stays in `app-core`. `clients/ua-rs/runs/2026-11-27-key-handles-nm.py`
 checks it: the `user-profile` rlib defines no signing symbol (`nm`), a `wallet` build does (the control), and `scaas-profile`'s
 graph enables no signing feature. Verify-only code (classical kind verification, FROST/MuSig2 key-data and PoP checks)
-stays; revisit only for a measured size need (controller call 2026-11-27).
+stays; revisit only for a measured size need (owner 2026-11-27).
