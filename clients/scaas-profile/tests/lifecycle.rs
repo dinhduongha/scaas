@@ -11,8 +11,8 @@
 )]
 
 use scaas_profile::{
-    keychain_name, uuid7, ConfirmDeleteUnreadable, ConfirmMigratedKeystore, ConfirmRebuildIndex,
-    Error, ProfileEvent, ProfileKeychain, ProfilePart, Profiles, ProfilesConfig,
+    keychain_name, uuid7, ConfirmDeleteUnreadable, ConfirmRebuildIndex, Error, ProfileEvent,
+    ProfileKeychain, ProfilePart, Profiles, ProfilesConfig,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -530,7 +530,7 @@ mod hooks {
                 "nothing written"
             );
             o.reseal_hook(Box::new(move |s| s == stop));
-            let confirmed = Some(ConfirmMigratedKeystore {});
+            let confirmed = Some(scaas_profile::ConfirmMigratedKeystore {});
             assert_eq!(
                 code(o.set_passphrase(PASS, Some(TEST), None, confirmed)),
                 "VaultIo"

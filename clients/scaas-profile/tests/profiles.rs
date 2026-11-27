@@ -539,6 +539,7 @@ fn g12_root_modes_and_symlink() {
 }
 
 /// An envelope's fields but its label, which every envelope write re-seals at the new rev (owner 2026-11-28, review F-2).
+#[cfg(feature = "test-hooks")]
 fn resealed(env: &str) -> Value {
     let mut v: Value = serde_json::from_str(env).unwrap();
     v.as_object_mut().unwrap().remove("label").unwrap();
