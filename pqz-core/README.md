@@ -590,7 +590,7 @@ The rejected backends' code and runs are kept in `pqzh/stark-backup/` as the rec
 
 | Want to… | Run |
 |---|---|
-| run the full gate A / B checklist at one set (KAT, fix checks, the provers' constant-time check `ct` and the C core's sanitizer run `ub`, differential, C = Rust = wasm32, vectors, `pqz-ffi`, the Rust PQZL core's tests with the C oracle, cargo tests, PQZH cross-checks, fuzz smoke; `sh pqz-core/gate-controls.sh`: the negative controls of its scripts) | `[PQZ_SET=<set>] scripts/capped pqz-core/gate.sh [<label>]` (resumes an interrupted run; `--last` re-runs the latest) |
+| run the full gate A / B checklist at one set (KAT, fix checks, the provers' constant-time check `ct` and the C core's sanitizer run `ub`, differential, C = Rust = wasm32, vectors, `pqz-ffi`, the Rust PQZL core's tests with the C oracle, cargo tests, PQZH cross-checks, fuzz smoke; `sh pqz-core/gate-controls.sh`: the negative controls of its scripts) | on CI, the gate's record: the workflow `pqz-gate.yml` (below); locally, the fallback: `[PQZ_SET=<set>] scripts/capped pqz-core/gate.sh [<label>]` (resumes an interrupted run; `--last` re-runs the latest) |
 | build PQZL (native + wasm) | `[PQZ_SET=<set>] pqzl/build.sh all` |
 | check the PQZL arithmetic against upstream LaZer | `pqzl/build/native/kat_dump > pqzl/build/native/kat-pqz.json`, then `python3 -I pqzl/kat/check.py params/sets/<set>/lazer-3330e48-kat.json pqzl/build/native/kat-pqz.json` (must print 19/19) |
 | test PQZH | `(cd pqzh/ligero && cargo test --release --offline [--features set-<set>])` |
@@ -599,6 +599,37 @@ The rejected backends' code and runs are kept in `pqzh/stark-backup/` as the rec
 | add a parameter set, or regenerate one | write `params/sets/<set>/set.toml`, then `params/sets/make.sh <set> all` ([params/README.md](params/README.md)) |
 | reproduce the 2026-10-17 freeze (§5 history; the package is stale since plan 5h Task 8a) | `OUT=<dir> scripts/capped pqz-core/artifact/reproduce.sh [--full]` |
 | build / test the node plugin and image | `[PQZ_SET=<set>] scripts/capped pqz-core/nethermind/run-tests.sh`, `[PQZ_SET=<set>] scripts/capped pqz-core/nethermind/build-image.sh pqz<n>` ([nethermind/README.md](nethermind/README.md)) |
+
+**The full gate on CI** ([decisions ARCH-POS-26](../docs/decisions.md#ARCH-POS-26)). The full gate (`gate.sh`, every
+step) runs at the four sets in the GitHub Actions workflow [`.github/workflows/pqz-gate.yml`](../.github/workflows/pqz-gate.yml),
+**only when asked**, never on a push to `dev` or `main` or on a pull request. It is a **post-check**: no other job needs it, it
+is no required status, merges and other streams do not wait for it, and a red run is a finding fixed after. What blocks a
+merge stays as before: the affected steps (kat, tbox, sv, fnv, rust, fuzz, `pqz-vectors --check`, `pqz_kat.py --check`, as
+AGENTS.md "Cryptography" lists them) and the `pqz` job of `ci.yml`. "Gate once on the final core tree" still holds: the CI
+run on that tree is the gate.
+
+- **Ask for a run:** push the commit to a branch `pqz-gate/<name>`, e.g. `git push origin <sha>:refs/heads/pqz-gate/2026-11-27`
+  (all four sets; works before the workflow is on the default branch), or, once it is on the default branch, Actions >
+  pqz-gate > Run workflow (input `sets`: `all` or one set), `gh workflow run pqz-gate.yml -f sets=all --ref <branch>`.
+  A newer push to the same branch cancels the run in progress.
+- **Jobs:** two per set on `ubuntu-24.04` (6 h each at most): part `a` runs `kat tbox sv ct ub diff`, part `b` runs
+  `fnv vectors ffi rust cargo xcheck fuzz`. One set's whole gate does not fit 6 h: the 2026-10-26 runs (four sets at once on
+  the owner's 8-core machine) took about 5 h at `n2816-kmax65536` before `ct` and `ub` existed (`diff` 2 h 23 min,
+  `vectors` 53 min, `rust` 46 min, `fnv` 33 min), and the 2026-11-27 `n2304-kmax4096` run's steps took about 4 h 20 min with them
+  (`diff` 1 h 58 min, `rust` 1 h 1 min, `ct` 29 min); a hosted runner (4 vCPU, cold builds) is no faster. Estimated per job:
+  part `a` 1.5 h (`n2048-kmax1024`) to 4 h (`n2816-kmax65536`), part `b` 1.5 h to 3 h. The parts are chosen with the
+  gate's own resume: the job records the other part's steps as passed at the tree `gate.sh` computes (`resume.sh`
+  `gate_tree`), so `gate.sh` reports them "resumed" and runs only its own; neither script is changed for it. A step in
+  neither list runs in both parts. Nothing waits for a slot: `gate.sh` calls no `scripts/capped` itself (the differential
+  runs with `CAPPED=env`), and each job has its runner to itself.
+- **Output:** each job uploads `runs/gate/<set>-*`, the step scripts' `gate-<set>` logs and the wallet module's logs (30
+  days) and writes its step table to the job summary; the job `summary` merges each set's two parts, with the tree id, and
+  says PASS only when both parts end PASS at one tree and every step ran in one of them
+  (`.github/pqz_gate_summary.py`). A part's own `gate.sh` summary lists the other part's steps as "resumed": read the merged
+  table. The logs are public; the jobs read no secret and print no environment.
+- **Record:** copy the `summary` job's table (rows `step | commit | rc | time | parts`) and the run URL into
+  `runs/<date>-pqz-gate-<sets>-summary.txt` (for example `runs/2026-11-27-pqz-gate-n2304-summary.txt`, kept in the same
+  form), with the gate's tree id and its verdict per set.
 
 <details>
 <summary><b>PQZL core (C)</b> — builds, bench, KAT, fix checks, keys</summary>

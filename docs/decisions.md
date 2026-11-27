@@ -617,6 +617,30 @@ proof the verifier refuses. The vectors and KATs catch it; none moved.
 **Source.** Owner ruling 2026-11-26 (chat, through the coordinator): the direct RustCrypto uses move to the next generation
 before the pre-freeze tag; it was planned for after the freeze, TODO 8b-2b.
 
+<a id="ARCH-POS-26"></a>
+### ARCH-POS-26 — The pqz-core full gate runs on CI, only when asked, as a post-check
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: decisions.md#ARCH-POS-26 · superseded-by: —
+
+**Rule.** The pqz-core full gate (`pqz-core/gate.sh`, every step, at the four parameter sets) runs on CI in the workflow
+`.github/workflows/pqz-gate.yml`, **only when asked**: a push to a branch `pqz-gate/<name>` or a manual run
+(`workflow_dispatch`, input `sets`), never on a push to `dev` or `main`, a pull request, a schedule or a path filter. It is a
+**post-check**: no other job `needs` it, it is not a required status, and merges and other work do not wait for it. What
+blocks a merge stays as before: the affected steps (AGENTS.md "Cryptography": kat, tbox, sv, fnv, rust, fuzz, `pqz-vectors
+--check`, `pqz_kat.py --check`) and the `pqz` job of `ci.yml`. A red full gate is a finding, fixed after; it does not stop
+other streams. "Gate once on the final core tree" still holds (every later core change pulled forward first): the CI run on
+that tree is the gate; the local `scripts/capped pqz-core/gate.sh` stays usable as a fallback. A run's step table and URL are
+recorded in `runs/<date>-pqz-gate-<sets>-summary.txt`.
+**Status.** BUILT on branch `pqz-gate-ci`, UNAUDITED tooling; no CI run yet. Two jobs per set (part `a`: kat tbox sv ct ub
+diff; part `b`: fnv vectors ffi rust cargo xcheck fuzz), since one set's gate does not fit a hosted runner's 6 h; the parts
+are selected through `gate.sh`'s own resume state, `gate.sh` and `resume.sh` unchanged ([pqz-core/README.md](../pqz-core/README.md),
+"The full gate on CI").
+**Why.** A full gate takes hours per set on the owner's machine and holds its slots; the four sets at once compete with
+every other stream there, and the 2026-11-27 run stopped three sets at about 25 % to free it.
+**Cost if wrong.** A finding of the full gate arrives after a merge rather than before; the affected steps still block a
+merge. Runner minutes, and a 6 h limit per job.
+**Source.** Owner ruling 2026-11-27 (chat): the pqz-core full gate runs on CI, only when needed, as a post-check; other
+work does not wait on it.
+
 ## 2. Node — General
 
 ### NODE-GEN-01 — Node holds no subject funds or keys
