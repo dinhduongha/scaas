@@ -6,7 +6,7 @@ at `fa51e8275` (round 2: no P1, every round-1 finding fixed or partly fixed, new
 `9f2ee89b7` (round 3: area C approve, areas A and B approve with one P1 each, no P0); every finding of the three rounds is applied as the controller's ruling of the same day (§19). No decryption-oracle path was found in either round, and no owner
 ruling was reopened. Branch `user-profiles-spec` (from `dev` `644ea61a8`), worktree `.claude/worktrees/user-profiles-spec`. Rule ids
 (SPECIFIED, defined once in [clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12, recorded in [decisions.md](../../decisions.md)
-§41): CLI-UPR-01 to CLI-UPR-28. No contract, signed byte format, chain profile or node rule changes; no on-chain byte changes. The
+§41): CLI-UPR-01 to CLI-UPR-29. No contract, signed byte format, chain profile or node rule changes; no on-chain byte changes. The
 `ua-rs` calls and the two file formats of §7 and §10.1, and the keystore's new vault label of §7.4, are new and need vector rows in
 clientkeys and `ua-rs` before code. UNAUDITED.
 
@@ -36,6 +36,8 @@ ARCH-POS-15. Order of sources: AGENTS.md "Which source wins".
 | O10 | 2026-11-27 | The spec's open points Q-UP1 to Q-UP9 (§16): Q-UP5, export and import of a whole profile as one sealed file, is in scope now with the content, seal, confirm and id rule of §10.1; the other eight as recommended. | CLI-UPR-17; §16 |
 | O11 | 2026-11-27 | Platform (biometric) unlock on a shared OS account opens the profile to everyone enrolled on that account: an accepted risk. Mitigation: the user may lock each secret item separately with its own passphrase, optional per item: every seed (its own vault passphrase) and every imported native secret key; that per-item passphrase is never opened by platform or biometric unlock, only typed. | CLI-UPR-23; §7.4, §14.1 |
 | O12 | 2026-11-27 | Q-UP10, Q-UP11 as recommended (§16.1): a hidden profile with a lost passphrase is removed by hand, no call deletes unlisted directories; an export leaves out `keystore.prev`, the PqChat store and credential references. | CLI-UPR-15, CLI-UPR-18 |
+| O13 | 2026-11-27 | The user-profile store is its own crate, `scaas-profile`, over `ua-rs` only, so scaas-app's default build (no SDK) holds a profile (its Matrix session key, its settings) with `scaas-matrix`; the SDK depends on it and adds what needs the SDK (§11). | CLI-UPR-02 (Change) |
+| O14 | 2026-11-27 | Each profile has its own Matrix: its own logins, session, store, crypto keys and device id, sealed in that profile (the Matrix store key a sealed item); nothing Matrix-side is shared between profiles; one `scaas-matrix` client per open profile; switching profiles closes the current client first. | CLI-UPR-29 |
 
 Standing rules applied: secrets never leave the SDK and every KDF, AEAD and MAC runs in `ua-rs` (CLI-SDK-01, CLI-SDK-02); fail closed
 with named errors; no decryption oracle (ARCH-POS-13); every RPC consumer takes a list of nodes (ARCH-POS-15); the node is open and
@@ -139,7 +141,7 @@ the app supplies only the keychain items (anchors, the `protected` marker, the u
       <64 hex>.lock              FileStore's lock of that item, kept as FileStore keeps it
       <64 hex>.tmp.<pid>.<n>     a FileStore temporary a crash left; removed at the next open under the instance lock
     g0/                          an unprotected profile's only generation: plain names, part `sdk` only (below)
-    matrix/                      the matrix-rust-sdk store of this profile's Matrix login, under its own key (a sealed item)
+    matrix/                      the matrix-rust-sdk store of this profile's Matrix logins, under its own key (a sealed item); never shared (CLI-UPR-29)
 ```
 
 - **What a generation of a protected profile accepts:** `<64 hex>`, `<64 hex>.lock` and `<64 hex>.tmp.<pid>.<n>` (the last removed at
@@ -329,6 +331,8 @@ shown, without a terminator; integers big-endian at the width shown.
   cache in code today (its one trait is `Net`): its offline cache is a plan task of the app, written through the `SecureStore` face of
   part `pqvault`. The Matrix store keeps its own encryption; its store key is a sealed item, and it is **the one key that leaves the
   arena** (matrix-rust-sdk needs its bytes): it lives in the Matrix client until the profile locks, and the lock closes that client.
+  Each profile has its own Matrix logins, session, store, crypto keys and device id (owner O14, CLI-UPR-29): nothing Matrix-side is
+  shared between profiles, one `scaas-matrix` client runs per open profile, and a switch closes it before the other profile opens.
 - **Zeroisation.** Every key above (`KEK_pass`, `K_plat` and the platform secret, `K_label`, `K_item`, `K_name`, `K_x`), every
   Argon2id output, dummy runs included, the OpaqueString bytes of a passphrase, a typed hidden name, and every plaintext buffer of an
   item, a label, an export or an import live in `Zeroizing` buffers or the arena and are dropped at the end of the call; `DEK_p` and
@@ -613,7 +617,14 @@ payload = be32(len) ‖ label JSON ‖ be32(len) ‖ settings JSON ‖ be16(item
 
 ## 11. SDK surface (CLI-UPR-02, CLI-UPR-22; SPECIFIED; a sketch for the plan)
 
-A module `user_profile` (feature `user-profile`, which pulls `ua-rs`'s existing `argon2` 0.6.0 path; no new crate):
+Two layers (owner O13). **`scaas-profile`**, a crate over `ua-rs` only (`ua-rs`'s existing `argon2` 0.6.0 path), synchronous (its
+calls run on a blocking thread), with its own `Error` whose codes carry the SDK's names: the profile root, the index, the envelope,
+the instance lock, the sealed store with its journal, generations, manifests and anchor, hidden profiles, delete, migration, export
+and import, the storage of settings, and the `ProfileKeychain` interface. **The SDK**, module `user_profile` (feature `user-profile`:
+the SDK's vault and `scaas-profile`): `UserProfile::sdk` (an `Sdk` opened on a profile), `Sdk::close()` at lock and switch, the
+chain-profile meaning of the settings, the store keys handed to app cores (`part_store`, `pqchat_store`, `matrix_store`), and the
+`SecureStore` face with the mapping of the store's codes to `StoreError` and `SdkError`. The sketch is the SDK's; a call that needs
+no `Sdk` has its synchronous twin in `scaas-profile`, which scaas-app's default build calls directly.
 
 ```rust
 pub struct ProfilesConfig {
@@ -622,11 +633,10 @@ pub struct ProfilesConfig {
     pub authenticator: Option<Arc<dyn Authenticator>>,   // platform unlock before any Sdk exists
     pub limits: Limits,                                  // its own heavy limiter for Argon2id
 }
-#[async_trait]
-pub trait ProfileKeychain: Send + Sync {                 // small items only (<= 2,560 bytes), named by the SDK
-    async fn get(&self, name: String) -> Result<Option<Vec<u8>>, StoreError>;
-    async fn put(&self, name: String, bytes: Vec<u8>) -> Result<(), StoreError>;
-    async fn delete(&self, name: String) -> Result<(), StoreError>;
+pub trait ProfileKeychain: Send + Sync {                 // scaas-profile's, synchronous; small items only (<= 2,560 bytes), named by the store
+    fn get(&self, name: &str) -> Result<Option<Vec<u8>>, scaas_profile::Error>;
+    fn put(&self, name: &str, bytes: &[u8]) -> Result<(), scaas_profile::Error>;
+    fn delete(&self, name: &str) -> Result<(), scaas_profile::Error>;
 }
 impl UserProfiles {
     pub async fn new(config: ProfilesConfig) -> Result<Arc<UserProfiles>, SdkError>;  // start (§10), rebuild, migration
@@ -912,13 +922,14 @@ Each negative test has its positive control and its named mutant, which must tur
 | G15 zeroisation | the profile arena is wiped at lock (the arena's existing wipe test extended); heap buffers are `Zeroizing` by type, which a test cannot observe: only the arena part is tested, stated | an open profile's arena holds its keys | a key kept in the arena past lock |
 | vectors | UUIDv7 rows built by `uuid::Builder::from_unix_timestamp_millis` from a timestamp and random bytes; envelope wrap AD, item, HMAC name, manifest, label and export-chunk rows (the pinned bytes of §7.1, §7.2 and §10.1); `name_key` rows (NFC / NFD, a no-break space, case) | clientkeys and `ua-rs` read the same rows | — |
 | end-to-end | two instances on one machine, two profiles, a PqChat 1:1 session over a local Matrix homeserver and a local chain | — | — |
+| Matrix per profile (CLI-UPR-29; wave 2) | two profiles, two Matrix sessions over a local homeserver: two logins, two device ids, two stores under two store keys, each key a sealed item of its own profile; no file, key or session of one is read by the other; a switch closes the first client before the second opens | one profile's session survives its lock and reopen | one `matrix/` store or device id shared by two profiles; the store key kept outside the profile's sealed store; the client left open at a switch |
 
 ## 18. Rule ids
 
 | Id | Rule | Owner |
 |---|---|---|
 | CLI-UPR-01 | "Profile" on screen, `UserProfile` in code; "chain profile" / `ChainProfile` for a chain's data; the rename a later task, `ChainProfileMismatch` included | yes (O1, Q-UP8) |
-| CLI-UPR-02 | in the SDK layer, used by every client | yes (O2) |
+| CLI-UPR-02 | in the SDK layer, used by every client; Change 2026-11-27: the store lives in `scaas-profile`, used by the SDK and by scaas-app's default build | yes (O2, O13) |
 | CLI-UPR-03 | many profiles per machine, each its own directory with its store, chat and vault state and settings | yes (O3) |
 | CLI-UPR-04 | each protected separately, own passphrase and KDF parameters, biometric opt-in; one opens nothing of another | yes (O4) |
 | CLI-UPR-05 | "default" on first run; the passphrase asked at the first secret | yes (O5) |
@@ -945,6 +956,7 @@ Each negative test has its positive control and its named mutant, which must tur
 | CLI-UPR-26 | a settings change that could weaken the profile needs the typed profile passphrase | no |
 | CLI-UPR-27 | import in two calls: a preview of every setting held in memory, then the import of the user's choices, sealed from its first byte | no |
 | CLI-UPR-28 | the anchor is compared as the keystore's: ahead is a crash and the anchor follows; below, or another hash at the same rev, is a rollback; the envelope has a `rev` | no |
+| CLI-UPR-29 | each profile has its own Matrix (logins, session, store, crypto keys, device id) sealed in it; nothing shared; one `scaas-matrix` client per open profile, closed first at a switch | yes (O14) |
 
 ## 19. Review response (Fable, 2026-11-27; the controller's rulings, owner may veto)
 

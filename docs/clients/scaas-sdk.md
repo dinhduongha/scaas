@@ -608,7 +608,13 @@ before the CLI's `--profile` flag.
 
 <a id="CLI-UPR-02"></a>**CLI-UPR-02** — **User profiles live in the SDK layer and every client uses them** (owner 2026-11-27;
 SPECIFIED): scaas-app desktop and mobile, `scaas-tui` and the CLI `scaas` open, lock and switch profiles through one SDK surface
-(spec §11), with no profile logic of their own.
+(spec §11), with no profile logic of their own. **Change (owner 2026-11-27, decisions CLI-UPR-02's Change of that date;
+SPECIFIED):** the store lives in `scaas-profile`, used by the SDK and by scaas-app's default build: a crate of its own over `ua-rs`
+only (the profile root, the index, the envelope, the instance lock, the sealed store with its journal, generations, manifests and
+anchor, hidden profiles, delete, migration, export and import, the storage of settings), with its own error codes named as the
+SDK's. The SDK depends on it and adds what needs the SDK: an `Sdk` opened on a profile, `Sdk::close()` at lock and switch, the
+chain-profile meaning of the settings, the store keys handed to app cores, and the `SecureStore` face with the mapping of the
+store's codes to `StoreError` and `SdkError`.
 
 <a id="CLI-UPR-03"></a>**CLI-UPR-03** — **A machine holds many profiles, each its own data directory** (owner 2026-11-27;
 SPECIFIED): its encrypted store (many seeds, many native secret keys, hidden sets: the keystore of §3 unchanged), its chat and vault
@@ -786,3 +792,9 @@ manifest's revision and hash, and the envelope's revision (a new envelope field)
 and the anchor's, or a write by a client that could not reach this anchor) moves the anchor forward; a value below it, or another
 hash at the same revision, is `ProfileRollback`. Every client writes the anchor file; a client with a keychain also writes the
 keychain item, and both are compared by this rule, so the CLI and the desktop app taking turns raise no event.
+
+<a id="CLI-UPR-29"></a>**CLI-UPR-29** — **Each profile has its own Matrix: its logins, session, store, crypto keys and device id;
+nothing Matrix-side is shared between profiles** (owner 2026-11-27; SPECIFIED). A profile's Matrix login or logins, its session, its
+matrix-rust-sdk store (`matrix/`, spec §5), its crypto keys and its device id belong to that profile and are sealed in it: the Matrix
+store key is a sealed item of the profile's store (spec §7.2). No Matrix state, file or key is shared between two profiles. One
+`scaas-matrix` client runs per open profile; switching profiles closes the current profile's client first (CLI-UPR-07).

@@ -5,25 +5,32 @@
 
 **Status (2026-11-27):** PLANNED; wave 1 runs now, wave 2 later. Spec:
 [`2026-11-27-user-profiles.md`](../specs/2026-11-27-user-profiles.md) (SPECIFIED, a frame; Fable reviewed it in three rounds, every
-finding applied, spec §19). Rules: [clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12, CLI-UPR-01 to CLI-UPR-28, recorded in
-[decisions.md](../../decisions.md) §41. Owner rulings O1 to O12 and Q-UP1 to Q-UP11 (spec §1, §16) are fixed and not reopened here.
+finding applied, spec §19). Rules: [clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12, CLI-UPR-01 to CLI-UPR-29, recorded in
+[decisions.md](../../decisions.md) §41. Owner rulings O1 to O14 and Q-UP1 to Q-UP11 (spec §1, §16) are fixed and not reopened here.
 UNAUDITED: every line this plan builds stays UNAUDITED.
+
+**Owner rulings 2026-11-27 after UP5:** (O13, CLI-UPR-02's Change) the store is its own crate `clients/scaas-profile` over `ua-rs`
+only, used by the SDK and by scaas-app's default build; UP5's core moved there (`74b860488`), and UP6 to UP10 build their store
+parts there, the SDK keeping what needs an `Sdk` (each task's **Files** below). (O14, CLI-UPR-29) each profile has its own Matrix
+logins, session, store, crypto keys and device id, sealed in it; wave 1 builds only the Matrix store key as a sealed item.
 
 **Branch:** `user-profiles` from `dev` at `a739cee1f` (it holds `fix-lock-all-hidden`, review A-8, which the lock of spec §10
 relies on), worktree `.claude/worktrees/user-profiles`. Commits local, staged by explicit path; **no push, no merge**.
 
 **Goal of wave 1:** every new byte format of the spec has a generator in clientkeys and rows that clientkeys and `ua-rs` (and the
-SDK, for the UUIDv7 and `name_key` rows) read; `ua-rs` holds the profile arena and every KDF, AEAD and MAC of the spec; the SDK
-module `user_profile` (feature `user-profile`) builds the profile root, the index cache, the instance lock, the sealed store with
-its manifests, tombstones and anchor, the re-seal, hidden profiles, delete, migration, export and import, and `Sdk::close()`, each
-under its §17 tests with a positive control and a named mutant.
+SDK, for the UUIDv7 and `name_key` rows) read; `ua-rs` holds the profile arena and every KDF, AEAD and MAC of the spec; the crate
+`scaas-profile` builds the profile root, the index cache, the instance lock, the sealed store with its manifests, tombstones and
+anchor, the re-seal, hidden profiles, delete, migration, export and import and the storage of settings; the SDK module
+`user_profile` (feature `user-profile`) builds the `SecureStore` face, the code mapping, `UserProfile::sdk`, `Sdk::close()` and the
+settings' chain-profile meaning; each under its §17 tests with a positive control and a named mutant.
 
 **Wave 2** (after the path-less TreeKEM and TUI branches land on `dev`): the chain-profile rename (spec §15), the CLI's
 `--profile` and `scaas profile …` commands, the pqchat-core and pqvault-core store adapters (the synchronous `PqChatStore` face
 over the wave-1 core, `Items` made `async`), platform unlock (`enable_platform_unlock`, `disable_platform_unlock`, the SDK's use of
 `K_plat`), the SDK's key-lock calls (`ImportKey.key_passphrase`, `unlock_key`, `lock_key`, `lock_key_separately`, `KeyLocked`, the
 skips in `vault/prf.rs` and `vault/seeds.rs`, the backup and device-link counts), TUI T15, scaas-app's pickers, the bindings of
-the `user_profile` surface, and the two-instance PqChat e2e (§17 "end-to-end").
+the `user_profile` surface, the two-instance PqChat e2e (§17 "end-to-end"), and the per-profile Matrix e2e (CLI-UPR-29, §17
+"Matrix per profile": two profiles, two Matrix sessions, no shared state, a switch closing the first client).
 
 ## Global constraints (read before every task)
 
@@ -67,6 +74,7 @@ Abbreviations: `W` = the worktree root; `cap` = `"$W/scripts/capped"`; `C` = `--
 | `ua-profile` | `cd clients/ua-rs && $cap cargo test C --features user-profile,test-hooks,vectors --test profile --test app_core` |
 | `ua-clippy` | `cd clients/ua-rs && $cap cargo clippy C --all-targets -- -D warnings && $cap cargo clippy C --all-targets --features user-profile,test-hooks,vectors -- -D warnings` |
 | `ua-vault` | `cd clients/ua-rs && $cap cargo test C --test wallet_vault --test wallet_custody --test retained_key --test wallet_import_ua` |
+| `prof` | `cd clients/scaas-profile && $cap cargo test C && $cap cargo test C --features test-hooks && $cap cargo clippy C --all-targets -- -D warnings && $cap cargo clippy C --all-targets --features test-hooks -- -D warnings` |
 | `sdk-up` | `cd clients/scaas-sdk && $cap cargo test C UPF --test user_profile && $cap cargo test C UPF --lib user_profile` |
 | `sdk-reg` | `cd clients/scaas-sdk && $cap cargo test C --test vault --test keystore_vectors && $cap cargo test C --lib vault` |
 | `sdk-clippy` | `cd clients/scaas-sdk && $cap cargo clippy C --all-targets UPF -- -D warnings && $cap cargo clippy C --all-targets -- -D warnings` |
@@ -115,8 +123,8 @@ These fill only what spec §7 and §10.1 leave open; everything the spec pins st
 | UP2 | `ua-rs` `ProfileKeys` (profile arena), the Argon2id envelope with bounds, item seal, HMAC names, label seal, export chunk seal, the dummy run, `test-hooks`; reads UP1's rows | UP1 |
 | UP3 | the key-lock vault label `native-import-locked:` in `ua-rs` and clientkeys: accepted, skipped by seed-wide loops, refused with a `prf` envelope, out of the backup payload; vector row | UP0 |
 | UP4 | SDK foundations: `StoreError` and `SdkError` codes, `Event` variants, `vault::io` mapping, `rev_of`'s sealed bound, features `user-profile` / `test-hooks`, `check_test_features.py`, the bindings regenerated | UP2 |
-| UP5 | SDK sealed store core: generations, manifests, tombstones, anchor, store write lock with `ProfileBusy`, the `SecureStore` face, the unprotected `g0` | UP4 |
-| UP6 | SDK profile root, index cache and rebuild, UUIDv7, `name_key`, envelope, instance lock, start, create, open, list, lock, `UserProfile::sdk()`, `Sdk::close()` | UP5 |
+| UP5 | sealed store core (in `scaas-profile` since O13): generations, manifests, tombstones, anchor, store write lock with `ProfileBusy`, the `SecureStore` face, the unprotected `g0` | UP4 |
+| UP6 | profile root, index cache and rebuild, UUIDv7, `name_key`, envelope, instance lock, start, create, open, list, lock, `UserProfile::sdk()`, `Sdk::close()` | UP5 |
 | UP7 | re-seal: `set_passphrase`, `change_passphrase`, KDF raise; journal and generation rules; `ProfilePassphraseRequired` on an unprotected profile | UP6 |
 | UP8 | hidden profiles: `create_hidden`, `open_hidden` (counted search), `hide`, `show`, `rename`, duplicates, limits | UP7 |
 | UP9 | delete by tombstone, `delete_locked`, `rebuild_index`, migration of the CLI's legacy store into "default" | UP7 |
@@ -150,8 +158,9 @@ These fill only what spec §7 and §10.1 leave open; everything the spec pins st
 | G12 CLI, paths | UP6 (root modes, symlinked root, foreign directory), UP9 (migration source paths) | the CLI's flags and descriptors; the Windows row |
 | key lock (§7.4) | UP3 (the label, the refusals, loops, backup payload) | the SDK calls and their tests |
 | G15 zeroisation | UP2 | — |
-| vectors | UP1, UP2, UP6 (UUIDv7 and `name_key` read by the SDK) | — |
+| vectors | UP1, UP2, UP6 (UUIDv7 and `name_key` read by `scaas-profile`) | — |
 | end-to-end | — | two instances, PqChat 1:1 |
+| Matrix per profile (CLI-UPR-29) | UP6 (the Matrix store key, a sealed item of the profile; two profiles, two keys) | two profiles, two Matrix sessions, no shared state; a switch closes the client |
 
 ## UP0 — Baseline
 
@@ -275,8 +284,9 @@ Calls (names may follow the code's style; the bytes are UP1's):
 
 ## UP5 — The sealed store core
 
-**Files:** `clients/scaas-sdk/src/user_profile/{mod.rs,store.rs,anchor.rs}` (new), `clients/scaas-sdk/tests/user_profile.rs`
-(new, `required-features = ["user-profile", "test-hooks"]`).
+**Files:** `clients/scaas-profile/src/{lib.rs,store.rs,anchor.rs,file.rs}`, `clients/scaas-profile/tests/store.rs` (the core's
+tests; moved from the SDK by O13, `74b860488`); in the SDK `src/user_profile/mod.rs` (the `SecureStore` face, the code mapping) and
+`tests/user_profile.rs` (`required-features = ["user-profile", "test-hooks"]`: the face, the codes).
 
 One synchronous core per open profile (file I/O and AEAD blocking): the generation directory `g<N>/`, the parts' manifests, the
 store write lock (`std::sync::Mutex` or a fair lock; a writer waits at most 120 s, then `ProfileBusy`; `test-hooks` shortens the
@@ -299,12 +309,15 @@ refused (`ProfileFormat`). Bounds: 65,536 entries per part (`ProfilePartFull`), 
 - [ ] Mutants (`up5`): the HMAC name replaced by the item name; the manifest's rev not compared; no tombstone at delete; the
       manifest written without `put_if`; "differs from the anchor" as the rule; the `.lock` / `.tmp.*` pattern refused; no clean-up
       at open; a waiting writer answered `StoreConflict`.
-- [ ] Gates: `sdk-up`, `sdk-reg`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP5: sealed store core`.
+- [ ] Gates: `prof`, `sdk-up`, `sdk-reg`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP5: sealed store core`.
 
 ## UP6 — Root, index, envelope, open and lock
 
-**Files:** `clients/scaas-sdk/src/user_profile/{root.rs,index.rs,envelope.rs,names.rs,profile.rs}` (new), `src/lib.rs`
-(`Sdk::close()`, the closed flag), `tests/user_profile.rs`.
+**Files:** `clients/scaas-profile/src/{root.rs,index.rs,envelope.rs,names.rs,profile.rs}` (new: root, index, envelope, instance
+lock, start, create, open, list, lock, the keychain marker, the KDF bounds and the per-device maximum, the Matrix store key item),
+`clients/scaas-profile/tests/`; in the SDK `src/user_profile/mod.rs` (`UserProfiles` over the crate, `UserProfile::sdk`, the heavy
+limiter around the crate's KDF calls, `ProfileKdfOutOfMemory` from `scaas-ua`'s `KdfOutOfMemory`), `src/lib.rs` (`Sdk::close()`,
+the closed flag), `tests/user_profile.rs`.
 
 `ProfilesConfig`, `ProfileKeychain`, `UserProfiles::{new, list, create, open}`, `UserProfile::{sdk, lock}`, `UserProfileInfo` (its
 `Debug` redacts the id), `ProfileUnlock::Passphrase` (platform in wave 2), `KdfParams` with the per-device maximum (desktop 1 GiB;
@@ -333,11 +346,12 @@ rows.
 - [ ] Mutants (`up6`): the instance lock dropped; start taking every profile's lock; the state check removed; a missing index treated
       as a first run; a rebuild listing only unprotected profiles; `close` not called at lock; the root's mode not tightened; a
       symlinked root accepted; the per-device maximum not checked; a KDF under the root lock.
-- [ ] Gates: `sdk-up`, `sdk-reg`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP6: profile root, index, open and lock`.
+- [ ] Gates: `prof`, `sdk-up`, `sdk-reg`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP6: profile root, index, open and lock`.
 
 ## UP7 — Re-seal
 
-**Files:** `clients/scaas-sdk/src/user_profile/{reseal.rs,profile.rs}`, `tests/user_profile.rs`; the vault's secret-creating calls
+**Files:** `clients/scaas-profile/src/{reseal.rs,profile.rs}`, `clients/scaas-profile/tests/`; in the SDK `src/user_profile/mod.rs`,
+`tests/user_profile.rs`, and the vault's secret-creating calls
 (`generate`, `import_words`, `derive_child`, `derive_from_signature`, `derive_from_key`, `import_key`, `create_passkey_key`,
 `create_se_key`, the app core's first key) refused `ProfilePassphraseRequired` before any work on an unprotected profile's `Sdk`.
 
@@ -358,11 +372,12 @@ higher one with no journal `ProfileDamaged`, never removed); tombstones dropped 
 - [ ] Mutants (`up7`): the journal ignored at open; the envelope renamed before the generation is complete; removing every
       generation other than `gen`; removing a lower generation before the wrap opens; `DEK_p` kept at a passphrase change;
       tombstones carried into the new generation; the store write lock not held during the re-seal.
-- [ ] Gates: `sdk-up`, `sdk-reg`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP7: re-seal`.
+- [ ] Gates: `prof`, `sdk-up`, `sdk-reg`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP7: re-seal`.
 
 ## UP8 — Hidden profiles
 
-**Files:** `clients/scaas-sdk/src/user_profile/{hidden.rs,profile.rs,index.rs}`, `tests/user_profile.rs`.
+**Files:** `clients/scaas-profile/src/{hidden.rs,profile.rs,index.rs}`, `clients/scaas-profile/tests/`; the SDK's
+`src/user_profile/mod.rs` and `tests/user_profile.rs` for the async calls over them.
 
 `create_hidden`, `open_hidden` (spec §8 steps 1–3: candidates from `p/` only, ≤ 32 else `ProfileSearchTooLarge`, `max(candidates,
 4)` runs, each at its own parameters, damaged candidates one default run, dummy runs to four, no early stop, the match's lock taken
@@ -379,11 +394,13 @@ hidden path, at most 16 hidden (`ProfileHiddenLimit`), `last` never written by a
 - [ ] Mutants (`up8`): an early stop at the match; a corrupt candidate ending the search; candidates read from the index; `hide()`
       without the duplicate check; `last` written on a hidden open; `name` in the wraps' AD (the hint trusted over the label); the
       lock taken before the search reads.
-- [ ] Gates: `sdk-up`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP8: hidden profiles`.
+- [ ] Gates: `prof`, `sdk-up`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP8: hidden profiles`.
 
 ## UP9 — Delete, rebuild, migration
 
-**Files:** `clients/scaas-sdk/src/user_profile/{lifecycle.rs,migrate.rs,root.rs}`, `tests/user_profile.rs`.
+**Files:** `clients/scaas-profile/src/{lifecycle.rs,migrate.rs,root.rs}`, `clients/scaas-profile/tests/`; the SDK's
+`src/user_profile/mod.rs` (the vault calls refused on a migrated "default", the `backup: pending` check of `delete`) and
+`tests/user_profile.rs`.
 
 `delete_preview`, `delete` (the name typed again as `ConfirmDeleteProfile`; `ConfirmDeleteUnbacked` with a `backup: pending` seed;
 tombstone rename under the root lock, the row dropped, the keychain items removed, the tombstone removed), `delete_locked` (the
@@ -399,11 +416,13 @@ profiles reported (`Event::ProfileDamaged`), never migrated.
       `g0` only after the commit; the migrated keystore opens with its seed afterwards (the positive control).
 - [ ] Mutants (`up9`): the clean-up removing a directory without an envelope; no root lock at migration; migration ignoring
       `migration: pending` on resume.
-- [ ] Gates: `sdk-up`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP9: delete and migration`.
+- [ ] Gates: `prof`, `sdk-up`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP9: delete and migration`.
 
 ## UP10 — Settings, export, import
 
-**Files:** `clients/scaas-sdk/src/user_profile/{settings.rs,export.rs}`, `tests/user_profile.rs`.
+**Files:** `clients/scaas-profile/src/{settings.rs,export.rs}` (the `settings` item's storage, export, `import_preview`, `import`),
+`clients/scaas-profile/tests/`; the SDK's `src/user_profile/settings.rs` (`ProfileSettings` per chain-profile key, the §7.7 rule)
+and `tests/user_profile.rs`.
 
 `ProfileSettings` (per chain-profile key: named endpoints with `first` marks, the RPC policy, lowered caps; the default chain
 profile; the idle lock; the clipboard opt-in; credential references): the item `settings` of part `sdk`. `set_settings(s,
@@ -426,11 +445,11 @@ its first byte under its `build.lock`, committed under the root lock by one rena
 - [ ] Mutants (`up10`): the passphrase check of `set_settings` removed; parse before verify; settings imported whole; a filter that
       forgets credential references; start removing a temporary directory whose `build.lock` is held; a preview written to disk in
       plain form.
-- [ ] Gates: `sdk-up`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP10: settings, export, import`.
+- [ ] Gates: `prof`, `sdk-up`, `sdk-clippy`, `fmt`, `docs`. Commit `user-profiles UP10: settings, export, import`.
 
 ## UP11 — Wave-1 closing gates
 
-- [ ] On the final tree, once: `ck`, `ck-gen`, `ua-profile`, `ua-clippy`, `ua-vault`, `sdk-up`, `sdk-reg`, `sdk-clippy`, `features`,
+- [ ] On the final tree, once: `ck`, `ck-gen`, `ua-profile`, `ua-clippy`, `ua-vault`, `prof`, `sdk-up`, `sdk-reg`, `sdk-clippy`, `features`,
       `bind-gen`, `fmt` (rust js toml), `docs`, and every task's mutants `check`. Rows into the summary; commit it.
 
 ## UP12 — Docs

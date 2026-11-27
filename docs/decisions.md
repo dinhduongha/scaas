@@ -12661,7 +12661,7 @@ Change (controller calls, 2026-11-23, T26 area A part b (custody), branch `sdk-t
 
 Change (owner 2026-11-23, "agreed, add it", relayed by the coordinator; owner: yes; status: BUILT on branch `sdk-t26-b`, UNAUDITED; numbered (161) on its branch, renumbered (169) at the merge `t26-merge`, where area A part b holds (160) to (167); B-21 alike, (160) to (168)): (169) **B-20, wasm32 reads a body chunk by chunk to its cap, as natively (CLI-RPC-07).** `scaas-rpc` turns on reqwest's `stream` feature for the wasm32 target only; its `bytes_stream` needs the new dependency **`wasm-streams` 0.4.2** (licence `MIT OR Apache-2.0`, already allowed by every `deny.toml`), pinned exactly (`=0.4.2`) in `clients/scaas-rpc/Cargo.toml` and added to every lockfile that resolves `scaas-rpc` (no other version moved). Why: the fetch backend without streams reads the whole body before it can be bounded, so an endpoint announcing no length could exhaust a page's memory. One bounded read (`http::read_capped`) now serves both targets and both readers (the capped answer and the hashed object): it stops at the first chunk that would pass the cap, before the rest is read, with the same `AnswerTooLarge` as before.
 
-**User profiles (CLI-UPR-\*).** The rules are in [clients/scaas-sdk.md](clients/scaas-sdk.md#12-user-profiles) §12; the design is the [user-profiles spec](superpowers/specs/2026-11-27-user-profiles.md), a frame; the owner ruled every open point of its §16 on 2026-11-27. Entries 01 to 09, 17 and 23 carry the owner's rulings of 2026-11-27; 10 to 16, 18 to 22 and 24 to 28 are the controller's means (owner may override), with the owner's §16 rulings and the controller's rulings on the three rounds of the Fable review of 2026-11-27 recorded as Changes on the entries they touch.
+**User profiles (CLI-UPR-\*).** The rules are in [clients/scaas-sdk.md](clients/scaas-sdk.md#12-user-profiles) §12; the design is the [user-profiles spec](superpowers/specs/2026-11-27-user-profiles.md), a frame; the owner ruled every open point of its §16 on 2026-11-27. Entries 01 to 09, 17, 23 and 29 carry the owner's rulings of 2026-11-27; 10 to 16, 18 to 22 and 24 to 28 are the controller's means (owner may override), with the owner's §16 rulings and the controller's rulings on the three rounds of the Fable review of 2026-11-27 recorded as Changes on the entries they touch.
 
 ### CLI-UPR-01 — "Profile" on screen and `UserProfile` in code; a chain's pinned data is a "chain profile"
 - old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-01 · superseded-by: —
@@ -12682,6 +12682,8 @@ Change (owner 2026-11-27, spec §16 Q-UP8, relayed by the coordinator; owner: ye
 **Why.** The same protection and lock rules in every client.
 **Cost if wrong.** A client with its own profile code that seals or locks differently.
 **Source.** Owner ruling 2026-11-27 (chat): profiles are in the SDK layer, used by every client; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O2, §11.
+
+Change (owner 2026-11-27, relayed by the controller; owner: yes; status: SPECIFIED; the store core of plan UP5 moved at `74b860488`, UNAUDITED): old, the store was a module of the SDK (`user_profile`), so a build without the SDK could hold no profile; new, the store lives in `scaas-profile`, used by the SDK and by scaas-app's default build: a crate over `ua-rs` only, holding the profile root, the index, the envelope, the instance lock, the sealed store with its journal, generations, manifests and anchor, hidden profiles, delete, migration, export and import and the storage of settings, with its own error codes named as the SDK's; the SDK depends on it and adds an `Sdk` opened on a profile, `Sdk::close()` at lock and switch, the chain-profile meaning of the settings, the store keys handed to app cores, and the `SecureStore` face with the mapping of the store's codes to `StoreError` and `SdkError`. Why: the app's default build has no SDK and still holds a profile (its Matrix session key, its settings) with `scaas-matrix`. Source: owner ruling 2026-11-27 (chat, through the controller): the user-profile store becomes its own crate, which the SDK depends on; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O13, §11.
 
 ### CLI-UPR-03 — A machine holds many profiles, each its own data directory
 - old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-03 · superseded-by: —
@@ -12978,6 +12980,15 @@ Change (controller call 2026-11-27, the round-3 Fable review of `9f2ee89b7`, R3-
 **Why.** The keystore's own anchor uses this rule (`vault/mod.rs` `rolled_back`); "differs from the anchor" raised a rollback at every kill between a write and its anchor, and whenever a client without a keychain and one with it took turns.
 **Cost if wrong.** False rollbacks in normal use, which teach the user to accept a real one.
 **Source.** Controller call 2026-11-27 on the round-3 Fable review of the user-profiles spec at `9f2ee89b7` (R3-A-1, B N-1); SDK spec §6.3; [spec](superpowers/specs/2026-11-27-user-profiles.md) §7.2, §19.
+
+### CLI-UPR-29 — Each profile has its own Matrix: its logins, session, store, crypto keys and device id; nothing Matrix-side is shared between profiles
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-29 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-29).) A profile's Matrix logins, session, store, crypto keys and device id are its own and sealed in it (the Matrix store key a sealed item); no Matrix state is shared between profiles; one `scaas-matrix` client per open profile; a switch closes the current client first.
+**Status.** SPECIFIED; wave 1 builds the store item only, the two-session test is wave 2. UNAUDITED.
+**Why.** Profiles are separate identities (CLI-UPR-03, CLI-UPR-04); a shared Matrix device or store would tie them together on the homeserver and on disk.
+**Cost if wrong.** One profile's chats, keys or device visible to another; a switch that leaves the first profile's client signed in.
+**Source.** Owner ruling 2026-11-27 (chat, through the controller): each profile has its own Matrix logins, session, store, crypto keys and device id, sealed in that profile; nothing Matrix-side is shared; one `scaas-matrix` client per open profile, closed first at a switch; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O14, §5, §7.2, §17.
 
 ## 42. Clients — terminal UI (`scaas-tui`)
 
