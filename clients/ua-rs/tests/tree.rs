@@ -3348,4 +3348,44 @@ fn tree_resume_keeps_the_leaves_under_review() {
     );
     // fable-F-2 = C-4: `tree_resume` adopts, and the consumed replay keeps no head's `next`
     assert!(early.head.is_none(), "the old head's next dropped by adopt");
+    // the compromise warnings as well (the first P9 mutant run: dropping them survived, `pathless-faults` has none for A
+    // before epoch 8): B's own path-less record of `pathless-own` it cannot reproduce warns at epoch 3 and puts leaf 4
+    // under review; a resume that finds no new epoch keeps both
+    let sc = v["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "pathless-own")
+        .unwrap();
+    let mut own = scenario(&keys, &v, &world, sc, &mut differs, None);
+    let (d, kem) = &world.devices["B"];
+    let dev = TreeDevice {
+        ua: a32(&d["ua"]),
+        key_id: u(&d["keyId"]),
+        kem,
+    };
+    let mut first = keys
+        .tree_replay(SC, &mut own, &dev, None, 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (
+            first.warnings.iter().map(|w| w.epoch).collect::<Vec<_>>(),
+            first.review.clone()
+        ),
+        (vec![3], vec![4]),
+        "control: the warning and its leaf"
+    );
+    let again = keys
+        .tree_resume(SC, &mut own, &dev, &mut first, 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (
+            again.warnings.iter().map(|w| w.epoch).collect::<Vec<_>>(),
+            again.review
+        ),
+        (vec![3], vec![4]),
+        "a resume keeps the warning and its leaf"
+    );
 }
