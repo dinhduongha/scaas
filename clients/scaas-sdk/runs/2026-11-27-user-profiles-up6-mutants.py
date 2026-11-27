@@ -64,8 +64,7 @@ MUTANTS = [
      PROF + "g8_start_during_held_kdf"),
     # part b: without the close, the old `Sdk`'s chain call still reaches the chain after lock
     ("close not called at lock",
-     [(U, "            out = s.vault().lock_all().await;\n            s.close().await;\n",
-       "            out = s.vault().lock_all().await;\n")],
+     [(U, "            out = s.close().await;\n", "            let _ = &out;\n")],
      SDK + "g11_no_request_after_lock"),
     # part b: without the flag, the closed `Sdk`'s chain call is `ChainUnknown` (its chains dropped), not `ProfileLocked`: only
     # the exact code tells
