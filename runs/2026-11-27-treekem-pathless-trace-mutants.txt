@@ -1,0 +1,5 @@
+# trace mutants at commit aef1b9647 (name | outcome | test)
+a read more on a bad tag at an anchored device (C45) | killed | CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios the_pathless_faults_read_as_their_control
+a read more on a sealedInfo not taken | killed | CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios the_pathless_faults_read_as_their_control
+a read more on any epoch not followed | killed | CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios the_pathless_faults_read_as_their_control
+3 mutants, 3 killed, 0 survived (0 killed elsewhere), 0 not loaded

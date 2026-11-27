@@ -454,3 +454,179 @@ fn kem_of(l: &Local, me: &Me) -> String {
     let pk = format!("0x01{}{}", &parts[1][2..], &parts[2][2..]);
     cast(&["keccak", &pk])
 }
+
+/// A device of `app` over the chain with its own store.
+fn device_on(l: &Local, app: &Arc<scaas_sdk::app_core::AppCore>) -> Arc<PqChat> {
+    PqChat::with_net(
+        app.clone(),
+        Arc::new(pqchat_core::net::SdkNet {
+            sdk: l.sdk.clone(),
+            app: app.clone(),
+        }),
+        Arc::new(pqchat_core::MemoryStore::new()),
+        l.conf(),
+    )
+}
+
+/// A tree session of `alice` with `bob` and `bound` (`None`: the client default 20), created and landed; its ref and
+/// alice's state at epoch 0.
+async fn small_session(
+    l: &Local,
+    pq: &Arc<PqChat>,
+    alice: &Me,
+    bob: &Me,
+    nonce: u64,
+    bound: Option<u32>,
+) -> (SessionRef, TreeState) {
+    let created = pq
+        .create_tree(CreateTree {
+            me: alice.clone(),
+            chain: CHAIN.into(),
+            home: l.home.clone(),
+            nonce,
+            admins: vec![],
+            members: vec![bob.ua.clone()],
+            info: info(l),
+            payer: l.payer.clone(),
+            path_refresh_bound: bound,
+        })
+        .await
+        .unwrap();
+    land(l, created.call.clone()).await;
+    let s = sref(l, &created.session_id);
+    assert!(
+        pq.tree_resume_create(&s, &l.payer).await.unwrap().is_none(),
+        "created"
+    );
+    println!(
+        "[tree] session {} created (bound {bound:?})",
+        created.session_id
+    );
+    let st = pq.tree_state(&s, alice, 0, None).await.unwrap();
+    (s, st)
+}
+
+/// Alice's Adds of `who` (from position `used`) on `st`, `refresh` for "add and refresh": built, signed, planned and
+/// landed; the record, the plan's entries and the state after.
+async fn add_all(
+    l: &Local,
+    pq: &Arc<PqChat>,
+    s: &SessionRef,
+    st: &TreeState,
+    alice: &Me,
+    who: &[&Me],
+    refresh: bool,
+) -> (Value, Vec<&'static str>, TreeState) {
+    let (leaf, _) = leaf_of(st, alice);
+    // `used`: one past the last live leaf (the roster has the tree's width, its blank tail included)
+    let used = st
+        .replay
+        .rosters
+        .get(&st.head)
+        .unwrap()
+        .iter()
+        .rposition(Option::is_some)
+        .map_or(0, |i| i + 1) as u32;
+    let adds = who
+        .iter()
+        .enumerate()
+        .map(|(i, me)| {
+            json!({"leaf": used + i as u32, "ua": me.ua.to_ascii_lowercase(), "keyId": 0,
+                "via": format!("0x{}", "00".repeat(32)), "kemHash": kem_of(l, me)})
+        })
+        .collect();
+    let c = TreeCommit {
+        me: alice.clone(),
+        key_id: 0,
+        removes: vec![],
+        adds,
+        admins: vec![alice.ua.to_ascii_lowercase()],
+        info: None,
+        info_reviewed: false,
+        payer: l.payer.clone(),
+        refresh,
+    };
+    let TreeBuilt {
+        signed,
+        plan,
+        adds_left,
+        ..
+    } = pq.tree_commit(s, st, c, leaf).await.unwrap();
+    println!(
+        "[tree] built {} Adds (refresh {refresh}): pathless {}",
+        who.len(),
+        signed.record["pathless"]
+    );
+    assert!(adds_left.is_empty(), "one commit");
+    let entries = plan.txs.iter().map(|t| t.entry).collect();
+    land_commit(l, pq, s, &signed, &plan).await;
+    let after = pq.tree_state(s, alice, 0, None).await.unwrap();
+    (signed.record, entries, after)
+}
+
+/// The path-less delta P8b (§13, local only): the bound at N + 1 on a session with `pathRefreshBound` 1. The first Add goes
+/// path-less (`sincePath` 1); the second would pass the bound, so the client builds the path form, which lands and resets
+/// the counter; the last joiner, on its own device, follows the head.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate pqc-chain)"]
+async fn chain_tree_bound() {
+    let (l, m) = local(&[(0, true), (1, true), (2, true), (3, true)]).await;
+    let app = pqchat_core::scope(&l.sdk).unwrap();
+    let pq = device_on(&l, &app);
+    let (s, a0) = small_session(&l, &pq, &m[0], &m[1], 7, Some(1)).await;
+    let (r1, _, a1) = add_all(&l, &pq, &s, &a0, &m[0], &[&m[2]], false).await;
+    assert_eq!(
+        (r1["pathless"].clone(), a1.replay.since_path),
+        (json!(true), 1)
+    );
+    assert_eq!(a1.replay.path_bound, 1);
+    let (r2, e2, a2) = add_all(&l, &pq, &s, &a1, &m[0], &[&m[3]], false).await;
+    assert_eq!(r2["pathless"], json!(false), "at N + 1 the path form");
+    assert_eq!(
+        a2.replay.since_path, 0,
+        "the path commit resets the counter"
+    );
+    println!("[tree] bound 1: the second Add as a path commit, plan {e2:?}, sincePath 0");
+    let d = device_on(&l, &app)
+        .tree_state(&s, &m[3], 0, None)
+        .await
+        .unwrap();
+    assert!(
+        followed(&d).contains(&a2.head),
+        "the joiner follows the head: {:?}",
+        followed(&d)
+    );
+}
+
+/// The path-less delta P8 (§9's rows, measured): on a session of alice and bob, a path-less Add of 1 key, one of 10, then
+/// "add and refresh" of 1 (a path commit). With `PQCHAT_GAS_ROWS` every landed transaction prints its receipt's gas (`[gas]`
+/// lines, the runner's rows); on the node of `PQCHAT_CHAIN_RPC` (the local copy of the SCaaS testnet's chain) the node's own
+/// count, 2^24 enforced.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate pqc-chain)"]
+async fn chain_tree_pathless_rows() {
+    let accounts: Vec<(u32, bool)> = (0..14).map(|a| (a, true)).collect();
+    let (l, m) = local(&accounts).await;
+    let app = pqchat_core::scope(&l.sdk).unwrap();
+    let pq = device_on(&l, &app);
+    let (s, a0) = small_session(&l, &pq, &m[0], &m[1], 9, None).await;
+    println!("[rows] path-less, 1 Add");
+    let (r, e, a) = add_all(&l, &pq, &s, &a0, &m[0], &[&m[2]], false).await;
+    assert_eq!(r["pathless"], json!(true));
+    println!("[rows] plan {e:?}");
+    println!("[rows] path-less, 10 Adds");
+    let ten: Vec<&Me> = m[3..13].iter().collect();
+    let (r, e, a) = add_all(&l, &pq, &s, &a, &m[0], &ten, false).await;
+    assert_eq!(
+        (r["pathless"].clone(), a.replay.since_path),
+        (json!(true), 11)
+    );
+    println!("[rows] plan {e:?}");
+    println!("[rows] add and refresh, 1 Add (path commit, 13 keys)");
+    let (r, e, a) = add_all(&l, &pq, &s, &a, &m[0], &[&m[13]], true).await;
+    assert_eq!(
+        (r["pathless"].clone(), a.replay.since_path),
+        (json!(false), 0)
+    );
+    println!("[rows] plan {e:?}");
+}

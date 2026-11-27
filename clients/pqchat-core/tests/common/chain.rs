@@ -171,9 +171,11 @@ fn sec(s: &str) -> Arc<SecretBytes> {
     Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(s.as_bytes().to_vec())).unwrap())
 }
 
-/// A deployed local chain with the SDK over it.
+/// A deployed local chain with the SDK over it: anvil, or (the path-less delta P8, P8b) a node the runner started and
+/// deployed to, named by `PQCHAT_CHAIN_RPC` with its book `PQCHAT_CHAIN_BOOK` and a funded key `PQCHAT_CHAIN_FUNDER`
+/// (runs/2026-11-27-treekem-pathless-nethermind.sh: the local copy of the SCaaS testnet's chain, chain id 31337).
 pub struct Local {
-    pub anvil: Anvil,
+    pub anvil: Option<Anvil>,
     pub rpc: String,
     pub sdk: Arc<Sdk>,
     pub seed: String,
@@ -373,6 +375,9 @@ pub async fn local_with_extra(
     instances: usize,
     extra: Extra<'_>,
 ) -> (Local, Vec<Me>, Vec<String>) {
+    if let Ok(rpc) = std::env::var("PQCHAT_CHAIN_RPC") {
+        return on_node(rpc, accounts, instances, extra).await;
+    }
     let port = std::net::TcpListener::bind("127.0.0.1:0")
         .and_then(|l| l.local_addr())
         .expect("a free port")
@@ -456,7 +461,7 @@ pub async fn local_with_extra(
     let payer = payer_of(&seed);
     (
         Local {
-            anvil,
+            anvil: Some(anvil),
             rpc,
             sdk,
             seed,
@@ -490,10 +495,130 @@ pub async fn land(l: &Local, call: scaas_sdk::app_core::AppCall) -> u64 {
         gas <= TX_CAP,
         "the harness sends nothing above 2^24 gas ({gas})"
     );
+    let (selector, from) = (
+        call.quote.data.get(..10).unwrap_or("0x").to_string(),
+        call.quote.from.to_ascii_lowercase(),
+    );
     let op = l.sdk.wallet().submit_native_send(call.quote).await.unwrap();
     let s = follow(&l.sdk, op).await;
     assert!(matches!(s, OpState::Landed { .. }), "{s:?}");
+    // the path-less delta P8: every landed transaction's gas as the node counts it (its receipt), its entry by selector; a
+    // gas count, no timing. `Landed` names the block; the transaction is the sender's one with that selector in it
+    if let (true, OpState::Landed { block, .. }) = (std::env::var("PQCHAT_GAS_ROWS").is_ok(), &s) {
+        let b: serde_json::Value = serde_json::from_str(&cast(&[
+            "rpc",
+            "eth_getBlockByNumber",
+            &format!("{block:#x}"),
+            "true",
+            "--rpc-url",
+            &l.rpc,
+        ]))
+        .unwrap();
+        let str_of = |v: &serde_json::Value, k: &str| {
+            v.get(k)
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("-")
+                .to_ascii_lowercase()
+        };
+        for t in b["transactions"].as_array().into_iter().flatten() {
+            if str_of(t, "from") != from || !str_of(t, "input").starts_with(&selector) {
+                continue;
+            }
+            let r: serde_json::Value = serde_json::from_str(&cast(&[
+                "rpc",
+                "eth_getTransactionReceipt",
+                &str_of(t, "hash"),
+                "--rpc-url",
+                &l.rpc,
+            ]))
+            .unwrap();
+            println!(
+                "[gas] {selector} gasUsed {} regular {} state {} gasLimit {gas}",
+                str_of(&r, "gasUsed"),
+                str_of(&r, "gasUsedRegular"),
+                str_of(&r, "gasUsedState")
+            );
+        }
+    }
     gas
+}
+
+/// [`local_with_extra`] on the node of `PQCHAT_CHAIN_RPC`: the contracts already deployed by the runner (its book), the
+/// deployer and the seed's EVM key 0 funded by `PQCHAT_CHAIN_FUNDER`; no state reload (the node enforces 2^24 itself, the
+/// positive control says so).
+async fn on_node(
+    rpc: String,
+    accounts: &[(u32, bool, u16)],
+    instances: usize,
+    extra: Extra<'_>,
+) -> (Local, Vec<Me>, Vec<String>) {
+    let book = std::env::var("PQCHAT_CHAIN_BOOK").expect("PQCHAT_CHAIN_BOOK with PQCHAT_CHAIN_RPC");
+    let dep: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&book).unwrap()).unwrap();
+    let addr = |k: &str| {
+        dep[k]
+            .as_str()
+            .unwrap_or_else(|| panic!("the book has no {k}"))
+            .to_ascii_lowercase()
+    };
+    let (registry, factory, home) = (
+        addr("ua_registry"),
+        addr("token_factory"),
+        addr("pqchat_instance"),
+    );
+    let uid = cast(&["block", "0", "--field", "hash", "--rpc-url", &rpc]);
+    let funder =
+        std::env::var("PQCHAT_CHAIN_FUNDER").expect("PQCHAT_CHAIN_FUNDER with PQCHAT_CHAIN_RPC");
+    let holder = scaas_ua::wallet::Wallet::from_mnemonic(REPO, "")
+        .unwrap()
+        .native_key(scaas_ua::wallet::Network::Evm, 0, None)
+        .unwrap()
+        .address()
+        .unwrap();
+    for to in [holder.as_str(), DEPLOYER_ADDRESS] {
+        cast(&[
+            "send",
+            "--rpc-url",
+            &rpc,
+            "--private-key",
+            &funder,
+            "--value",
+            "100ether",
+            to,
+        ]);
+    }
+    println!("[chain] node {rpc}: registry {registry}, factory {factory}, PqChat {home}");
+    positive_control(&rpc);
+    let more = create_instances(&rpc, &factory, instances);
+    let (sdk, seed) = sdk_at(
+        &rpc,
+        &uid,
+        &registry,
+        &factory,
+        extra(&rpc, &uid, &registry, &factory),
+    )
+    .await;
+    let mut mes = vec![];
+    for (account, kem, kind) in accounts {
+        mes.push(register_kind(&sdk, &seed, *account, *kem, *kind).await);
+    }
+    println!("[chain] {} UAs registered", mes.len());
+    let payer = payer_of(&seed);
+    (
+        Local {
+            anvil: None,
+            rpc,
+            sdk,
+            seed,
+            registry,
+            factory,
+            home,
+            uid,
+            payer,
+        },
+        mes,
+        more,
+    )
 }
 
 /// The seed's UA of `account` registered on `sdk`'s chain (with a KEM key, version 0, or without), self-relayed: its `Me`.
