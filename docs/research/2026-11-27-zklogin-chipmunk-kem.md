@@ -184,7 +184,7 @@ Kyber code) and its newer `ML_KEM` type are not interchangeable *(inference: FIP
 | Naming the combiner | **now, docs only** | the CFRG concrete hybrid KEMs draft (`-04`, 2026-07-06) defines MLKEM768-X25519 (= X-Wing), MLKEM768-P256 and MLKEM1024-P384, not ML-KEM-1024 + X25519 [K4]. Scheme 1 is X-Wing's combiner over ML-KEM-1024. A crypto reviewer should confirm in the KEM spec that X-Wing's argument (it hashes `ss_M` without the ML-KEM ciphertext, relying on ML-KEM's ciphertext binding) carries over to ML-KEM-1024 *(inference: the property is ML-KEM's, not its level's)* |
 | ML-KEM-768 records | no | scheme 1 already uses the higher level; 768 stays for TLS, where the codepoint fixes it |
 | Classic McEliece, FrodoKEM | no | conservative, but McEliece public keys are hundreds of KB and FrodoKEM's are tens of KB; too large for a 1,601-B-class on-chain key record. HQC covers the second-family goal |
-| A KEM key for classical-only UAs | open question for the owner, not a gap in the KEM | a passkey-only or ed25519-only UA has no KEM key today (KEM holders are PQ kinds); a user reaches PqChat by a PQ holder |
+| A KEM key for classical-only UAs | closed: no (owner ruling 2026-11-27) | the question this note raised; the owner ruled that PqChat and PqVault use PQ UA kinds only and that a classical-only UA gets no KEM key ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32), its Change of 2026-11-27 in decisions.md) |
 
 ### 3.3 NewHope: why not
 
@@ -222,8 +222,9 @@ What SCaaS has that they lack:
 
 ## 5. What this note does not decide
 
-No owner ruling is proposed as made. The three recommendations, the combiner review item and the KEM-for-classical-UAs question
-are for the owner.
+No owner ruling is proposed as made. The three recommendations and the combiner review item are for the owner. The
+KEM-for-classical-UAs question this note raised is closed by the owner's ruling of 2026-11-27 (PQ UA kinds only for PqChat and
+PqVault; no KEM key for a classical-only UA), recorded under CTR-UA-32.
 
 ## 6. Sources (all read 2026-11-27)
 

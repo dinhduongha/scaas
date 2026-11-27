@@ -497,7 +497,8 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   (owner 2026-11-05, confirmed 2026-11-07; BUILT on EVM and Soroban, plan T66a): an `msig`, PQ-eligible or not, reverts
   `UAKemHolder` at `register` (a whole or a hash-committed key) and at `setKemKey`, before any signature; a PQ-eligible `msig` still
   holds a PQZ key ([CTR-UA-16](#CTR-UA-16)). Senders seal to each accepted member's own KEM key. Operators: a client on the old
-  builders that registers an `msig` with a KEM key gets `UAKemHolder` (a refused job).
+  builders that registers an `msig` with a KEM key gets `UAKemHolder` (a refused job). So PqChat and PqVault parties are PQ UAs only: a classical-only UA holds no
+  KEM key and gets none attached (owner 2026-11-27).
 - **No revocation** (what has been on chain stays public forever and cannot be withdrawn; if an old secret key may have leaked,
   the UA must assume that anything sent to that key can be read) and **no one-owner check** (a KEM record carries no proof of
   possession of the KEM secret, so a uniqueness rule would let anyone who sees a key first list it under their own UA and block
