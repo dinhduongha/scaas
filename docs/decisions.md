@@ -12661,6 +12661,324 @@ Change (controller calls, 2026-11-23, T26 area A part b (custody), branch `sdk-t
 
 Change (owner 2026-11-23, "agreed, add it", relayed by the coordinator; owner: yes; status: BUILT on branch `sdk-t26-b`, UNAUDITED; numbered (161) on its branch, renumbered (169) at the merge `t26-merge`, where area A part b holds (160) to (167); B-21 alike, (160) to (168)): (169) **B-20, wasm32 reads a body chunk by chunk to its cap, as natively (CLI-RPC-07).** `scaas-rpc` turns on reqwest's `stream` feature for the wasm32 target only; its `bytes_stream` needs the new dependency **`wasm-streams` 0.4.2** (licence `MIT OR Apache-2.0`, already allowed by every `deny.toml`), pinned exactly (`=0.4.2`) in `clients/scaas-rpc/Cargo.toml` and added to every lockfile that resolves `scaas-rpc` (no other version moved). Why: the fetch backend without streams reads the whole body before it can be bounded, so an endpoint announcing no length could exhaust a page's memory. One bounded read (`http::read_capped`) now serves both targets and both readers (the capped answer and the hashed object): it stops at the first chunk that would pass the cap, before the rest is read, with the same `AnswerTooLarge` as before.
 
+**User profiles (CLI-UPR-\*).** The rules are in [clients/scaas-sdk.md](clients/scaas-sdk.md#12-user-profiles) §12; the design is the [user-profiles spec](superpowers/specs/2026-11-27-user-profiles.md), a frame; the owner ruled every open point of its §16 on 2026-11-27. Entries 01 to 09, 17 and 23 carry the owner's rulings of 2026-11-27; 10 to 16, 18 to 22 and 24 to 28 are the controller's means (owner may override), with the owner's §16 rulings and the controller's rulings on the three rounds of the Fable review of 2026-11-27 recorded as Changes on the entries they touch.
+
+### CLI-UPR-01 — "Profile" on screen and `UserProfile` in code; a chain's pinned data is a "chain profile"
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-01 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-01).) User-facing text says "Profile"; code and docs say `UserProfile` / `user_profile`. The per-chain profile (EVM and network profiles, the default one, the TUI's pinned ones and caps) is "chain profile" / `ChainProfile` in docs and code. The rename touches no on-chain byte and is a later task, listed in the spec §15.
+**Status.** SPECIFIED; the rename PLANNED. UNAUDITED.
+**Why.** One word for two things would make "switch profile" ambiguous on every screen and in every API.
+**Cost if wrong.** A user switches chain when meaning to switch identity, or the reverse.
+**Source.** Owner ruling 2026-11-27 (chat, through the coordinator): the feature is named Profile, `UserProfile` / `user_profile` in code and docs; the per-chain profile is renamed chain profile (`ChainProfile`) in docs and code, as a later task; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O1, §15.
+
+Change (owner 2026-11-27, spec §16 Q-UP8, relayed by the coordinator; owner: yes; status: SPECIFIED): old, whether the stable code `ProfileMismatch` is renamed was open; new, the rename task renames it `ChainProfileMismatch` in code, every binding and the docs. Why: every chain is test-only, so no compatibility is owed, and O1 renames code as well as docs. Source: owner ruling 2026-11-27 (chat): Q-UP8 as recommended; [spec](superpowers/specs/2026-11-27-user-profiles.md) §16.
+
+### CLI-UPR-02 — User profiles live in the SDK layer and every client uses them
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-02 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-02).) One SDK surface (module `user_profile`) opens, locks and switches profiles for scaas-app desktop and mobile, `scaas-tui` and the CLI.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The same protection and lock rules in every client.
+**Cost if wrong.** A client with its own profile code that seals or locks differently.
+**Source.** Owner ruling 2026-11-27 (chat): profiles are in the SDK layer, used by every client; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O2, §11.
+
+### CLI-UPR-03 — A machine holds many profiles, each its own data directory
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-03 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-03).) Each profile directory holds its encrypted store (many seeds, many native secret keys, hidden sets), its chat and vault state and its own settings, its chain-profile settings included.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Several people or roles on one machine and one OS account.
+**Cost if wrong.** One person's seeds, chats or endpoints visible to another.
+**Source.** Owner ruling 2026-11-27 (chat), point 1; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O3, §5.
+
+### CLI-UPR-04 — Each profile is protected separately; opening one unlocks nothing of another
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-04 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-04).) Its own passphrase and KDF parameters; an optional biometric unlock, opt-in (PqVault's O7 (b) pattern); no key shared between profiles.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A profile is a separate person's or role's data.
+**Cost if wrong.** One passphrase or one biometric opens every profile.
+**Source.** Owner ruling 2026-11-27 (chat), point 2; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O4, §7.
+
+### CLI-UPR-05 — A first run with no profile creates "default"; its passphrase is asked at its first secret
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-05 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-05).) The client creates a profile named "default" on first run; the profile asks for a passphrase when its first seed or key is created.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A first run needs no setup step, and no secret is ever stored unprotected.
+**Cost if wrong.** A first screen that blocks on a passphrase, or a seed in an unprotected profile.
+**Source.** Owner ruling 2026-11-27 (chat), point 3; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O5, §7.
+
+### CLI-UPR-06 — A profile is open in at most one instance; instances of different profiles meet only over the network
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-06 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-06).) A lock file in the profile's directory; a second instance opening the same profile is refused with `ProfileInUse`. Instances on different profiles work together only over PqChat, Matrix and the node, with no local side channel.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Two writers of one profile's state, and a local shortcut that tests would take instead of the real paths.
+**Cost if wrong.** A corrupted profile store, or two-person chat that works on one machine and fails across two.
+**Source.** Owner ruling 2026-11-27 (chat), point 4; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O6, §9.
+
+### CLI-UPR-07 — Switching locks the current profile as a seed lock does, then opens the other
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-07 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-07).) The current profile's secrets are forgotten exactly as CLI-SDK-06's lock forgets a seed's; then the other opens; on desktop and mobile.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Nothing of one profile may stay usable in the other's session.
+**Cost if wrong.** A key handle of profile A signing in profile B's session.
+**Source.** Owner ruling 2026-11-27 (chat), point 5; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O7, §10.
+
+### CLI-UPR-08 — The profile list shows names only; a hidden profile opens only by typing its name
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-08 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-08).) The list shows the user-given names only; an option hides a profile from it, after which it opens only by typing its name, as a hidden set opens only by its passphrase.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Someone looking at the screen learns no more than the names the user chose to show.
+**Cost if wrong.** The list reveals a profile its owner wanted unseen.
+**Source.** Owner ruling 2026-11-27 (chat), point 6; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O8, §8.
+
+### CLI-UPR-09 — A profile's id is a UUIDv7
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-09 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-09).) The id is a UUIDv7. Consequence, stated: its timestamp gives each profile's creation time to the millisecond, hidden ones included, to anyone who can list the profile root.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The owner's ruling; the creation-time disclosure is covered by CLI-UPR-13's limit (hidden from the list, not deniable on disk).
+**Cost if wrong.** A stolen disk dates every profile.
+**Source.** Owner ruling 2026-11-27 (chat): a profile's id is a UUIDv7; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O9, §4, §14.
+
+### CLI-UPR-10 — The profile id is stable, names the directory and never leaves the device
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-10 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-10).) Made once, never changed; names the profile's directory and its keychain items; the user-given name is only a label, a rename keeps the id; never on chain, in a job, a request, a message, a log, an error, an event or a backup; not derived from any seed, key or name.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A rename must not move data; an id that left the device or came from a seed would link the profile to its UAs.
+**Cost if wrong.** A gateway or homeserver links a machine's profiles, or a rename loses a profile's data.
+**Source.** Controller call 2026-11-27 (the owner asked for an id; the version is CLI-UPR-09); [spec](superpowers/specs/2026-11-27-user-profiles.md) §4.
+
+Change (controller call 2026-11-27, the Fable review of `06d9843d5`, G12 (C-15), G15; owner: no, owner may veto; status: SPECIFIED): old, the id never left the device, nothing said of its path to the client; new, an envelope whose id differs from its directory is refused; the id reaches the client only in `UserProfileInfo` (its `Debug` redacted) to name keychain items, and the client keeps it out of third-party logs. Why: the app names keychain items by the id, and matrix-rust-sdk logs paths. Source: controller call 2026-11-27 on the Fable review of the user-profiles spec at `06d9843d5`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+### CLI-UPR-11 — One profile root; an index of ids and names only; a one-time move into "default"
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-11 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-11).) `p/<id>/` per profile under one root per OS user; `profiles.json` holds visible ids and names and the last visible one opened, bounded, canonical, written by `put_if` without a previous copy, untrusted until the sealed name confirms it; today's store and per-person config move into "default" once, no old layout read after.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A previous copy of the index would keep a hidden profile's row; every chain is test-only, so no compatibility path is owed.
+**Cost if wrong.** A hidden profile listed by a stale copy; an edited index trusted.
+**Source.** Controller call 2026-11-27; [spec](superpowers/specs/2026-11-27-user-profiles.md) §5, §6, §12.
+
+Change (controller call 2026-11-27, the Fable review of `06d9843d5`, G10, G12 (A-4, A-9, C-10, C-13); owner: no, owner may veto; status: SPECIFIED): old, the index was trusted to tell what is unlisted and a lost index was a first run; the migration looked at the new root; new, the index is a cache of visible names rebuilt from the envelopes (a name in clear in an unprotected envelope, sealed in a protected one), never a first run while profiles exist; a row pointing at a profile sealed as hidden is refused and dropped; the migration reads the CLI's legacy data directory on every OS, only when no profile directory exists, and resumes only into the profile marked `migration: pending`; the root is tightened to `0700` and a symlinked root refused. Why: one corrupt byte in the index locked out every profile, and on macOS and Windows the old store was never found. Source: controller call 2026-11-27 on the Fable review of the user-profiles spec at `06d9843d5`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+Change (controller call 2026-11-27, the round-2 Fable review of `fa51e8275`, R2-A-1, R2-A-3, R2-A-10, R2-B-1, R2-B-9, R2-C-7, R2-C-11; owner: no, owner may veto; status: SPECIFIED): old, mobile used a store of the app's, a rebuilt index listed no protected profile, a generation refused FileStore's own files, any existing root was tightened, and the migration read only the default path; new, every platform uses a directory, the app supplying only keychain items; a visible profile's name is a public field of its envelope, so a rebuild lists every visible profile; a generation accepts HMAC names, their `.lock` files and FileStore's crash-left temporaries (removed at open), and the unprotected `g0` holds plain items of part `sdk`; the root is tightened only when it holds profiles or the SDK made it, another wider directory refused (`ProfileRootUnsafe`); the migration also reads `--data-dir`, and legacy items beside existing profiles are reported. Why: a crash leftover locked a profile out, a lost index stranded every protected profile, and the mobile trait could not express the crash-safe layout. Source: controller call 2026-11-27 on the round-2 Fable review of the user-profiles spec at `fa51e8275`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+### CLI-UPR-12 — A profile's items are sealed under its own data key, wrapped by Argon2id of its passphrase
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-12 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-12).) A random 32-byte data key per profile in `ua-rs`'s arena; an envelope with per-profile Argon2id parameters (default 64 MiB / 3 / 4, bounded both ways), the wrapped key, an optional per-device biometric wrap and the sealed name; every store item sealed with its name and revision as associated data, through a `SecureStore` adapter so the keystore code runs unchanged; seed vaults keep their own passphrases inside; an unprotected profile holds no secret (`ProfilePassphraseRequired`).
+**Status.** SPECIFIED; vectors before code. UNAUDITED.
+**Why.** The owner's separate protection (CLI-UPR-04) made concrete with the parameters already pinned for PqVault (CLI-PQV-10's Change) and the arena handling of CLI-SDK-06; the SDK holds no cryptography (CLI-SDK-01).
+**Cost if wrong.** A tampered envelope that weakens or stalls the KDF; items swapped between names unnoticed.
+**Source.** Controller call 2026-11-27; CLI-SDK-01, CLI-SDK-06, CLI-PQV-07, CLI-PQV-10; [spec](superpowers/specs/2026-11-27-user-profiles.md) §7, §16 Q-UP1, Q-UP2.
+
+Change (owner 2026-11-27, spec §16 Q-UP1 and Q-UP2, relayed by the coordinator; owner: yes; status: SPECIFIED): old, one or two passphrase entries at the first secret and the default KDF parameters were open; new, two entries (the profile passphrase and the seed's vault passphrase), the client neither suggesting nor refusing equal text; the default 64 MiB / 3 / 4, stronger allowed within the bounds, no timing run. Why: the seed's own passphrase is the owner rule of 2026-11-11 and protects it in every copy of the keystore; the set is PqVault's pinned one. Source: owner ruling 2026-11-27 (chat): Q-UP1 and Q-UP2 as recommended; [spec](superpowers/specs/2026-11-27-user-profiles.md) §16.
+
+Change (controller call 2026-11-27, the Fable review of `06d9843d5`, G3, G6 (B-3, B-6, C-5, C-9); owner: no, owner may veto; status: SPECIFIED): old, the envelope's state was bound to nothing and the platform wrap had no derivation, associated data or minimum policy; new, the wrap's associated data is the envelope's public fields; a protected profile refuses any plain item, an unprotected one any sealed item and (outside a migration) a keystore; a keychain marker refuses an unprotected envelope after protection where the OS has one, the residual stated where it has none; the platform key is `HKDF(secret, info "scaas.profile.platform.v1")` under its own handle, the policy must require the current biometric enrollment, and platform unlock never reaches a hidden profile. Why: a writer of the directory could step around the seal by flipping `state`, and a policy of two false flags opened the profile without a biometric. Source: controller call 2026-11-27 on the Fable review of the user-profiles spec at `06d9843d5`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+Change (controller call 2026-11-27, the round-2 Fable review of `fa51e8275`, R2-B-7, R2-C-6, R2-B-5; owner: no, owner may veto; status: SPECIFIED): old, the wraps' associated data was "the public fields as written in the file", the hidden flag was only sealed, and a planted unprotected profile was a residual of desktop Linux alone; new, the associated data is `ua-rs`'s `seal_key` prefix then the canonical object of exactly format, version, id, state, generation, the visible name and the parameters; a visible name is public, a hidden profile has none; the keychain marker is rewritten when missing and a missing anchor beside it is `ProfileRollback`; an unprotected profile is announced at every open and its settings are shown before `set_passphrase` seals them; the planted-profile residual is stated for every platform; a passphrase change drops the platform wrap. Why: clientkeys must produce the same bytes, and a writer may plant an unprotected profile with their own settings on every platform. Source: controller call 2026-11-27 on the round-2 Fable review of the user-profiles spec at `fa51e8275`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+Change (controller call 2026-11-27, the round-3 Fable review of `9f2ee89b7`, R3-B-1; owner: no, owner may veto; status: SPECIFIED): old, the visible name was in the wraps' associated data, so rename, hide and show needed a key the spec said was gone; new, the wraps' associated data is format, version, id, state, generation and parameters only; the visible name is a clear hint, checked against the sealed label after unlock (`ProfileIndexMismatch`, the hint rewritten from the label); rename, hide and show re-seal only the label under `DEK_p`, with no passphrase, never touching the wraps (`hide()` still drops the platform wrap); a disk writer can change a visible profile's shown name before unlock, detected at unlock (stated in the threat model). Why: the calls could not be built without keeping the passphrase or its key for the session. Source: controller call 2026-11-27 on the round-3 Fable review of the user-profiles spec at `9f2ee89b7`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+### CLI-UPR-13 — A hidden profile is found by trying every unlisted directory, padded, with one error; it is not deniable on disk
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-13 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-13).) Name and passphrase as secret inputs; the KDF run on every unlisted directory with no early exit, padded to at least four runs; `ProfileOpen` for every failure; nothing outside its directory names it; the directory, its UUIDv7 and its keychain items stay visible on disk.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The time and the error of a failed open must not tell whether a hidden profile exists; deniability on disk would need decoys, which is a non-goal.
+**Cost if wrong.** A screen observer learns that a hidden profile exists from a fast failure.
+**Source.** Controller call 2026-11-27; ARCH-POS-13; [spec](superpowers/specs/2026-11-27-user-profiles.md) §8, §16 Q-UP7, Q-UP9.
+
+Change (owner 2026-11-27, spec §16 Q-UP7 and Q-UP9, relayed by the coordinator; owner: yes; status: SPECIFIED): old, whether a hidden name is key material and whether anything stronger than hiding from the list is offered were open; new, the name is a label, not bound into the KDF; nothing stronger, deniability on disk a non-goal. Why: names are short and guessable; decoys or a fixed-size container would be a design of its own. Source: owner ruling 2026-11-27 (chat): Q-UP7 and Q-UP9 as recommended; [spec](superpowers/specs/2026-11-27-user-profiles.md) §16.
+
+Change (controller call 2026-11-27, the Fable review of `06d9843d5`, G7 (B-7, B-8, B-10, B-14, C-3, C-4, C-11); owner: no, owner may veto; status: SPECIFIED): old, a hidden profile was first created visible, two could share name and passphrase, padding ran at the default whatever the envelope, a corrupt candidate could end the search, and names were compared in two forms; new, `create_hidden` writes no row ever and `hide()` states its residual; duplicates refused by running the search first; at most 16 candidates (`ProfileSearchTooLarge`), max(count, 4) runs at each envelope's own parameters, a dummy run for each unusable candidate, a single match only; one name helper (NFKC, then lower case) on both sides, passphrases in OpaqueString form. Why: the name was on disk before it was hidden, and the search's count and time rules had holes. Source: controller call 2026-11-27 on the Fable review of the user-profiles spec at `06d9843d5`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+Change (controller call 2026-11-27, the round-2 Fable review of `fa51e8275`, R2-B-1, R2-C-7, R2-C-8, R2-C-9; owner: no, owner may veto; status: SPECIFIED): old, the search cap of 16 sat below the directory limit of 32, the candidates came from the index, and `hide()` ran no duplicate check; new, at most 16 hidden profiles (`create_hidden`, a hidden import and `hide()` refuse at the cap, `ProfileHiddenLimit`); the candidates are the envelopes without a public name and the unusable directories, never the index; every path that makes a profile hidden or changes a hidden one's name or passphrase runs the duplicate check; `hide()` rewrites the envelope and the anchor, so an envelope from before it put back is `ProfileRollback`. Why: the 17th hidden profile or an index rebuild locked every hidden open out, and two profiles with one (name, passphrase) never opened again. Source: controller call 2026-11-27 on the round-2 Fable review of the user-profiles spec at `fa51e8275`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+Change (controller call 2026-11-27, the round-3 Fable review of `9f2ee89b7`, R3-C-3, B N-4; owner: no, owner may veto; status: SPECIFIED): old, the search refused more than 16 candidates, and a planted public name on a hidden envelope was not named; new, the search accepts up to 32 candidates (the directory limit), hidden profiles staying capped at 16; a hidden envelope carrying a planted public name is refused when opened through the list, the hint removed, and is named in the threat model as a denial. Why: 16 hidden profiles and one damaged directory locked every hidden open out. Source: controller call 2026-11-27 on the round-3 Fable review of the user-profiles spec at `9f2ee89b7`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+### CLI-UPR-14 — The instance lock is an OS advisory lock held for the open profile's life
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-14 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-14).) A non-blocking exclusive lock on `instance.lock`, the mechanism FileStore's item locks use; released by the OS at any process end; nothing written into it, so no stale lock and no race; local filesystems only; Web Locks in a browser. When built, clients share the root and the index, never an open profile (CLI-SDK-17's shared directory, SDK spec §6.3).
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A PID or time stamp in a lock file needs a stale-lock rule, and every such rule races.
+**Cost if wrong.** A crash leaves a profile that cannot open, or two instances both judge a lock stale.
+**Source.** Controller call 2026-11-27; [spec](superpowers/specs/2026-11-27-user-profiles.md) §9, §16 Q-UP3, Q-UP4.
+
+Change (owner 2026-11-27, spec §16 Q-UP3 and Q-UP4, relayed by the coordinator; owner: yes; status: SPECIFIED): old, a read-only second instance and app extensions were open; new, a second instance is refused (`ProfileInUse`) even when it only reads; an app extension (iOS AutoFill, Android autofill) is refused while the app has the profile open, for now. Why: a second lock class would need every write path audited; an extension channel would be a local side channel CLI-UPR-06 excludes. Source: owner ruling 2026-11-27 (chat): Q-UP3 and Q-UP4 as recommended; [spec](superpowers/specs/2026-11-27-user-profiles.md) §16.
+
+Change (controller call 2026-11-27, the Fable review of `06d9843d5`, G7, G11 (A-14, B-10, C-11); owner: no, owner may veto; status: SPECIFIED): old, the lock was "taken before the envelope is read" for every open; new, opening by id takes the non-blocking `try_lock` first; the hidden search reads without a lock and locks only its single match, re-reading its envelope under the lock. Why: a search that locked every candidate would block other instances, and one that did not contradicted the rule. Source: controller call 2026-11-27 on the Fable review of the user-profiles spec at `06d9843d5`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+### CLI-UPR-15 — Profile lifecycle: journaled create, typed-name delete by tombstone with a backup reminder, delete of a locked profile
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-15 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-15).) Create is journaled with its index row; delete needs the name typed, shows the seeds without a backup and asks a second confirmation for them, and starts with a tombstone that start-up finishes; a directory without an envelope is reported, never removed; a locked visible profile (a lost passphrase) is deleted with the name typed and a confirmation that its data is lost; export and import by CLI-UPR-17.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A crash must not leave half a profile; a delete loses every unbacked seed.
+**Cost if wrong.** Lost seeds at a hasty delete; an orphaned directory.
+**Source.** Controller call 2026-11-27; CLI-SDK-04 (`ConfirmRemoveUnbacked`), CLI-SDK-06 (export); [spec](superpowers/specs/2026-11-27-user-profiles.md) §10, §16 Q-UP5.
+
+Change (owner 2026-11-27, spec §16 Q-UP5, relayed by the coordinator; owner: yes; status: SPECIFIED): old, export / import of a profile was a named gap; new, a whole profile exports and imports as one sealed file (CLI-UPR-17, CLI-UPR-18). Why: the owner put it in scope. Source: owner ruling 2026-11-27 (chat): Q-UP5 in scope now; [spec](superpowers/specs/2026-11-27-user-profiles.md) §10 (export and import), §16.
+
+Change (controller call 2026-11-27, the Fable review of `06d9843d5`, G4, G10 (A-3, A-5, C-7, C-10, C-17); owner: no, owner may veto; status: SPECIFIED): old, delete removed the envelope first and start-up removed any directory without one; a profile with a lost passphrase could not be deleted; create and its row were two steps; new, create and import are journaled with their row; delete starts by renaming the directory to a tombstone; start-up removes tombstones only and reports a directory without an envelope; a locked visible profile is deleted with the name typed and `ConfirmDeleteUnreadable`. Why: one missing file made start-up erase a whole profile, and a crash between create's rename and its row left a profile no rule opened. Source: controller call 2026-11-27 on the Fable review of the user-profiles spec at `06d9843d5`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+Change (owner 2026-11-27, spec §16.1 Q-UP10, relayed by the coordinator; owner: yes; status: SPECIFIED): old, whether a hidden profile with a lost passphrase could be removed by a call was open; new, the app neither names nor deletes it, the user removes its directory by hand, and no call deletes unlisted directories. Why: such a call would let anyone at the OS account delete another person's hidden profile without a passphrase. Source: Owner ruling 2026-11-27 (chat): a hidden profile with a lost passphrase is removed by hand; no call deletes unlisted directories; [spec](superpowers/specs/2026-11-27-user-profiles.md) §10, §16.1.
+
+### CLI-UPR-16 — Clients open a profile by name, a hidden one only through a prompt
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-16 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-16).) `--profile <name>` and `--profile-hidden` in the CLI and the TUI, the hidden name and passphrase from the terminal without echo or a file descriptor; the apps' pickers always offer "Open another profile"; a hidden profile's name never drawn; the chain-profile rename lands before `--profile`.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A hidden name on a command line stays in shell history; `--profile` beside today's `--profiles` invites a wrong flag.
+**Cost if wrong.** A hidden profile named in `~/.bash_history`; a chain-profile file taken for a user profile.
+**Source.** Controller call 2026-11-27; CLI-SDK-17, CLI-TUI-16; [spec](superpowers/specs/2026-11-27-user-profiles.md) §13.
+
+Change (owner 2026-11-27, spec §16 Q-UP6, relayed by the coordinator; owner: yes; status: SPECIFIED): old, what the idle lock locks was open; new, the idle lock locks the seeds, as today, not the profile. Why: locking the profile would ask both passphrases after every idle period. Source: owner ruling 2026-11-27 (chat): Q-UP6 as recommended; [spec](superpowers/specs/2026-11-27-user-profiles.md) §16.
+
+Change (controller call 2026-11-27, the Fable review of `06d9843d5`, G12 (A-10, C-13, C-15); owner: no, owner may veto; status: SPECIFIED): old, the CLI followed `last` and had one passphrase descriptor; nothing set the profile's settings; new, the CLI uses `--profile` or "default", never `last`, and names the profile on stderr; one descriptor per secret (`--profile-passphrase-fd`, `--passphrase-fd`, `--key-passphrase-fd`, `--export-passphrase-fd`, `--profile-name-fd`); `scaas profile settings` replaces `--overlay`; the process-listing limit of `--profile` stated; the clipboard value a client set cleared at lock. Why: a script would have run against whichever profile an app opened last. Source: controller call 2026-11-27 on the Fable review of the user-profiles spec at `06d9843d5`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+Change (controller call 2026-11-27, the round-2 Fable review of `fa51e8275`, R2-A-8, R2-C-11; owner: no, owner may veto; status: SPECIFIED): old, a `--profile` name with no profile had no code, one descriptor served a passphrase change, and commands that need no profile opened "default"; new, `ProfileUnknown`; `--profile-passphrase-fd` and `--new-profile-passphrase-fd`; `list`, `create`, `create-hidden`, `import` and `rebuild-index` open no profile; `--profile-name-fd` also picks a visible profile without argv; the stderr line landing in CI logs is stated. Why: a wrong name sent the user to a passphrase prompt, and a CLI `list` failed while the TUI held "default". Source: controller call 2026-11-27 on the round-2 Fable review of the user-profiles spec at `fa51e8275`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+### CLI-UPR-17 — A whole profile exports and imports as one sealed file
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-17 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-17).) Inside: the profile's store items as sealed today, its index entry, its settings with its chain-profile settings. Never inside: the OS lock, caches. Sealed under a passphrase typed at export with the profile envelope's Argon2id bounds; a typed confirm; import makes a new profile with a new UUIDv7; a file never overwrites an existing profile; the integrity of the whole file bound in the seal; vectors in clientkeys and `ua-rs` before code.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A profile moves or is backed up in one step, not seed by seed with its settings set again by hand.
+**Cost if wrong.** A file that overwrites a live profile, or one changed in transit and accepted.
+**Source.** Owner ruling 2026-11-27 (chat), spec §16 Q-UP5: export and import of a whole profile as one sealed file are in scope now; content, exclusions, seal, typed confirm, a new UUIDv7 at import, no overwrite, integrity in the seal, vectors later; [spec](superpowers/specs/2026-11-27-user-profiles.md) §10 (export and import).
+
+### CLI-UPR-18 — The export file holds no id, so an import is always a new profile; sealed in pinned chunks; nothing is written before it validates
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-18 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-18).) The index entry in the file is the name and the hidden flag, no id (CLI-UPR-10); also never inside: the envelope and data key, keychain items, the Matrix store, temporary files; the header the AEAD's associated data; every item read by its own reader and the settings by CLI-TUI-06 before anything is written; one error `ProfileImportOpen`; a new profile passphrase at import; a new PqChat device id.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** With no id in the file there is no "same id on an empty machine" case and nothing to match or overwrite: the simplest safe rule of the owner's choice. The PqChat device anchor stays behind so no counter is reused (CLI-PQC-09).
+**Cost if wrong.** A restore that cannot keep the old id (nothing off the device names it, so nothing depends on it); a crafted settings file that weakens an RPC policy.
+**Source.** Controller call 2026-11-27, choosing the id rule the owner left open in Q-UP5; CLI-UPR-10, CLI-PQC-09, CLI-TUI-06; [spec](superpowers/specs/2026-11-27-user-profiles.md) §10 (export and import).
+
+Change (controller call 2026-11-27, the Fable review of `06d9843d5`, G9 (A-12, B-11, C-1, C-2, C-8, C-12); owner: no, owner may veto; status: SPECIFIED): old, the file held `pqchat/` and every setting, was one base64 AEAD with an unstated size, and export needed only the typed name; new, the file leaves out `keystore.prev`, the PqChat store and credential references and marks imported operations so they are followed only on the user's word; export needs the profile passphrase and writes a new `0600` file never through a symlink; the seal is AES-256-GCM-SIV in 1 MiB chunks with a last-chunk flag, the payload at most 64 MiB (`ProfileExportTooLarge`), no byte parsed before its tag verifies and nothing committed before the final chunk; import keeps only settings that cannot weaken, every endpoint, `first` mark, idle-lock and clipboard choice only on the user's confirm of each; header refusals keep the one error with a reason in the local log; temporary directories removed at start. Why: a crafted file could bring an endpoint that decides every read with a credential of the user's, and PqChat state that CLI-PQC-09 keeps device-bound. Source: controller call 2026-11-27 on the Fable review of the user-profiles spec at `06d9843d5`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+Change (owner 2026-11-27, spec §16.1 Q-UP11, relayed by the coordinator; owner: yes; status: SPECIFIED): old, leaving `keystore.prev`, the PqChat store and credential references out of the export was a controller call the owner might veto; new, it is the owner's ruling. Why: the PqChat store is device-bound (CLI-PQC-09), credential references name another machine's files, and `keystore.prev` may hold a seed the user removed. Source: Owner ruling 2026-11-27 (chat): a profile export leaves out keystore.prev, the PqChat store and credential references; [spec](superpowers/specs/2026-11-27-user-profiles.md) §10 (export and import), §16.1.
+
+Change (controller call 2026-11-27, the round-2 Fable review of `fa51e8275`, R2-B-8, R2-C-1, R2-C-11, R2-C-12; owner: no, owner may veto; status: SPECIFIED): old, the chunk size, the chunk lengths, the header bound and the accepted item names were open, and a credential reference in a crafted file had no rule; new, the chunk is exactly 1,048,576 bytes (the last 1 to 1,048,576), the header at most 4 KiB, the items `keystore` and `sdk.state` once each; a credential reference in a file is always dropped, never offered; the title says "sealed in pinned chunks". Why: more than one file encoded one payload, and one confirmed endpoint with a crafted credential reference would send a local secret out. Source: controller call 2026-11-27 on the round-2 Fable review of the user-profiles spec at `fa51e8275`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+### CLI-UPR-19 — The sealed store: AES-256-GCM-SIV with a random nonce per seal, framed associated data, HMAC file names and an anchored manifest
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-19 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-19).) AES-256-GCM-SIV, a 96-bit nonce from the OS RNG at every seal; associated data length-framed: domain, profile-format version, store part, item name, rev; file names HMAC-SHA-256 of part and name under `HKDF(DEK_p, "scaas.profile.item-name.v1")`, the names in a sealed manifest of (part, name, rev) whose revision and hash are anchored in the keychain (else a file); an item below the manifest is `ProfileRollback`; every derived key separated by its HKDF label, distinct from PqVault's `P_k`; every key and plaintext buffer zeroized at the end of its call; `DEK_p` in a new profile arena, since `AppKeys` hangs off a seed's wallet.
+**Status.** SPECIFIED; vectors before code. UNAUDITED.
+**Why.** The data key lives long and (item, rev) repeats (a retry after `StoreConflict`, `accept_rollback`, a copied directory), so a nonce-misuse-resistant AEAD; pqchat-core's item names are UAs, session ids and room ids, which a file name would show; only the keystore had an anchor.
+**Cost if wrong.** A repeated GCM nonce gives the authentication key; a stolen disk lists who a profile talks to; an old `settings` put back goes unseen.
+**Source.** Controller call 2026-11-27 on the Fable review of the user-profiles spec at `06d9843d5`, groups G1, G2, G5, G15 (B-1, B-2, B-5, B-12, B-13, B-15, C-6, C-14); SDK spec §6.3; [spec](superpowers/specs/2026-11-27-user-profiles.md) §7.1, §7.2, §19.
+
+Change (controller call 2026-11-27, the round-2 Fable review of `fa51e8275`, R2-A-10, R2-B-2, R2-B-6, R2-C-10; owner: no, owner may veto; status: SPECIFIED): old, one manifest for every part, no rule for a deleted or missing item, no identity of its own, and an anchor over generation and manifest only; new, one manifest per part, a sealed item of the reserved part `profile`, with a tombstone per deleted item, at most 65,536 entries (`ProfilePartFull`), written under the store write lock with `put_if`; a listed item missing is `ProfileDamaged`; the anchor covers the generation, each manifest and the envelope and is written at every envelope write and re-seal commit; the cost (three writes per item write) and every keychain-less client stated; `vault.restore_previous()` replaces a hand copy of `keystore.prev`. Why: a deleted item put back returned silently, and two writers raced on one manifest. Source: controller call 2026-11-27 on the round-2 Fable review of the user-profiles spec at `fa51e8275`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+Change (controller call 2026-11-27, the round-3 Fable review of `9f2ee89b7`, B N-1, N-2, N-3; owner: no, owner may veto; status: SPECIFIED): old, the manifest or envelope "differing" from the anchor was a rollback, a re-created item restarted at a low revision, and tombstones were never retired; new, the anchor is compared as the keystore's (CLI-UPR-28); a re-created item's stored revision continues above its tombstone; tombstones are dropped at a re-seal. Why: an honest crash raised a false rollback, a re-created item read as rolled back, and a pruning part filled up. Source: controller call 2026-11-27 on the round-3 Fable review of the user-profiles spec at `9f2ee89b7`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+### CLI-UPR-20 — No crash loses a profile: re-seal by generation and journal, root work under the root lock, delete by tombstone
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-20 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-20).) `set_passphrase`, `change_passphrase` and a parameter raise write `profile.envelope.next` (state `sealing`, a new data key), re-seal every item into `g<N+1>/`, then commit by one rename; an uncommitted journal is rolled back at the next open or start; first run, migration, create, import, rebuild and start-up clean-up run under the root lock; create and import are journaled with their row; temporary directories and tombstones are removed at start; a passphrase change rotates `DEK_p`.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A crash between the envelope and the last re-sealed item lost a migrated keystore or left it unopenable; two starters could split a migration over two directories.
+**Cost if wrong.** Seeds out of reach after a crash; an orphan directory no rule opens.
+**Source.** Controller call 2026-11-27 on the Fable review of the user-profiles spec at `06d9843d5`, groups G4, G5, G10 (A-1, A-2, A-3, A-5, B-4, C-5, C-6, C-7); [spec](superpowers/specs/2026-11-27-user-profiles.md) §7.3, §10, §12, §19.
+
+Change (controller call 2026-11-27, the round-2 Fable review of `fa51e8275`, R2-A-4, R2-B-5, R2-C-5, R2-C-11; owner: no, owner may veto; status: SPECIFIED): old, the journal held `state: "sealing"` and needed a second wrap, start removed any generation other than the envelope's, start took every profile's lock, and the root lock's span was not set; new, `profile.envelope.next` is written as protected from the start, the file name being the journal; at the profile's own open a journaled generation is removed before its journal, a lower one removed, a higher one without a journal `ProfileDamaged`, never removed; start takes no live profile's lock; the root lock covers only short root steps, never a KDF run, a re-seal or a dialog; temporary directories hold their own `build.lock`. Why: an old envelope put back made start erase the live generation, and a CLI start could make an app's open fail. Source: controller call 2026-11-27 on the round-2 Fable review of the user-profiles spec at `fa51e8275`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+Change (controller call 2026-11-27, the round-3 Fable review of `9f2ee89b7`, R3-C-1; owner: no, owner may veto; status: SPECIFIED): old, a lower generation was removed at open before the wrap opened; new, a lower generation is removed only when `g<gen>/` exists and the wrap has opened, else `ProfileDamaged` with nothing removed. Why: one edited `gen` field erased the only generation before any authentication. Source: controller call 2026-11-27 on the round-3 Fable review of the user-profiles spec at `9f2ee89b7`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+### CLI-UPR-21 — KDF bounds per field and per device; `p` is fixed; a cost the device cannot pay is named
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-21 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-21).) `m` 64 MiB to 1 GiB on desktop and to 256 MiB on mobile and in a browser, `t` 3 to 10, `p` 4; outside the general bounds `ProfileFormat`, above this device's maximum `ProfileKdfTooLarge`, both before any KDF; out of memory `ProfileKdfOutOfMemory`, never "wrong passphrase"; a test-only set (8 MiB, 1) behind `test-hooks`, refused in a release build.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** "Below the default" was no order for three numbers, `p` is no strength knob, 1 GiB does not fit a phone, and a failed allocation must not read as a wrong passphrase. Q-UP2's default stands (owner).
+**Cost if wrong.** A desktop export that a phone reports as a wrong passphrase; test suites paying 64 MiB per CLI command.
+**Source.** Controller call 2026-11-27 on the Fable review of the user-profiles spec at `06d9843d5`, group G8 (A-11, B-9, C-12); owner Q-UP2; [spec](superpowers/specs/2026-11-27-user-profiles.md) §7.5, §19.
+
+### CLI-UPR-22 — The profile layer fits the SDK: its own config, its own `Sdk`, named store errors, a sealed size bound, stores for app cores
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-22 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-22).) `UserProfiles::new(ProfilesConfig { root | the app's stores, authenticator, limits })`; a profile opens and keeps its `Sdk`, its lock a state later calls meet (`ProfileLocked`); `StoreError` gains `VaultFormat`, `ProfileLocked`, `ProfilePassphraseRequired`, mapped by `vault::io`; `rev_of` reads a sealed item up to the base64 of its plain bound plus 1 KiB; `keystore.head` unsealed by contract; a sealed store per app-core part, pqchat-core through an adapter of its revisions (a plan task); the Matrix store key the one key that leaves the arena; no new crate (`uuid` 1 with `v7`, argon2 0.6.0, AES-256-GCM-SIV, HKDF, OpaqueString exist). The profile lock relies on `lock_all` revoking every hidden set (review A-8, a code fix on branch `fix-lock-all-hidden`).
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The first sketch could not be called on mobile, before an `Sdk` existed, or by pqchat-core; a sealed item above 12 MiB would have read as revision `u64::MAX`.
+**Cost if wrong.** Every write of a large item a `Conflict`; errors collapsed to `VaultIo`; app cores writing plain files.
+**Source.** Controller call 2026-11-27 on the Fable review of the user-profiles spec at `06d9843d5`, group G11 (A-6, A-7, A-8, A-14, A-15); [spec](superpowers/specs/2026-11-27-user-profiles.md) §7.2, §11, §19.
+
+Change (controller call 2026-11-27, the round-2 Fable review of `fa51e8275`, R2-A-3, R2-A-5, R2-A-6, R2-A-11; owner: no, owner may veto; status: SPECIFIED): old, mobile used `ProfileStores`, pqchat-core's synchronous store had no adapter that could not block, lock left the `Sdk`'s tasks and pools running, and `sdk(config)` took a store it ignored; new, a directory on every platform with a `ProfileKeychain` interface; one synchronous sealed core, pqchat-core calling its synchronous face from a blocking task (chosen because a synchronous face never waits on a future), `StoreFault` carrying the code; the new `Sdk::close` called at lock and switch; `sdk(ProfileSdkConfig)` without a store, authenticator or limits, a second call returning the same `Sdk`; String seed ids; no crate feature for UUIDv7 (`Builder::from_unix_timestamp_millis`); `test-hooks` a new feature in three crates. Why: profile A's traffic would continue after a switch, and an adapter blocking on an async store deadlocks a current-thread runtime. Source: controller call 2026-11-27 on the round-2 Fable review of the user-profiles spec at `fa51e8275`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+Change (controller call 2026-11-27, the round-3 Fable review of `9f2ee89b7`, round-3 area A P2, P3; owner: no, owner may veto; status: SPECIFIED): old, the pqchat face was "one change in pqchat-core" with no helper named, and the browser was not addressed; new, the one helper is pqchat-core's `Items`, its `get` and `update` made async over `spawn_blocking`, 33 construction sites in 9 files gaining an `.await`; the browser store needs an async core of its own (PLANNED), since IndexedDB has no synchronous form. Why: every pqchat-core store call must go through one place, and the synchronous core gives no path for wasm32. Source: controller call 2026-11-27 on the round-3 Fable review of the user-profiles spec at `9f2ee89b7`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+### CLI-UPR-23 — Platform unlock on a shared OS account is an accepted risk; each seed and each imported secret key may carry its own passphrase, never opened by platform unlock
+- old: — · status: current · owner: yes · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-23 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-23).) Everyone enrolled on the OS account opens a profile whose platform unlock is on: accepted. The user may lock each secret item with its own passphrase, optional per item: every seed (its own vault passphrase) and every imported native secret key; that passphrase is only typed, never opened by platform or biometric unlock.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The owner's ruling on review finding C-9.
+**Cost if wrong.** A person enrolled on a shared account reads the profile's settings, stores and public keystore fields.
+**Source.** Owner ruling 2026-11-27 (chat): platform unlock on a shared OS account is an accepted risk; each seed and each imported secret key may carry its own passphrase, never opened by platform unlock; [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O11, §7.4, §14.1.
+
+### CLI-UPR-24 — The key lock: an imported key under its own passphrase, opened only by typing it; what a platform unlock leaves readable is stated
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-24 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-24).) `ImportKey.key_passphrase` optional; with it the vault `native-import-locked:<network>:<n>` (a new label form, clientkeys and vectors first) has a pin envelope only and opens by `unlock_key` alone, never by the seed's unlock of any kind, a passkey, a platform secret or the profile's unlock; a signature while it is locked is `KeyLocked`; `lock_key_separately` moves an existing import under its own passphrase, the earlier copies' residual stated. A platform unlock leaves readable the settings, the keystore's public fields, the operation history, the PqChat and Matrix stores and PqVault's cache; no seed, imported key, key-locked key, PqVault item or sealed PqChat history.
+**Status.** SPECIFIED; vectors before code. UNAUDITED.
+**Why.** Today an imported key is sealed under its seed's passphrase and PRF envelope (`vault/seeds.rs` `import_key`), so the seed's platform unlock opens it; the owner's mitigation (CLI-UPR-23) needs a passphrase of its own for it.
+**Cost if wrong.** An imported key opened by any biometric enrolled on a shared account.
+**Source.** Controller call 2026-11-27, the means of the owner's ruling CLI-UPR-23; CLI-SDK-03, CLI-SDK-06, SDK spec §6.7; [spec](superpowers/specs/2026-11-27-user-profiles.md) §7.4, §17.
+
+Change (controller call 2026-11-27, the round-2 Fable review of `fa51e8275`, R2-B-3, R2-B-4; owner: no, owner may veto; status: SPECIFIED): old, the key lock named no place that enforced it, and `lock_key_separately` left the old vault in `keystore.prev`; new, every seed-wide loop (the passphrase re-wrap and PRF enable and disable of `vault/prf.rs`, `reseal_label_vault`, `open_label_vault_retained`) skips `native-import-locked:` vaults; a reader refuses one that carries a `prf` envelope (a vector row); the seed's sealed backup and device link leave key-locked keys out and say how many; `lock_key_separately` rewrites `keystore.prev` in the same procedure. Why: a seed's platform unlock enabled while the key was open would have added a PRF envelope to it, defeating the owner's mitigation. Source: controller call 2026-11-27 on the round-2 Fable review of the user-profiles spec at `fa51e8275`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+### CLI-UPR-25 — A re-seal holds the profile's exclusive store write lock for its whole run; no write is lost
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-25 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-25).) Every writer of every part (the SDK, pqchat-core, pqvault-core) takes the profile's store write lock for a write; a re-seal holds it from before its journal to its commit; writers wait, then write into the new generation; a pqchat counter never goes backwards (a test).
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A write that landed in the old generation after its item was copied vanished at the commit, with no crash at all.
+**Cost if wrong.** A seed just imported lost, or a pqchat counter used twice (CLI-PQC-09).
+**Source.** Controller call 2026-11-27 on the round-2 Fable review of the user-profiles spec at `fa51e8275` (R2-A-2, R2-C-4); [spec](superpowers/specs/2026-11-27-user-profiles.md) §7.3, §19.
+
+Change (controller call 2026-11-27, the round-3 Fable review of `9f2ee89b7`, round-3 area A P3; owner: no, owner may veto; status: SPECIFIED): old, whether a writer waits or gets `StoreConflict` during a long re-seal was not said; new, writers wait, never `StoreConflict`, at most 120 s, then `ProfileBusy` with nothing written. Why: a keystore update is seven atomic writes under one store-wide lock. Source: controller call 2026-11-27 on the round-3 Fable review of the user-profiles spec at `9f2ee89b7`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+### CLI-UPR-26 — A settings change that could weaken the profile needs the profile passphrase typed
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-26 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-26).) Adding an endpoint, a `first` mark or a credential reference, turning the idle lock off or lengthening it, and turning the clipboard opt-in on need the typed passphrase (a platform unlock does not count); strengthening changes and the default chain profile do not.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A session left open, or anyone enrolled on a shared OS account (CLI-UPR-23), could otherwise plant an endpoint that decides the reads, those feeding a decryption included (ARCH-POS-15).
+**Cost if wrong.** A local secret sent to a planted endpoint, or reads decided by it.
+**Source.** Controller call 2026-11-27 on the round-2 Fable review of the user-profiles spec at `fa51e8275` (R2-C-3); CLI-TUI-06, ARCH-POS-15; [spec](superpowers/specs/2026-11-27-user-profiles.md) §7.7, §19.
+
+### CLI-UPR-27 — An import is two calls: a preview of everything in the file, then the import of the user's choices
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-27 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-27).) `import_preview(source, export_passphrase)` verifies and opens the whole file, builds the new profile in a temporary directory under its own lock and returns the name, the hidden flag, the counts and every setting with an item id, kept ones included; `import(review, choices, profile_passphrase, name)` seals and commits under the root lock by one rename and the row.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** With one call the client had to choose before it saw the file, so the filter became the client's (CLI-UPR-02); holding the root lock across the review would hang every other start.
+**Cost if wrong.** A client passing "keep all"; every CLI command waiting on an open import dialog.
+**Source.** Controller call 2026-11-27 on the round-2 Fable review of the user-profiles spec at `fa51e8275` (R2-A-4, R2-C-2); [spec](superpowers/specs/2026-11-27-user-profiles.md) §10.1, §11, §19.
+
+Change (controller call 2026-11-27, the round-3 Fable review of `9f2ee89b7`, R3-C-2, round-3 area A P2; owner: no, owner may veto; status: SPECIFIED): old, the preview wrote the opened items into the temporary directory in plain form before any profile passphrase existed; new, the preview keeps the decrypted payload in memory (at most 64 MiB); nothing plain is written to disk; the temporary directory is written only by `import`, sealed under the new profile's key. Why: the operation history sat unsealed on disk for as long as the review was open, and after a crash. Source: controller call 2026-11-27 on the round-3 Fable review of the user-profiles spec at `9f2ee89b7`; [spec](superpowers/specs/2026-11-27-user-profiles.md) §19.
+
+### CLI-UPR-28 — The anchor is compared as the keystore's: ahead is a crash and the anchor follows; below, or another hash at the same revision, is a rollback
+- old: — · status: current · owner: no · date: 2026-11-27 · normative: clients/scaas-sdk.md#CLI-UPR-28 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-UPR-28).) The anchor holds the generation, each part manifest's revision and hash, and the envelope's new `rev` and hash; a value ahead moves the anchor forward; below, or another hash at the same revision, is `ProfileRollback`; every client writes the anchor file, a client with a keychain also the keychain item, both compared by this rule.
+**Status.** SPECIFIED; vectors before code. UNAUDITED.
+**Why.** The keystore's own anchor uses this rule (`vault/mod.rs` `rolled_back`); "differs from the anchor" raised a rollback at every kill between a write and its anchor, and whenever a client without a keychain and one with it took turns.
+**Cost if wrong.** False rollbacks in normal use, which teach the user to accept a real one.
+**Source.** Controller call 2026-11-27 on the round-3 Fable review of the user-profiles spec at `9f2ee89b7` (R3-A-1, B N-1); SDK spec §6.3; [spec](superpowers/specs/2026-11-27-user-profiles.md) §7.2, §19.
+
 ## 42. Clients — terminal UI (`scaas-tui`)
 
 The rules are in [clients/scaas-tui.md](clients/scaas-tui.md); the design is the [scaas-tui spec](superpowers/specs/2026-11-17-scaas-tui.md), a frame whose parts that wait on unsettled SDK sections are marked (its §15), with open points in its §16 (Q-T2, Q-T5, Q-T6 and Q-T7 answered on 2026-11-24) and Fable's review of 2026-11-17 applied (its §18). Owner entries carry the owner's words only; the controller's means and proposals have entries of their own (Fable U14).
