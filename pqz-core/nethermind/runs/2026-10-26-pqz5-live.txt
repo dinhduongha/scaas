@@ -1,4 +1,4 @@
-# SCaaS testnet (7622) reset to image 2.2.0-pqz5, path B, 2026-10-26T07:57:02Z; owner 2026-10-26 ("làm roll-out testnet đi"): R0 review fix part b to the testnet; no backup of chain data (owner 2026-10-24)
+# SCaaS testnet (7622) reset to image 2.2.0-pqz5, path B, 2026-10-26T07:57:02Z; owner 2026-10-26 (roll out to the testnet now): R0 review fix part b to the testnet; no backup of chain data (owner 2026-10-24)
 # branch pqz-16k at 349b96b8; image scaas/nethermind-pqz:2.2.0-pqz5 = sha256:4d906b5511c48c096ef1485b622edd8c75442525e2856db42bc388f69dbd9334 (log 2026-10-26-image-pqz5.txt)
 $ docker inspect state
 exited exit 255 (stopped since 2026-10-25T08:05:36.81346856Z, host shutdown), image scaas/nethermind-pqz:2.2.0-pqz4

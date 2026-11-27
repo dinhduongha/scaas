@@ -22,7 +22,7 @@ import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
 
-/// @notice Step 8 (spec 2026-11-13-pqz-three-keys §7, K3-8; owner 2026-11-14 "không cần hỏi"): `ROLL_MAX` for the holder's signed
+/// @notice Step 8 (spec 2026-11-13-pqz-three-keys §7, K3-8; owner 2026-11-14): `ROLL_MAX` for the holder's signed
 ///         rollover. The rule: per set, the largest multiple of 16 whose relayed `mtxRollOverSigned` keeps the full transaction's
 ///         REGULAR gas within `0.75 · 2^24` on both relay paths (`mtxExecute`, an ECDSA envelope; `uaExecute`, a PQ fee UA). Worst
 ///         case per §7: `n` entries rolled plus `n` skip marks on further credits (each a cold slot and its own cold blob, every

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""SCaaS testnet reset 5: reset 4's check4.py for one deploy set (owner 2026-11-16, "ok, option 2, one chain, two deploy sets";
+"""SCaaS testnet reset 5: reset 4's check4.py for one deploy set (owner 2026-11-16: option 2, one chain, two deploy sets;
 the set's entries from deployments/scaas-testnet.json, deploybook.py set-book), and the set's ML-DSA mode: on mldsa-on each
 registry ML-DSA kind (0x0130 / 0x0131 / 0x0134) on a MldsaVerifier whose PRECOMPILE() is the chain's precompile, on mldsa-off
 each on PRECOMPILE() 0 (the expanded-key cache). As reset 4 (run from smartcontracts/evm, cast on PATH):

@@ -89,7 +89,7 @@ contract ExactDex {
     }
 }
 
-/// fix2-dex (owner 2026-11-12, "đồng ý bỏ đo token SCaaS"): the DEX measures no SCaaS token, so every SCaaS kind must move
+/// fix2-dex (owner 2026-11-12): the DEX measures no SCaaS token, so every SCaaS kind must move
 /// exactly what it is asked on each path the DEX uses: the pull (`mtxTrade`, Path A the fill, Path B the whole amount, both
 /// measured at the seller and at the DEX), a payout (`transfer`), a credit to a derived UA (`transferToUA`), a derived
 /// seller's pull and refund (`restorePulled` to a derived `from`, the ledger move). Every kind: `NORMAL`, `WRAPPED`, `NORMAL`

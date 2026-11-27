@@ -343,7 +343,7 @@ library UAStore {
         }
     }
 
-    /// The native rule (ruling D1; owner ruling 2026-10-30, "an EOA must really sign, no delegation"): an EOA (no code, or
+    /// The native rule (ruling D1; owner ruling 2026-10-30: an EOA must really sign, no delegation): an EOA (no code, or
     /// the EIP-7702 designator `0xef0100 ‖ delegate`) ⇒ ECDSA over `digest` by its own key only (65-byte r ‖ s ‖ v, low s, v
     /// 27 / 28: OZ `tryRecover`), never ERC-1271 through the delegate; other code ⇒ ERC-1271 `isValidSignature(digest, sig)`
     /// only, at 50 k, 400 k for a `SmartKeyAccount` clone (by its codehash `clone`, 0 = none). `digest` is `uaAuthDigest`

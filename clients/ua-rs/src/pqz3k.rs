@@ -3,11 +3,11 @@
 //! reproduces without PQZ arithmetic: the scoped key seeds of `offchain-shared` / `offchain-token` (K3-2; with the opening only
 //! inside [`PqzKeyHandle`]), the opening KEM seed (K3-6b), the leg seed (K3-4), an opening token's `memoHash` and `ownTag`, the
 //! opening blob's fields, `h(i)` / `entriesHash` and the holder's `PqzRollOver` digest, the scoped key record digests. The key
-//! handle itself (feature `pqz`, `handle.rs`; T21 O5 (b), owner 2026-11-16 "ok, as proposed") lives in the wallet's store and
+//! handle itself (feature `pqz`, `handle.rs`; T21 O5 (b), owner 2026-11-16) lives in the wallet's store and
 //! runs the holder check (K3-7) through pqz-ffi `opening::check_recipient`. UNAUDITED.
 use crate::keccak;
 
-/// T21 O5 (owner 2026-11-16, "ok, as proposed"): the entry points that take or return a raw BIP-39-derived seed (the two raw
+/// T21 O5 (owner 2026-11-16): the entry points that take or return a raw BIP-39-derived seed (the two raw
 /// derivations) are `pub` under the test feature `vectors` only and `pub(crate)` otherwise; a wallet's key with the opening is
 /// [`crate::wallet::Wallet::pqz_scoped_key`] (feature `pqz`). A release build cannot name them (the `compile_fail` checks on
 /// [`PqzKeyHandle`]).

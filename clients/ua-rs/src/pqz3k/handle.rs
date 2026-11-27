@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! The wallet's handle of one PQZ key with the opening (feature `pqz`; T21 O5 (b), owner 2026-11-16 "ok, as proposed"; design
+//! The wallet's handle of one PQZ key with the opening (feature `pqz`; T21 O5 (b), owner 2026-11-16; design
 //! docs/superpowers/specs/2026-11-16-pqz3k-handle-store.md; CLI-SGN-51, spec 2026-11-13-pqz-three-keys §6, §14.1, §14.18):
 //! `offchain-shared` (class 2) or `offchain-token` of a token with the opening, at one key version. [`Wallet::pqz_scoped_key`]
 //! derives its PQZ seed and its opening KEM seed inside the wallet's `SecretStore` (one arena slot, `seed32 ‖ openKemSeed`):

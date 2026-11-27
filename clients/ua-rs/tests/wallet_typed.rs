@@ -1568,7 +1568,7 @@ fn max_fee_null_is_absent() {
         .is_ok());
 }
 
-/// T21 O6 (owner 2026-11-16, "ok, as proposed"): clientkeys `erc7739TypedData` / `erc7739Signature` ported, against forge's KAT
+/// T21 O6 (owner 2026-11-16): clientkeys `erc7739TypedData` / `erc7739Signature` ported, against forge's KAT
 /// `evm/test/vectors/erc7739_kat.json` (AccountKat.t.sol): implicit mode (a token's `UAMetaTransfer` for a `SmartKeyAccount`)
 /// and explicit mode (`Order` nesting `Asset` for a `MandateWallet`); the contents names the wallet refuses; `Expect::Erc7739`
 /// signs the nest of the confirmed app typed data and nothing else (the app digest itself, another wallet: `PolicyRefused`).

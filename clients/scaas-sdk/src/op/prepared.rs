@@ -276,7 +276,7 @@ const TOKEN_KINDS: &[&str] = &["token", "zether", "pqz"];
 /// What the SDK prepares without a reference row yet (PLANNED: their fixtures), each on the domain kinds listed.
 #[cfg(test)] // the coverage test's
 pub(crate) const UNMEASURED: &[(&str, &[&str])] = &[
-    // U1 (owner 2026-11-19, "approved"): a follow-up after PR A. PQZ's multi transfers (P2: one line over the legs): the
+    // U1 (owner 2026-11-19): a follow-up after PR A. PQZ's multi transfers (P2: one line over the legs): the
     // PQZ precompile's stand-in at each auditor-group count not built yet; PQZ's signed rollover (P1: entries = min(n,
     // ROLL_MAX) + len(skip)): an opening token and the holder's ML-DSA authorization not built yet
     ("mtxConfidentialTransfer", &["pqz"]),

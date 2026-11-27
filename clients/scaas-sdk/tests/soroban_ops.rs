@@ -884,7 +884,7 @@ async fn strict_majority_compares_the_quotes_reads() {
     }
 }
 
-/// Owner 2026-11-22 ("accept SourceAccount when self-paying"): a pay self-relayed by its own subject (the transaction's
+/// Owner 2026-11-22 (SourceAccount accepted when self-paying): a pay self-relayed by its own subject (the transaction's
 /// source is A) is simulated with A's `SourceAccount` entry, accepted, and lands; the same entry when another key pays
 /// (the source is not the subject) is refused before anything is signed.
 #[tokio::test(flavor = "multi_thread")]

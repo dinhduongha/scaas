@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! The governance-delay sentence (plan T18b; owner 2026-11-18, "as proposed"; set-auditor closing review P3-5, spec
+//! The governance-delay sentence (plan T18b; owner 2026-11-18; set-auditor closing review P3-5, spec
 //! 2026-11-17-set-auditor §4 O13): which of a power bit's delay sentences a wallet shows. The marks are
 //! `smartcontracts/vectors/governance/governance_bits.json`'s (a bit whose `sentences` hold `atOnce`, `singleKey`, `locked`);
 //! the values are read on chain as one logical read (one endpoint, the profile's final block; T26 A2-2): the token's

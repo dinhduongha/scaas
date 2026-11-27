@@ -1957,8 +1957,8 @@ async fn e2e_bls_multi_on_anvil() {
 
 /// The largest `bls12381-multi` group (unweighted, threshold `n / 2 + 1`) whose registration fitted one transaction in every
 /// run on the local Nethermind copy, a chain capping the regular gas at 2^24 (`SCAAS_M20_BLS_FIND=1` measures it again):
-/// `register_bls_multi` counts the whole raise above the table's quote as regular gas (owner 2026-11-22, "keep it as it
-/// is"; decisions CLI-SDK-32's Change), so a larger group is refused `GasAboveTxCap` and must be split. 46 sits on the
+/// `register_bls_multi` counts the whole raise above the table's quote as regular gas (owner 2026-11-22, kept as it
+/// is; decisions CLI-SDK-32's Change), so a larger group is refused `GasAboveTxCap` and must be split. 46 sits on the
 /// edge (refused in one run, sent in another: the node's estimate moves with the chain's state); 47 and 48 were refused.
 const BLS_MULTI_MAX_FIT: u32 = 45;
 /// The smallest group refused in every run (the twin above the edge).

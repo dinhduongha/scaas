@@ -1,4 +1,4 @@
-# pqz-three-keys round summary (spec 2026-11-13-pqz-three-keys; owner 2026-11-14 "Từ giờ làm đi, không cần hỏi lại"),
+# pqz-three-keys round summary (spec 2026-11-13-pqz-three-keys; owner 2026-11-14: from now on, run without asking again),
 # branch pqz-three-keys. Summaries only: each row's own summary file or commit holds its figures; full logs stay local.
 # Not pushed, not merged elsewhere. Everything cryptographic here is UNAUDITED.
 

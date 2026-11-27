@@ -15,7 +15,7 @@ chain's genesis in another row or under another chain id (CHAIN_UID_PRIVATE), a 
 a kind keeping or checking records bound to chain_uid without the chain id (`homeChainKinds`) on a genesis another row
 shares: HOME_CHAIN_SHARED_GENESIS; a kind on neither that list nor `otherKinds`: KIND_UNKNOWN.
   python3 -I script/deploybook.py kind-check <kind> <chainId> <chainUid>   the kind may deploy on this chain
-Deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"; NET-EVM-11 Change): one chain may carry more
+Deploy sets (owner 2026-11-16: option 2, one chain, two deploy sets; NET-EVM-11 Change): one chain may carry more
 than one deploy of the same build, each with its own DEPLOY_SALT, named by a set label (SETS: `mldsa-off`, the deploy with
 MLDSA_PRECOMPILE=off, the default set; `mldsa-on`, MLDSA_PRECOMPILE=on). The chain's one book then holds every set under
 `sets.<label>` (the set's own entries, its `releases_json`), and its top level stays the default set's entries

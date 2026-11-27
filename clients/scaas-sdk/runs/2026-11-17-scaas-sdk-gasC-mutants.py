@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""scaas-sdk gas-table mutants of the split sampled check (owner 2026-11-19, "approved, as proposed"): the composition check
+"""scaas-sdk gas-table mutants of the split sampled check (owner 2026-11-19): the composition check
 at a worst-case-class signature (both bounds) and the safety check of the data-dependent kinds (lower bound only), each
 mutant a moved measurement or a dropped part of the composition: python3
 clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gasC-mutants.py check | run"""

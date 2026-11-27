@@ -338,7 +338,7 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UASetCompliance", "mtxSetCompliance", GR, "bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,bytes32 chainUid,E", ""),
     // owner 2026-11-12: the factory's creations through the router (chain-neutral spec §4.4, S3), relayable at fee 0 like every
     // `mtx*`; the config is named JSON (`args.config`), the node encodes it as `initArgs` and fills the signed `initHash`.
-    // owner 2026-11-12 ("both the generic row and the per-class ones"): `mtxCreateInstance` takes `args.init_call` (bytes, the
+    // owner 2026-11-12 (both the generic row and the per-class ones): `mtxCreateInstance` takes `args.init_call` (bytes, the
     // contract's `bytes initCall`) or a known class's named `args.config` the node builds it from ([`instance_init_call`])
     ("UACreateToken", "mtxCreateToken", GR, "bytes32 from,address target,uint8 kind,uint64 version,bytes32 initHash,bytes32 salt,E",
         "E target kind version init!config:TokenConfig salt @"),
@@ -5199,7 +5199,7 @@ mod tests {
         }
     }
 
-    /// Owner 2026-11-12 (`mtxCreateInstance`, "both the generic row and the per-class ones"): a creation names `args.init_call`
+    /// Owner 2026-11-12 (`mtxCreateInstance`: both the generic row and the per-class ones): a creation names `args.init_call`
     /// (bytes) or a known class's `args.config`, never both; the node hashes the call into the signed `initHash`. The vector row
     /// `create_config.json` `instance` (forge `test_instanceInitCallKat`): `PqChat`'s named config builds the row's `initCall`,
     /// byte for byte the raw form's calldata and struct hash. Refused by name: both, neither, a job's `initHash`, a config of a

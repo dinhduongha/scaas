@@ -15,7 +15,7 @@ B3 chainspec (patch-chainspec --testnet-reset --rescue-vault-alloc, add-schedule
 B3 note | - | - | chain/engine-pqz.json carries the retired ids 0x046859a8 / 0xef1ffbcb: the pqz9 node refuses it (PQZ-REFUSE ... is not the library's, exit 120); the provisional three-key rows of 44d1c86fa used instead (testnet only, until the calibration)
 B3 throwaway node, mining off | 5fa28c6ec | 0 | genesis 0x9ae9048b...5b13; vault code = vector, nonce 1, admin 0x..01's UA, rescuer 0x..02, seq 0
 B4 reset (reset4.sh reset, explorer) | 5fa28c6ec | 0 | data dirs renamed *.pre-reset4-20261115; .bak-pre-reset4-20261115 copies; pqz7 -> pqz9 on sealer + rpc; PQZ-START sha256 29c351ec... on both; genesis as predicted; block 1 0x40da1c0b...da89; Blockscout on a fresh DB
-T-20 exit-120 drill (owner "Làm vào testnet luôn"), after B4, before the deploy | 5fa28c6ec | 0 | see T-20 below
+T-20 exit-120 drill (owner: run it on the testnet directly), after B4, before the deploy | 5fa28c6ec | 0 | see T-20 below
 B8 live checks after schedule 1 (reset4.sh check) | 5fa28c6ec | 0 | 463 ok, 0 FAIL: e2e.py probe every row; ML-DSA 59,006 / 68,006 / 135,006, valid 1 / flipped 0, exact gas through a contract call (T-21: Nethermind's own precompile lookup, warm); OP_SELFTEST d6c01fbc...
 B8 T-GAS mldsa87 (tgas.py, read only) | this commit | 0 | MldsaVerifier(0x0134).verify ~140,360 gas of execution at precompile 135,006; cap 250,000: headroom 109,640 (43.9 %); cap not moved
 chainUid in fixtures, node example, NET-EVM-02 | a9cf764e2 | 0 | DeployBook.t.sol 3 passed; test_deploybook.py ok; scaas-node example_config_builds_every_family 1 passed

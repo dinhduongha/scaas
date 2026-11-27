@@ -155,7 +155,7 @@ pub(crate) fn with_margin(g: u64) -> u64 {
     g.saturating_add(g / 2)
 }
 
-/// The kinds whose verify gas depends on the data (owner 2026-11-19, "approved, as proposed"): ed25519 (its row the forced
+/// The kinds whose verify gas depends on the data (owner 2026-11-19): ed25519 (its row the forced
 /// worst case), FN-DSA-512 / -1024 (the most of 64 salts plus `margin`).
 pub(crate) const DATA_DEPENDENT: [u16; 3] = [0x0102, 0x0132, 0x0135];
 
@@ -1524,7 +1524,7 @@ mod tests {
         assert!(line > 0);
     }
 
-    /// G2 (owner 2026-11-19, "approved"): a base row's `ua_extra` covers every variant a derived signer can sign. Its own figure
+    /// G2 (owner 2026-11-19): a base row's `ua_extra` covers every variant a derived signer can sign. Its own figure
     /// is the worst of the variants measured with the derived reference signer (`reference_rows_hold_their_sources`), the
     /// variants measured without it listed `unmeasured` (theirs is the largest measured on another variant); a row none of
     /// whose variants was measured takes the largest `ua_extra` measured for the same entry and lane state on another kind

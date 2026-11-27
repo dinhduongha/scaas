@@ -3338,7 +3338,7 @@ async fn router_creations_signed_by_an_eoa() {
     );
 }
 
-/// Owner 2026-11-12 (`mtxCreateInstance`, "both the generic row and the per-class ones"): an EOA with no gas signs two `PqChat`
+/// Owner 2026-11-12 (`mtxCreateInstance`: both the generic row and the per-class ones): an EOA with no gas signs two `PqChat`
 /// creations (class 3, kind 0) on the chain's `GovernanceRouter`, relayed at fee 0: one names its `init_call` bytes
 /// (`initialize(0, 0)`: owner 0, the setting `none`), the other the class's named config `{owner: <creator>}`, which the node builds
 /// into the call with the default setting `sstore2` (CTR-CHAT-23); both instances stand at the creator's predicted addresses with

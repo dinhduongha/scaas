@@ -19,7 +19,7 @@ import {UAKinds} from "../../../src/ua/UAKinds.sol";
 import {nid} from "../../helpers/Ids.sol";
 import {EnvKit} from "../../helpers/EnvKit.sol";
 
-/// Round 3t (CTR-PQZ-36, verifier fee spec §6.4, §15 (7); Fable P2-1, owner 2026-11-11 "Giữ cách hiện tại"): on the regulated
+/// Round 3t (CTR-PQZ-36, verifier fee spec §6.4, §15 (7); Fable P2-1, owner 2026-11-11: the current approach kept): on the regulated
 /// PQZ kinds 12 (op 1) and 13 (the unshield-unwrap) the verifier fee is a fee leg (CTR-AS-25): `_regName(verifierPayee())`
 /// refuses a frozen verifier `FeeRecipientFrozen` and a denied one `NotEligible` (the `DENYLIST` `R` check), only while
 /// `vf ≠ 0` (positive control: the same token at fee 0 passes), before `_pullShieldIn` and before the library (M17, M22);

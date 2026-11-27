@@ -35,7 +35,7 @@ interface ISdkGasCancel {
 ///         of one isolated call (`foundry.toml`: `isolate = true`) signed by the reference signer, a native EVM key (no
 ///         registry call): regular gas, `gasTotalUsed - 15,000 (the Amsterdam intrinsic cost) - the call's standard calldata
 ///         gas (4 a zero byte, 16 a non-zero byte)`, plus the call's state gas (EIP-8037, `lastFrameGas().gasStateUsed`)
-///         (owner 2026-11-19, "approved"). A fresh lane has nonce 0; a used one has its nonce slot set to 1 before the call,
+///         (owner 2026-11-19). A fresh lane has nonce 0; a used one has its nonce slot set to 1 before the call,
 ///         everything else the same. Every call starts from the same snapshot, so the payee holds nothing before it: the
 ///         worst case of a first write. Each value is a pin of `test/vectors/sdk_gas.json`: a run fails when a key is missing
 ///         or moved; `SDK_GAS_WRITE=true` merges `<key>` (the sum), `<key>_regular` and `<key>_state` into `SDK_GAS_OUT`
@@ -184,7 +184,7 @@ abstract contract SdkGasRows is SdkGasDeploy {
     /// read through `_sgN`), its index (`sgPoint`) and its key infix (`sgCountTag`, `n<count>_` or a fixture's own; empty
     /// outside a counted row, so every other key is as before).
     uint256 internal sgCount;
-    /// The line's upper check waived, by the owner's rulings of 2026-11-19 ("approved") that accept a line above the points:
+    /// The line's upper check waived, by the owner's rulings of 2026-11-19 that accept a line above the points:
     /// P1, the env publishes' `env_items` at the worst array's per-element slope (the other arrays, and an array's elements
     /// past its first, below it); P2, PQZ `mtxConfidentialTransfer` / `…Compact` (the precompile's price steps with the
     /// auditor groups). P4 ("approved"): a row whose chord is not at or above every point keeps the worst slope's line (Zether `mtxConfidentialTransferCompact`, PQZ `mtxRollOver`). The excess is refunded.
@@ -284,7 +284,7 @@ abstract contract SdkGasRows is SdkGasDeploy {
     /// I1 part 2: the line of a counted row over its points (`counts`, `tags`; a point whose count does not exceed the one
     /// before it starts a new sequence). For every key the run measured (`fresh`, `used`, `fee`, `held`, `ua`, `ua2`; a
     /// derived run `ua` only) the run's slope `s` is, on one rising sequence whose chord is at or above every point (P4,
-    /// owner 2026-11-19, "approved": tight where the cost rises faster at higher counts), the chord's: the worst over those
+    /// owner 2026-11-19: tight where the cost rises faster at higher counts), the chord's: the worst over those
     /// keys of the whole-gas rise a count from the first point to the last (rounded up), each key's intercept its line
     /// through its first point; else the worst over the keys and sequences of the whole-gas rise a count between two
     /// points, each key's intercept the largest `g(c) - s * c` over its points. `s` is pinned as
@@ -350,7 +350,7 @@ abstract contract SdkGasRows is SdkGasDeploy {
         }
     }
 
-    /// P4 (owner 2026-11-19, "approved"): on one rising sequence (`counts` strictly increasing), the chord's slope `c`, the
+    /// P4 (owner 2026-11-19): on one rising sequence (`counts` strictly increasing), the chord's slope `c`, the
     /// worst over the measured keys `g[w]` of the whole-gas rise a count from the first point to the last (rounded up), and
     /// whether each key's line through its first point at `c` is at or above every one of its points.
     function _sgChord(uint256[] memory counts, uint256[][6] memory g) internal pure returns (uint256 c, bool ok) {
