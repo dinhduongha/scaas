@@ -4,11 +4,13 @@
 //! byte: `K_e`, `P_k`, `K_v`, `kInfo`, `kPrev`, `bk` and `kFile` are `AppKey` handles of one usage each. The bytes that come
 //! out are ciphertexts, the 60-B key wraps, and the plaintexts the caller asked to open. UNAUDITED.
 use crate::content::{self, Bad};
+use crate::item::Item;
 use crate::records::{item_aad, Addr, Wrap, B32};
 use crate::Error;
 use scaas_sdk::app_core::{AppCore, AppKey, AppKeyUsage as U, AppNonce, AppWrap, SecretBytes};
 use scaas_sdk::op::KeyRef;
 use std::sync::Arc;
+use zeroize::Zeroizing;
 
 /// Every label of PqVault starts with it; the scope declares it (nothing below the SDK knows it).
 pub const PREFIX: &str = "scaas/pqvault/v1/";
@@ -139,9 +141,9 @@ pub fn seal_info(
     epoch: B32,
     info: &serde_json::Value,
 ) -> Result<Vec<u8>, Error> {
-    let pt = content::pad_info(content::canonical(info)?.as_bytes())?;
+    let mut pt = content::pad_info(content::canonical(info)?.as_bytes())?;
     let k = info_key(core, kv, vault, epoch)?;
-    Ok(core.seal(k, AppNonce::Random, vec![], pt)?)
+    Ok(core.seal(k, AppNonce::Random, vec![], std::mem::take(&mut *pt))?)
 }
 
 /// The JSON of `sealedInfo` under `kv`; `None` when its tag, padding or JSON fails (the caller names it: a wrong passphrase,
@@ -157,8 +159,7 @@ pub fn open_info(
     let pt = core
         .open(k, AppNonce::Random, vec![], sealed.to_vec())
         .ok()?;
-    let c = pt.with(|b| content::unpad(b, true)).ok()?;
-    content::parse_canonical(&c)
+    pt.with(|b| content::unpad(b, true).and_then(content::parse_canonical))
         .ok()
         .filter(serde_json::Value::is_object)
 }
@@ -259,28 +260,30 @@ fn item_key(core: &AppCore, kv: &Arc<AppKey>, r: &[u8], x: &ItemAt) -> Result<Ar
     )?)
 }
 
-/// `ciphertext = r ‖ AES-256-GCM-SIV(bk, n, pt, aad)`, `r` 16 fresh random bytes, `(bk, n)` one HKDF output under `K_v`.
+/// `ciphertext = r ‖ AES-256-GCM-SIV(bk, n, pt, aad)`, `r` 16 fresh random bytes, `(bk, n)` one HKDF output under `K_v`; the
+/// plaintext's buffer handed to the SDK, which wipes it.
 pub fn encrypt_item(
     core: &AppCore,
     seed: &str,
     kv: &Arc<AppKey>,
     x: &ItemAt,
-    pt: Vec<u8>,
+    mut pt: Zeroizing<Vec<u8>>,
 ) -> Result<Vec<u8>, Error> {
     let r = core.random_bytes(seed, 16)?;
     let bk = item_key(core, kv, &r, x)?;
-    let ct = core.seal(bk, AppNonce::FromKey, x.aad(), pt)?;
+    let ct = core.seal(bk, AppNonce::FromKey, x.aad(), std::mem::take(&mut *pt))?;
     Ok([r, ct].concat())
 }
 
-/// The item a ciphertext holds under `kv` at `x`: its length, the tag, the padding, canonical JSON. Every failure is the one
-/// local `Unreadable` (ARCH-POS-13: nothing says which check failed, and nothing is sent).
+/// The item a ciphertext holds under `kv` at `x`: its length, the tag, the padding, canonical JSON, each field typed by the
+/// table and parsed inside the plaintext's secret buffer (CLI-PQV-16 H1). Every failure is the one local `Unreadable`
+/// (ARCH-POS-13: nothing says which check failed, and nothing is sent).
 pub fn decrypt_item(
     core: &AppCore,
     kv: &Arc<AppKey>,
     x: &ItemAt,
     ct: &[u8],
-) -> Result<serde_json::Value, Error> {
+) -> Result<Item, Error> {
     if !(CT_MIN..=CT_MAX).contains(&ct.len()) {
         return Err(Error::Unreadable);
     }
@@ -289,7 +292,7 @@ pub fn decrypt_item(
     let pt = core
         .open(bk, AppNonce::FromKey, x.aad(), body.to_vec())
         .map_err(|_| Error::Unreadable)?;
-    pt.with(content::item_of).map_err(|_| Error::Unreadable)
+    pt.with(Item::from_plaintext).map_err(|_| Error::Unreadable)
 }
 
 /// A `file` item's key (spec §6.8): `seal_key` of the file key (a `Data` handle) under `kFile = HKDF(K_v, "…/file" ‖ vaultId ‖

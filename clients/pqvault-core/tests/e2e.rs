@@ -2,8 +2,9 @@
 //! Plan V10e (and V10's chain rows): the real client on a local `anvil` (ignored by default: needs `anvil`, `forge`, `cast` and
 //! `smartcontracts/evm/lib`; run by `runs/<date>-pqvault-e2e.sh`, capped, foreground). The contracts' own `script/Deploy.s.sol`
 //! deploys the registry, the factory and a PqVault instance (`DEPLOY_PQVAULT`); every member's UA (FN-DSA-512, its KEM key
-//! ML-KEM-1024 + X25519) is registered through the SDK; every record is built and signed by `pqvault-core` over the SDK,
-//! prepared by the SDK's `prepare_app_call` and sent by `submit_native_send` (the seed's EVM key pays, fee 0); every read is
+//! ML-KEM-1024 + X25519) is registered through the SDK; every record is built by `pqvault-core` over the SDK and quoted
+//! before its signature (`quote_app_call`), signed on the confirm (`PqVault::confirm`), prepared by the SDK's
+//! `prepare_app_call` and sent by `submit_native_send` (the seed's EVM key pays, fee 0); every read is
 //! the SDK's `read_app`. No step calls `scaas-ua` or the contract directly except `cast` reads that compare raw state, and the
 //! factory's second instance (a replica) made by the deployer. Local only; nothing leaves the machine.
 #![allow(
@@ -336,6 +337,23 @@ async fn register_on(d: &Device, key: &KeyRef, chain: &str) {
     }
 }
 
+/// A prepared write confirmed (its one signing call, then the call's simulation) and sent: the signed record.
+async fn sent<R: Record>(pv: &PqVault, d: &Device, p: Prepared<R>) -> Signed<R> {
+    let c = pv.confirm(p).await.unwrap();
+    send(d, c.call.unwrap()).await;
+    c.signed
+}
+
+/// The item of a test's JSON (its canonical bytes read by the item layer).
+fn as_item(v: &Value) -> Item {
+    Item::from_canonical(content::canonical(v).unwrap().as_bytes()).unwrap()
+}
+
+/// A test's JSON of an item (its canonical bytes).
+fn json_of(i: &Item) -> Value {
+    serde_json::from_slice(&i.canonical().unwrap()).unwrap()
+}
+
 /// A prepared call sent by the SDK and followed: `Landed`.
 async fn send(d: &Device, call: AppCall) {
     let op = d.sdk.wallet().submit_native_send(call.quote).await.unwrap();
@@ -368,15 +386,17 @@ fn info(name: &str, shared: bool) -> VaultInfo {
     }
 }
 
-fn login(title: &str, pw: &str) -> Value {
-    json!({"type": "login", "title": title, "username": "u@example.org", "password": pw,
-        "urls": [{"url": "https://example.org", "match": "host"}]})
+fn login(title: &str, pw: &str) -> Item {
+    as_item(
+        &json!({"type": "login", "title": title, "username": "u@example.org", "password": pw,
+        "urls": [{"url": "https://example.org", "match": "host"}]}),
+    )
 }
 
 fn values(v: &[ItemVersion]) -> Vec<Value> {
     let mut out: Vec<Value> = v
         .iter()
-        .map(|x| x.value.as_ref().unwrap().clone())
+        .map(|x| json_of(x.value.as_ref().unwrap()))
         .collect();
     out.sort_by_key(|x| x["title"].as_str().unwrap_or_default().to_string());
     out
@@ -392,17 +412,11 @@ async fn create(
     pass: &Passphrase,
     i: &VaultInfo,
 ) -> VaultState {
-    let (s, wraps) = pv
-        .create_vault(key, i, members, at, mode, pass)
+    let p = pv
+        .create_vault(key, i, members, at, mode, pass, d.payer.clone())
         .await
         .unwrap();
-    send(
-        d,
-        pv.prepare_create(at, &s, &wraps, d.payer.clone())
-            .await
-            .unwrap(),
-    )
-    .await;
+    let s = sent(pv, d, p).await;
     let vid = vault_id(
         s.record.creator,
         s.record.nonce.0,
@@ -503,6 +517,18 @@ impl Net for Seam {
         self.calls.lock().unwrap().push("call".into());
         self.inner.call(c, ct, s, a, p).await
     }
+    async fn quote(
+        &self,
+        c: &str,
+        ct: Addr,
+        s: &str,
+        a: Value,
+        p: KeyRef,
+        k: KeyRef,
+    ) -> Result<scaas_sdk::app_core::AppQuote, SdkError> {
+        self.calls.lock().unwrap().push("quote".into());
+        self.inner.quote(c, ct, s, a, p, k).await
+    }
 }
 
 fn seamed(d: &Device) -> (PqVault, Arc<Seam>) {
@@ -574,71 +600,88 @@ async fn personal_vault_recovery_conflict_passphrase() {
     .await;
     say("index and personal vaults created");
     let iu = pv.unlock(&k0, idx.clone(), &Passphrase::Off).await.unwrap();
-    let r = pv.accept(&iu, &per, true, Some(1)).await.unwrap();
-    send(&d, pv.prepare_item(&at, &r, d.payer.clone()).await.unwrap()).await;
+    let r = pv
+        .accept(&iu, &per, true, Some(1), d.payer.clone())
+        .await
+        .unwrap();
+    sent(&pv, &d, r).await;
 
     // items, an edit, a batch
     let u = pv
         .unlock(&k1, per.clone(), &Passphrase::Given(sec(PASS.as_bytes())))
         .await
         .unwrap();
-    let it = pv.create_item(&u, &login("mail", "p1")).await.unwrap();
-    send(
-        &d,
-        pv.prepare_item(&at, &it, d.payer.clone()).await.unwrap(),
-    )
-    .await;
-    let latest = pv.open_latest(&u).await.unwrap();
-    assert_eq!(values(&latest), vec![login("mail", "p1")]);
-    let base = &latest[0];
-    // two devices write n + 1 from the same base: the first lands, the second is refused (PqVaultVersion)
-    let e1 = pv.edit_item(&u, base, &login("mail", "p2")).await.unwrap();
-    let mut ours = login("mail", "p1");
-    ours["notes"] = json!("from device 2");
-    let e2 = pv.edit_item(&u, base, &ours).await.unwrap();
-    send(
-        &d,
-        pv.prepare_edit(&at, &e1, d.payer.clone()).await.unwrap(),
-    )
-    .await;
-    assert!(
-        pv.prepare_edit(&at, &e2, d.payer.clone()).await.is_err(),
-        "the second n + 1 is refused"
-    );
-    let (e3, m) = pv
-        .resolve(&u, &login("mail", "p1"), &ours, base.item_id)
+    let it = pv
+        .create_item(&u, &login("mail", "p1"), d.payer.clone())
         .await
         .unwrap();
-    assert_eq!(e3.record.version.0, 3);
+    sent(&pv, &d, it).await;
+    let latest = pv.open_latest(&u).await.unwrap();
+    assert_eq!(values(&latest), vec![json_of(&login("mail", "p1"))]);
+    let base = &latest[0];
+    // two devices write n + 1 from the same base: the first lands, the second is refused (PqVaultVersion) by the
+    // simulation that follows its signature
+    let e1 = pv
+        .edit_item(&u, base, &login("mail", "p2"), d.payer.clone())
+        .await
+        .unwrap();
+    let mut ours = login("mail", "p1");
+    ours.set("notes", Field::Plain(json!("from device 2")));
+    let e2 = pv
+        .edit_item(&u, base, &ours, d.payer.clone())
+        .await
+        .unwrap();
+    sent(&pv, &d, e1).await;
+    let refused = pv.confirm(e2).await.unwrap();
+    assert!(
+        refused.call.is_err(),
+        "the second n + 1 is refused by the simulation after its signature"
+    );
+    let (e3, m) = pv
+        .resolve(
+            &u,
+            &login("mail", "p1"),
+            &ours,
+            base.item_id,
+            d.payer.clone(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(e3.record().version.0, 3);
     let Merge::Clean(merged) = m else {
         panic!("{m:?}")
     };
+    let merged = json_of(&merged);
     assert_eq!(merged["password"], "p2");
     assert_eq!(merged["notes"], "from device 2");
-    send(
-        &d,
-        pv.prepare_edit(&at, &e3, d.payer.clone()).await.unwrap(),
-    )
-    .await;
+    sent(&pv, &d, e3).await;
     say("conflict merged as version 3");
-    let notes: Vec<Value> = (0..5)
+    let notes: Vec<Item> = (0..5)
         .map(|i| {
-            json!({"type": "note", "title": format!("n{i}"), "mediaType": "text/plain",
-        "body": "x".repeat(600)})
+            as_item(
+                &json!({"type": "note", "title": format!("n{i}"), "mediaType": "text/plain",
+        "body": "x".repeat(600)}),
+            )
         })
         .collect();
     let small = ChainLimits {
         max_gas: 400_000 + 3 * 150_000 + 3 * 1100 * 700,
         ..LIMITS
     };
-    let batches = pv.create_items(&u, &notes, &small).await.unwrap();
+    let batches = pv
+        .create_items(&u, &notes, &small, d.payer.clone())
+        .await
+        .unwrap();
     assert!(batches.len() >= 2, "sized by the limits: {}", batches.len());
     assert_eq!(
-        batches.iter().map(|b| b.record.items.len()).sum::<usize>(),
+        batches
+            .iter()
+            .map(|b| b.record().items.len())
+            .sum::<usize>(),
         5
     );
-    for b in &batches {
-        send(&d, pv.prepare_batch(&at, b, d.payer.clone()).await.unwrap()).await;
+    for b in batches {
+        sent(&pv, &d, b).await;
     }
     let all = pv.open_latest(&u).await.unwrap();
     assert_eq!(all.len(), 6);
@@ -715,24 +758,19 @@ async fn personal_vault_recovery_conflict_passphrase() {
         .unwrap();
     pv.open_latest(&u).await.unwrap();
     const NEW: &str = "a new passphrase for the vault";
-    let (e, wraps, x) = pv
+    let (e, x) = pv
         .rekey(
             &u,
             &u.state.newest().unwrap().members,
             &[u.state.me],
             Some(&Passphrase::On(sec(NEW.as_bytes()))),
             Link::Prev,
+            d2.payer.clone(),
         )
         .await
         .unwrap();
     assert!(!x.weaker);
-    send(
-        &d2,
-        pv.prepare_rekey(&at, &e, &wraps, d2.payer.clone())
-            .await
-            .unwrap(),
-    )
-    .await;
+    sent(&pv, &d2, e).await;
     let s = pv.load(&at, per.vault_id, u.state.me).await.unwrap();
     let un = pv
         .unlock(&k1b, s.clone(), &Passphrase::Given(sec(NEW.as_bytes())))
@@ -742,28 +780,25 @@ async fn personal_vault_recovery_conflict_passphrase() {
     assert_eq!(values(&pv.open_latest(&un).await.unwrap()), want);
     // an item under the new epoch beside those under the old: each opens under its own epoch's key only
     let it = pv
-        .create_item(&un, &login("after the change", "c1"))
+        .create_item(&un, &login("after the change", "c1"), d2.payer.clone())
         .await
         .unwrap();
-    assert_ne!(it.record.epoch_id, per.vault_id);
-    send(
-        &d2,
-        pv.prepare_item(&at, &it, d2.payer.clone()).await.unwrap(),
-    )
-    .await;
+    assert_ne!(it.record().epoch_id, per.vault_id);
+    sent(&pv, &d2, it).await;
     let mut want = want;
-    want.push(login("after the change", "c1"));
+    want.push(json_of(&login("after the change", "c1")));
     want.sort_by_key(|x| x["title"].as_str().unwrap_or_default().to_string());
     assert_eq!(values(&pv.open_latest(&un).await.unwrap()), want);
     // the exposure of a weaker rekey that links prev (passphrase off): every item and version it would open (built, not sent)
     let latest = pv.open_latest(&un).await.unwrap();
-    let (_, _, x) = pv
+    let (_, x) = pv
         .rekey(
             &un,
             &un.state.newest().unwrap().members,
             &[un.state.me],
             Some(&Passphrase::Off),
             Link::Prev,
+            d2.payer.clone(),
         )
         .await
         .unwrap();
@@ -790,28 +825,24 @@ async fn personal_vault_recovery_conflict_passphrase() {
         "the old passphrase: the new epoch cannot be opened"
     );
     assert!(matches!(
-        pv.create_item(&old, &login("x", "y")).await,
+        pv.create_item(&old, &login("x", "y"), d2.payer.clone())
+            .await,
         Err(Error::EpochUnopenable { epoch: 1, .. })
     ));
     // passphrase off then on again without prev: a fresh epoch without history
-    let (e, wraps, x) = pv
+    let (e, x) = pv
         .rekey(
             &un,
             &un.state.newest().unwrap().members,
             &[un.state.me],
             Some(&Passphrase::Off),
             Link::None,
+            d2.payer.clone(),
         )
         .await
         .unwrap();
     assert!(x.weaker);
-    send(
-        &d2,
-        pv.prepare_rekey(&at, &e, &wraps, d2.payer.clone())
-            .await
-            .unwrap(),
-    )
-    .await;
+    sent(&pv, &d2, e).await;
     let s = pv.load(&at, per.vault_id, un.state.me).await.unwrap();
     let off = pv.unlock(&k1b, s, &Passphrase::Off).await.unwrap();
     assert_eq!(
@@ -878,7 +909,7 @@ async fn personal_vault_recovery_conflict_passphrase() {
     };
     send(
         &d2,
-        pv.prepare_rekey(&at, &signed, &[w], d2.payer.clone())
+        pv.prepare_signed(&at, &signed, &[w], d2.payer.clone())
             .await
             .unwrap(),
     )
@@ -949,7 +980,7 @@ async fn shared_vault_both_modes() {
     // one PqVault scope per process at a time (spec §12.3): each device's phase opens its own and drops it
     for mode in [Mode::Portable, Mode::ChainBound] {
         let given = || Passphrase::Given(sec(PASS.as_bytes()));
-        let both = vec![login("by A", "a1"), login("by B", "b1")];
+        let both = vec![json_of(&login("by A", "a1")), json_of(&login("by B", "b1"))];
         // A: the vault and A's item
         let (pa, seam) = seamed(&da);
         let ua = pa.ua(&ka).unwrap();
@@ -971,12 +1002,11 @@ async fn shared_vault_both_modes() {
         .await;
         let vid = s.vault_id;
         let u = pa.unlock(&ka, s, &given()).await.unwrap();
-        let it = pa.create_item(&u, &login("by A", "a1")).await.unwrap();
-        send(
-            &da,
-            pa.prepare_item(&at, &it, da.payer.clone()).await.unwrap(),
-        )
-        .await;
+        let it = pa
+            .create_item(&u, &login("by A", "a1"), da.payer.clone())
+            .await
+            .unwrap();
+        sent(&pa, &da, it).await;
         drop((u, pa, seam));
         // B: pending until accepted; then reads A's item and writes its own
         let pb = PqVault::new(db.sdk.clone()).unwrap();
@@ -989,12 +1019,11 @@ async fn shared_vault_both_modes() {
         ));
         sb.pending = false; // the user accepted it (the vaultRef itself is the personal test's)
         let u = pb.unlock(&kb, sb, &given()).await.unwrap();
-        let it = pb.create_item(&u, &login("by B", "b1")).await.unwrap();
-        send(
-            &db,
-            pb.prepare_item(&at, &it, db.payer.clone()).await.unwrap(),
-        )
-        .await;
+        let it = pb
+            .create_item(&u, &login("by B", "b1"), db.payer.clone())
+            .await
+            .unwrap();
+        sent(&pb, &db, it).await;
         assert_eq!(values(&pb.open_latest(&u).await.unwrap()), both);
         drop((u, pb));
         // A: reads B's item; a lying node; removes B and rekeys without it
@@ -1005,23 +1034,18 @@ async fn shared_vault_both_modes() {
             .unwrap();
         assert_eq!(values(&pa.open_latest(&u).await.unwrap()), both);
         say(&format!("{mode:?}: A and B read each other's items"));
-        let (e, wraps, _) = pa
+        let (e, _) = pa
             .rekey(
                 &u,
                 &u.state.newest().unwrap().members,
                 &[ua],
                 None,
                 Link::Prev,
+                da.payer.clone(),
             )
             .await
             .unwrap();
-        send(
-            &da,
-            pa.prepare_rekey(&at, &e, &wraps, da.payer.clone())
-                .await
-                .unwrap(),
-        )
-        .await;
+        sent(&pa, &da, e).await;
         *seam.lie.lock().unwrap() = true;
         assert!(
             matches!(pa.load(&at, vid, ua).await, Err(Error::ChainUnverified)),
@@ -1039,43 +1063,29 @@ async fn shared_vault_both_modes() {
             .await
             .unwrap();
         pa.open_latest(&u).await.unwrap();
-        let (r, affected) = pa.remove(&u, &[ub]).await.unwrap();
+        let (r, affected) = pa.remove(&u, &[ub], da.payer.clone()).await.unwrap();
         assert_eq!(
             affected.len(),
             2,
             "both items' latest versions were readable by B"
         );
-        send(
-            &da,
-            pa.prepare_remove(&at, &r, da.payer.clone()).await.unwrap(),
-        )
-        .await;
+        sent(&pa, &da, r).await;
         let u = pa
             .unlock(&ka, pa.load(&at, vid, ua).await.unwrap(), &given())
             .await
             .unwrap();
-        let (e, wraps, _) = pa
-            .rekey(&u, &[member(ua)], &[ua], None, Link::Prev)
+        let (e, _) = pa
+            .rekey(&u, &[member(ua)], &[ua], None, Link::Prev, da.payer.clone())
             .await
             .unwrap();
-        send(
-            &da,
-            pa.prepare_rekey(&at, &e, &wraps, da.payer.clone())
-                .await
-                .unwrap(),
-        )
-        .await;
+        sent(&pa, &da, e).await;
         let home = pa.load(&at, vid, ua).await.unwrap();
         let u = pa.unlock(&ka, home.clone(), &given()).await.unwrap();
         let it = pa
-            .create_item(&u, &login("after B left", "z"))
+            .create_item(&u, &login("after B left", "z"), da.payer.clone())
             .await
             .unwrap();
-        send(
-            &da,
-            pa.prepare_item(&at, &it, da.payer.clone()).await.unwrap(),
-        )
-        .await;
+        sent(&pa, &da, it).await;
         match mode {
             Mode::Portable => {
                 // the replica: the same signed create record and wraps at the second instance
@@ -1095,7 +1105,7 @@ async fn shared_vault_both_modes() {
                 };
                 send(
                     &da,
-                    pa.prepare_create(&replica, &signed, &wraps, da.payer.clone())
+                    pa.prepare_signed(&replica, &signed, &wraps, da.payer.clone())
                         .await
                         .unwrap(),
                 )
@@ -1110,16 +1120,10 @@ async fn shared_vault_both_modes() {
                     .unwrap();
                 let u0 = pa.unlock(&ka, s0, &given()).await.unwrap();
                 let only = pa
-                    .create_item(&u0, &login("replica only", "r"))
+                    .create_item(&u0, &login("replica only", "r"), da.payer.clone())
                     .await
                     .unwrap();
-                send(
-                    &da,
-                    pa.prepare_item(&replica, &only, da.payer.clone())
-                        .await
-                        .unwrap(),
-                )
-                .await;
+                sent(&pa, &da, only).await;
                 assert!(
                     !pa.replica_agrees(&home, &replica).await.unwrap(),
                     "a divergent replica is found"
@@ -1349,14 +1353,10 @@ async fn kem_rotation_and_msig_admin() {
         "no box for another set"
     );
     let it = pa
-        .create_item(&u, &login("before rotation", "r0"))
+        .create_item(&u, &login("before rotation", "r0"), da.payer.clone())
         .await
         .unwrap();
-    send(
-        &da,
-        pa.prepare_item(&at, &it, da.payer.clone()).await.unwrap(),
-    )
-    .await;
+    sent(&pa, &da, it).await;
     drop((u, pa));
     let w = db
         .sdk
@@ -1393,31 +1393,24 @@ async fn kem_rotation_and_msig_admin() {
         .find(|m| m.ua == ua)
         .unwrap()
         .clone();
-    let (e, wraps, _) = pa
-        .rekey(&u, &[ma, mb1], &[ua], None, Link::Prev)
+    let (e, _) = pa
+        .rekey(&u, &[ma, mb1], &[ua], None, Link::Prev, da.payer.clone())
         .await
         .unwrap();
-    assert_eq!(wraps.iter().find(|w| w.member == ub).unwrap().key_id.0, 1);
-    send(
-        &da,
-        pa.prepare_rekey(&at, &e, &wraps, da.payer.clone())
-            .await
-            .unwrap(),
-    )
-    .await;
+    assert_eq!(
+        e.wraps().iter().find(|w| w.member == ub).unwrap().key_id.0,
+        1
+    );
+    sent(&pa, &da, e).await;
     let u = pa
         .unlock(&ka, pa.load(&at, vid, ua).await.unwrap(), &given())
         .await
         .unwrap();
     let it = pa
-        .create_item(&u, &login("after rotation", "r1"))
+        .create_item(&u, &login("after rotation", "r1"), da.payer.clone())
         .await
         .unwrap();
-    send(
-        &da,
-        pa.prepare_item(&at, &it, da.payer.clone()).await.unwrap(),
-    )
-    .await;
+    sent(&pa, &da, it).await;
     drop((u, pa));
     let pb = PqVault::new(db.sdk.clone()).unwrap();
     let mut sb = pb.load(&at, vid, ub).await.unwrap();
@@ -1437,8 +1430,8 @@ async fn kem_rotation_and_msig_admin() {
     assert_eq!(
         values(&pb.open_latest(&u).await.unwrap()),
         vec![
-            login("after rotation", "r1"),
-            login("before rotation", "r0")
+            json_of(&login("after rotation", "r1")),
+            json_of(&login("before rotation", "r0"))
         ]
     );
     drop((u, pb));
@@ -1657,19 +1650,24 @@ async fn kem_rotation_and_msig_admin() {
         let vid = s.vault_id;
         let u = pa.unlock(&ka, s, &Passphrase::Off).await.unwrap();
         let it = pa
-            .create_item(&u, &login("under epoch 0", "m0"))
+            .create_item(&u, &login("under epoch 0", "m0"), da.payer.clone())
             .await
             .unwrap();
-        send(
-            &da,
-            pa.prepare_item(&at, &it, da.payer.clone()).await.unwrap(),
-        )
-        .await;
+        sent(&pa, &da, it).await;
         let ms0 = u.state.newest().unwrap().members.clone();
         assert!(
             matches!(
-                pa.rekey_by(&u, &msig, m, &ms0, &[ua], None, Link::Prev)
-                    .await,
+                pa.rekey_by(
+                    &u,
+                    &msig,
+                    m,
+                    &ms0,
+                    &[ua],
+                    None,
+                    Link::Prev,
+                    da.payer.clone()
+                )
+                .await,
                 Err(Error::NotAdmin)
             ),
             "M before it is an admin"
@@ -1678,34 +1676,34 @@ async fn kem_rotation_and_msig_admin() {
         let mut admins = vec![ua, m];
         admins.sort();
         let ms = u.state.newest().unwrap().members.clone();
-        let (e, wraps, _) = pa.rekey(&u, &ms, &admins, None, Link::Prev).await.unwrap();
-        send(
-            &da,
-            pa.prepare_rekey(&at, &e, &wraps, da.payer.clone())
-                .await
-                .unwrap(),
-        )
-        .await;
+        let (e, _) = pa
+            .rekey(&u, &ms, &admins, None, Link::Prev, da.payer.clone())
+            .await
+            .unwrap();
+        sent(&pa, &da, e).await;
         let u = pa
             .unlock(&ka, pa.load(&at, vid, ua).await.unwrap(), &Passphrase::Off)
             .await
             .unwrap();
         // M authors the next epoch, signed by both its members
-        let (e, wraps, _) = pa
-            .rekey_by(&u, &msig, m, &ms, &admins, None, Link::Prev)
+        let (e, _) = pa
+            .rekey_by(
+                &u,
+                &msig,
+                m,
+                &ms,
+                &admins,
+                None,
+                Link::Prev,
+                da.payer.clone(),
+            )
             .await
             .unwrap();
-        assert_eq!(e.record.author, m);
+        assert_eq!(e.record().author, m);
+        let e = sent(&pa, &da, e).await;
         assert!(
             e.sig.key_data.is_empty() && e.sig.signature.is_empty() && e.sig.members.len() == 2
         );
-        send(
-            &da,
-            pa.prepare_rekey(&at, &e, &wraps, da.payer.clone())
-                .await
-                .unwrap(),
-        )
-        .await;
         let s = pa.load(&at, vid, ua).await.unwrap();
         assert_eq!(
             s.newest().unwrap().author,
@@ -1716,7 +1714,7 @@ async fn kem_rotation_and_msig_admin() {
         assert_eq!(u.readable().len(), 3);
         assert_eq!(
             values(&pa.open_latest(&u).await.unwrap()),
-            vec![login("under epoch 0", "m0")]
+            vec![json_of(&login("under epoch 0", "m0"))]
         );
         drop((u, pa));
         say(&format!("{mode:?}: the msig admin's epoch verified"));
@@ -1787,8 +1785,9 @@ fn deploy_line(rpc: &str, chain_id: u64) -> (Value, String) {
     )
 }
 
-/// Controller call 2026-11-22 (CLI-PQV-15, F2): PqVault's dedicated path on a registry line of two generations (chain 31930,
-/// its own). The profile `g2` binds generation 2, `g1` generation 1, where the FN-DSA-512 UA and the `msig` M of it and a
+/// Controller call 2026-11-22 (CLI-PQV-15, F2): PqVault's dedicated path on a registry line of two generations (its own
+/// anvil at anvil's chain id 31337: the SDK takes the head as final only there, owner 2026-11-23, T26 B-22; chain 31930
+/// before 2026-11-27). The profile `g2` binds generation 2, `g1` generation 1, where the FN-DSA-512 UA and the `msig` M of it and a
 /// native EVM key are registered (generation 2 holds neither). Through `g2`: M's chain-bound record is signed with its native
 /// member over `UAAuth` in generation 1's domain (M's holder), generation 2's `requireAuthorized` forwards it there and
 /// accepts it, and `verify_pqvault_record` agrees; the native key signing alone is generation 2's (its own check); the same
@@ -1800,9 +1799,9 @@ async fn pqvault_records_on_a_two_generation_line() {
     use scaas_sdk::account::{msig_structure, MsigMemberArgs, MsigRegister};
     use scaas_sdk::app_core::AppUaSig;
     use scaas_sdk::op::MsigSlot;
-    const CHAIN: u64 = 31930;
+    const CHAIN: u64 = 31337;
     let (_a, rpc) = anvil_on(CHAIN).await;
-    say("anvil up (31930); deploying generations 1 and 2");
+    say("anvil up (31337); deploying generations 1 and 2");
     let (dep, gen2) = deploy_line(&rpc, CHAIN);
     let gen1 = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
     let inst = dep["pqvault_instance"]

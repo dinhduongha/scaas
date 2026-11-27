@@ -560,6 +560,15 @@ fn word32(n: u64) -> Vec<u8> {
 }
 
 async fn on_fake(factory: Option<&str>, class: scaas_rpc::Class) -> (Arc<Sdk>, String, Fake) {
+    on_fake_gas(factory, class, Default::default()).await
+}
+
+/// [`on_fake`] with the chain profile's measured gas rows `gas`.
+async fn on_fake_gas(
+    factory: Option<&str>,
+    class: scaas_rpc::Class,
+    gas: scaas_sdk::GasRows,
+) -> (Arc<Sdk>, String, Fake) {
     let chain = fake();
     let url = serve(chain.clone()).await;
     let mut p = profile();
@@ -567,6 +576,7 @@ async fn on_fake(factory: Option<&str>, class: scaas_rpc::Class) -> (Arc<Sdk>, S
     p.rpc[0].url = url;
     p.rpc[0].class = class;
     p.factory = factory.map(Into::into);
+    p.gas = gas;
     let s = Sdk::open(SdkConfig {
         profiles: vec![p],
         store: MemoryStore::new(),
@@ -1243,6 +1253,151 @@ async fn prepare_app_call_builds_named_calldata() {
         "a tuple without a component"
     );
     assert!(call(APP_CONTRACT, args).await.is_ok());
+}
+
+/// CLI-SDK-36: `quote_app_call` quotes a call of the app's contract before its record is signed, from the gas rows alone: the
+/// rows `(entry, "app", signer kind, not fresh)` and the transaction row of the chain profile give the figure (no simulation:
+/// the fake chain's estimate is never asked, so a call that would revert still quotes); without the entry's row the call is
+/// unquoted (`quote` none), its review still built; the contract checks of `prepare_app_call` hold (a listed token refused).
+#[tokio::test(flavor = "multi_thread")]
+async fn quote_app_call_reads_the_gas_rows_before_the_signature() {
+    let base = |entry: &str, gas: u64| scaas_sdk::GasBase {
+        entry: entry.into(),
+        kind: "app".into(),
+        fresh: false,
+        gas,
+        per_byte: None,
+        save: None,
+        fee_extra: None,
+        ua_extra: None,
+        per_item: None,
+        regular: None,
+    };
+    let tx = scaas_sdk::GasBase {
+        entry: "transaction".into(),
+        kind: "evm".into(),
+        per_byte: Some(scaas_sdk::GasPerByte {
+            input: "calldata".into(),
+            gas: 64,
+        }),
+        ..base("transaction", 21_000)
+    };
+    let verify = scaas_sdk::GasVerify {
+        signer: 0x0132,
+        gas: 300_000,
+        sig_bytes: 1000,
+        margin: 0,
+        per_item: None,
+        line: Default::default(),
+    };
+    let rows = scaas_sdk::GasRows {
+        base: vec![base("putNote", 500_000), tx],
+        verify: vec![verify],
+    };
+    let (s, seed, chain) = on_fake_gas(Some(FACTORY), scaas_rpc::Class::Named, rows).await;
+    let mut d = desc(Some(APP_ID), &["scaas/quote/v1/"]);
+    d.class = Some(7);
+    let a = AppCore::new(s.clone(), d).unwrap();
+    let mut c = [0u8; 32];
+    c[12..].copy_from_slice(&alloy::hex::decode(&APP_CONTRACT[2..]).unwrap());
+    let info = format!(
+        "{}{}{}{}{}{}{}",
+        hexs(&c),
+        w(9),
+        w(7),
+        w(1),
+        w(1),
+        w(1),
+        w(1)
+    );
+    answer(&chain, FACTORY, "infoOf(address)", &c, info);
+    let payer = KeyRef::Native {
+        seed: seed.clone(),
+        network: "evm".into(),
+        index: 0,
+    };
+    let signer = KeyRef::Ua {
+        seed: seed.clone(),
+        kind: 0x0132,
+        account: 0,
+        index: 0,
+    };
+    let entry = |name: &str| {
+        json!({"type": "function", "name": name, "stateMutability": "nonpayable", "outputs": [], "inputs": [
+            {"name": "id", "type": "bytes32"},
+            {"name": "sig", "type": "tuple", "components": [{"name": "keyData", "type": "bytes"},
+                {"name": "signature", "type": "bytes"}, {"name": "members", "type": "tuple[]", "components": [
+                    {"name": "index", "type": "uint16"},
+                    {"name": "members", "type": "tuple[]", "components": [{"name": "index", "type": "uint16"},
+                        {"name": "sig", "type": "bytes"}]},
+                    {"name": "sig", "type": "bytes"}]}]}]})
+        .to_string()
+    };
+    let args = json!({"id": format!("0x{}", "11".repeat(32)),
+        "sig": {"keyData": "0x", "signature": "0x", "members": []}})
+    .to_string();
+    let quote_by = |contract: &str, name: &str, p: KeyRef, k: KeyRef| {
+        let (a, contract, e, args) = (a.clone(), contract.to_string(), entry(name), args.clone());
+        async move {
+            a.quote_app_call("local".into(), contract, e, args, p, k)
+                .await
+        }
+    };
+    let quote =
+        |contract: &str, name: &str| quote_by(contract, name, payer.clone(), signer.clone());
+    let got = quote(APP_CONTRACT, "putNote").await.unwrap();
+    let q = got.quote.expect("the rows quote it");
+    assert_eq!(
+        q.gas_from,
+        Some(scaas_sdk::op::GasSources {
+            base: scaas_sdk::op::GasFrom::Chain,
+            verify: scaas_sdk::op::GasFrom::Chain,
+        })
+    );
+    // base + verify (with its 1000 signature bytes at 64 gas) + the intrinsic cost + the unsigned calldata at 64, plus half
+    let calldata = 4 + 32 * 8;
+    let g = 500_000 + 300_000 + 1000 * 64 + 21_000 + calldata * 64;
+    assert_eq!(q.gas, Some(g + g / 2));
+    assert!(got
+        .review
+        .iter()
+        .any(|f| f.name == "entry" && f.value.starts_with("putNote(bytes32,")));
+    // the twin without the entry's row: unquoted, the review still there
+    let none = quote(APP_CONTRACT, "putOther").await.unwrap();
+    assert!(none.quote.is_none());
+    assert!(none.review.iter().any(|f| f.name == "contract"));
+    assert_eq!(
+        code(quote(TOKEN, "putNote").await),
+        "AppDomainRefused",
+        "a listed token"
+    );
+    // review A-6: a signer kind without a verify row, an `msig` signer: unquoted, never another kind's figure
+    let mldsa = KeyRef::Ua {
+        seed: seed.clone(),
+        kind: 0x0130,
+        account: 0,
+        index: 0,
+    };
+    let q = quote_by(APP_CONTRACT, "putNote", payer.clone(), mldsa)
+        .await
+        .unwrap();
+    assert!(q.quote.is_none(), "no verify row of the kind");
+    let msig = KeyRef::Msig {
+        ua: format!("0x{}", "22".repeat(32)),
+        slots: vec![],
+    };
+    let q = quote_by(APP_CONTRACT, "putNote", payer.clone(), msig)
+        .await
+        .unwrap();
+    assert!(q.quote.is_none(), "an msig signer");
+    // review A-2: a payer that is no native EVM key is refused before the review, rows or none
+    for name in ["putNote", "putOther"] {
+        assert_eq!(
+            code(quote_by(APP_CONTRACT, name, signer.clone(), signer.clone()).await),
+            "Argument",
+            "{name}"
+        );
+    }
 }
 
 /// Controller call 2026-11-22 (CLI-SDK-33): one handle given twice in one call is `Argument`, before any lock is taken (it

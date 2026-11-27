@@ -435,7 +435,7 @@ OpaqueString (every non-ASCII space to U+0020, then NFC; empty, a control charac
 a composed and a decomposed form of one passphrase give one key; the normalisation runs in `ua-rs`. PqVault's V1 vectors
 (`smartcontracts/vectors/pqvault/`) run through this surface only (BUILT, UNAUDITED; `tests/app_core_vault_rows.rs` under
 `vectors`, `tests/app_core_vault_records.rs` in the main suite: typed digests in both domains, both signing paths,
-the verification); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](ua-libraries.md#CLI-PQV-12) in decisions.md.
+the verification); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](pqvault-core.md#CLI-PQV-12) in decisions.md.
 PqVault's records are signed and verified by `prepare_pqvault_record` and `verify_pqvault_record` (owner 2026-11-22,
 [CLI-PQV-13](../decisions.md#CLI-PQV-13); BUILT, UNAUDITED): thin calls of `ua-rs`'s `wallet::pqvault` with the generic
 calls' profile checks, accepting PqVault's domains `DS_V` / `DS_B` and its seven structs only; `prepare_app_record` and
@@ -448,9 +448,18 @@ portable path). One key handle twice in one app-core call is `Argument`, before 
 KEM key rotation is `Account::prepare_set_kem_key` (`setKemKey` at a version ≥ 1, checked by `ua-rs`'s `check_kem_record`
 first). Same entry: BUILT, UNAUDITED.
 
-**Sign after confirm** (owner 2026-11-27; SPECIFIED; BUILT-gap in `pqchat-core` and `pqvault-core`, which sign when they build a
-record): an app core builds the typed record and its quote for the review and calls the SDK's signing entry only on the user's
-confirm; a review left makes no signing call: [CLI-SDK-36](../decisions.md#CLI-SDK-36).
+**Sign after confirm** (owner 2026-11-27): an app core builds the typed record and its quote for the review and calls the
+SDK's signing entry only on the user's confirm; a review left makes no signing call: [CLI-SDK-36](../decisions.md#CLI-SDK-36).
+The quote before the signature is `AppCore::quote_app_call(chain, contract, entry, args, payer, signer)` (BUILT, UNAUDITED;
+the payer checked first, an app row's `per_item` counting the one argument array of its name, the record's `sig` not
+counted, [CLI-PQV-17](../decisions.md#CLI-PQV-17) (7)):
+`prepare_app_call`'s review and contract checks over the arguments with the record's `UASig` empty, and the payer's quote from
+the gas tables alone, never a simulation: the base row `(entry's name, "app", not fresh)` and the signer kind's verify row (its
+`sig_bytes` at the calldata price), the transaction row with the unsigned calldata, in the lookup order chain → module →
+reference, with the margin; `AppQuote.quote` none (unquoted) without the rows. It is no transaction: the signed record's call
+is still `prepare_app_call`'s, whose simulation follows the signature. `AppCore::seal` wipes the plaintext it is given.
+`pqvault-core` BUILT, UNAUDITED; BUILT-gap in `pqchat-core`, which still signs when it builds a record (it changes after the
+path-less branch lands).
 
 <a id="CLI-SDK-21"></a>**CLI-SDK-21** — **`seal_for_arweave`, `upload_file`, `fetch_file` and `open_file` put an app core's
 file on Arweave and read it back; the upload key signs only the item `ua-rs` built; the client keeps the signed bytes until

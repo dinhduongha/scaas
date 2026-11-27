@@ -12,7 +12,7 @@ Design, parts and order: the spec
 [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md) and its plan
 [`2026-11-17-pqvault.md`](../superpowers/plans/2026-11-17-pqvault.md). The registry's open portable app namespace
 ([CTR-UA-45](accounts.md#CTR-UA-45)) and the base shared with PqChat come before the EVM freeze (Part R); the contract may
-come after (Part V). Clients: [ua-libraries.md](../clients/ua-libraries.md#pqvault-clients).
+come after (Part V). Clients: [pqvault-core.md](../clients/pqvault-core.md).
 Other families: **PLANNED**, each in its own `pqvault-<family>` round.
 
 **Contents**

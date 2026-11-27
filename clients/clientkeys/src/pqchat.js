@@ -336,18 +336,24 @@ export function unpad(pt) {
 }
 
 /** Canonical JSON: object keys sorted (UTF-16 code units), no whitespace, `JSON.stringify` escapes; a number other than an
- *  integer within ±(2^53 − 1) is refused (`PqChatError('canonical')`), so every reader writes the same digits. */
-export const canonicalJson = (v) =>
-  JSON.stringify(v, (_, x) => {
+ *  integer within ±(2^53 − 1) is refused (`PqChatError('canonical')`), so every reader writes the same digits. Objects are
+ *  written key by key, never rebuilt: a JavaScript object lists integer-like keys first ("10" before " "), which would
+ *  break the UTF-16 order (review C-9 of 2026-11-27). Keys whose value is `undefined` are left out, as `JSON.stringify`
+ *  leaves them. */
+export const canonicalJson = (v) => {
+  const w = (x) => {
     if (typeof x === "number" && !Number.isSafeInteger(x)) throw new PqChatError("canonical");
-    return x && typeof x === "object" && !Array.isArray(x)
-      ? Object.fromEntries(
-          Object.keys(x)
-            .sort()
-            .map((k) => [k, x[k]]),
-        )
-      : x;
-  });
+    if (Array.isArray(x)) return `[${x.map((e) => (e === undefined ? "null" : w(e))).join(",")}]`;
+    if (x && typeof x === "object") {
+      const keys = Object.keys(x)
+        .filter((k) => x[k] !== undefined)
+        .sort();
+      return `{${keys.map((k) => `${JSON.stringify(k)}:${w(x[k])}`).join(",")}}`;
+    }
+    return JSON.stringify(x);
+  };
+  return w(v);
+};
 
 /** §6.4: `abi.encode(sessionId, epochId, sender, bytes16 device, uint64 counter, keccak256(abi.encode(bytes32[] parents)))`. */
 export const parentsHash = (parents) => keccak_256(abiEncode(["bytes32[]"], [parents]));

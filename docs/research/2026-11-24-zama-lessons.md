@@ -285,7 +285,7 @@ something the holder (or the sender) hands over. Every design below is a deliver
   [ARCH-POS-13](../decisions.md#ARCH-POS-13) "Source").
 - **PqVault's per-note share**: single notes go through a reusable "share box", one shared vault per recipient set, each later
   share a `createItems` copy; no contract change, no per-item keys (controller call 2026-11-21, decisions.md, normative
-  [CLI-PQV-07](../clients/ua-libraries.md#CLI-PQV-07)). A vault epoch key is wrapped to each member's UA KEM key, in state
+  [CLI-PQV-07](../clients/pqvault-core.md#CLI-PQV-07)). A vault epoch key is wrapped to each member's UA KEM key, in state
   ([CTR-PQV-06](../contracts/pqvault.md#CTR-PQV-06)); every accepted record is kept in full ([CTR-PQV-05](../contracts/pqvault.md#CTR-PQV-05)).
 - **ARCH-POS-13 already names the target**: "A decryption result reaches only the key holder, or a viewer the key holder
   names." A holder-granted viewer is inside the rule; what is outside is any path where the grantee or a third party chooses

@@ -231,7 +231,7 @@ fn item_aad(r: &Value) -> Vec<u8> {
 fn items_keys_aad_ciphertexts() {
     let v = load("items.json");
     let items = v["items"].as_array().unwrap();
-    assert_eq!(items.len(), 15); // F9: + a tombstone per shared vault, the 4,096-B and 16,384-B buckets
+    assert_eq!(items.len(), 19); // F9: + a tombstone per shared vault, the 4,096-B and 16,384-B buckets; + the item layer's 4 rows (CLI-PQV-16)
     for r in items {
         let (vid, eid, iid) = (
             unhex(&r["vaultId"]),

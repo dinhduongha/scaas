@@ -20,7 +20,10 @@ vectors = ["scaas-sdk/vectors"]
 [dependencies]
 scaas-sdk = { path = "../scaas-sdk", default-features = false, features = ["app-core", "mlock"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# `raw_value`: an item's fields read from the decrypted plaintext in place (CLI-PQV-16 H1; a feature, no crate added)
+serde_json = { version = "1", features = ["raw_value"] }
+# the item layer's buffers (CLI-PQV-16 H1): the version the SDK pins, no crate added to the graph
+zeroize = "=1.9.1"
 async-trait = "0.1"
 # ids, the wrap hash and the AAD (keccak256 and `abi.encode`, no key), the contract entries' JSON ABI items: the version and
 # features the SDK takes (no crate added to the graph)

@@ -213,13 +213,13 @@ Every state-changing `mtx*` is relayable, and a fee of 0 is accepted and never r
   - The leaves under review for a path commit.
 
   These lines are part of the review model, not app strings. Every front-end must show the two prices side by side.
-- **PqVault share** (share box: [CLI-PQV-02](../clients/ua-libraries.md#CLI-PQV-02)). The first share creates a shared vault
+- **PqVault share** (share box: [CLI-PQV-02](../clients/pqvault-core.md#CLI-PQV-02)). The first share creates a shared vault
   for the recipient set, and each later share is one `createItems` copy. The review shows:
   - the recipients (UA, kind, KEM key version);
   - whether this creates a new vault or reuses one;
   - the number of items, with their titles, decrypted locally: titles live only inside ciphertexts
-    ([CLI-PQV-03](../clients/ua-libraries.md#CLI-PQV-03)), so the title rows are local-only;
-  - the honest limit ([CLI-PQV-05](../clients/ua-libraries.md#CLI-PQV-05)): "a recipient keeps what it has read; removing
+    ([CLI-PQV-03](../clients/pqvault-core.md#CLI-PQV-03)), so the title rows are local-only;
+  - the honest limit ([CLI-PQV-05](../clients/pqvault-core.md#CLI-PQV-05)): "a recipient keeps what it has read; removing
     them later does not take it back";
   - the gas and the payer.
 - **Messages.** PqChat's per-message seal has no per-signature review ([CLI-PQC-04](../clients/pqchat-core.md#CLI-PQC-04)) and

@@ -11,7 +11,7 @@ spec's estimates [E], not measured; build effort is an estimate *(estimate)*.
 **Method.** SCaaS facts come from this repository and are cited by path and rule id: the PqVault spec
 [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md) (revision 6), the contract rules
 [`contracts/pqvault.md`](../contracts/pqvault.md) (CTR-PQV-*), the client rules
-[`clients/ua-libraries.md`](../clients/ua-libraries.md#pqvault-clients) (CLI-PQV-*), `clients/pqvault-core/src/` as built on
+[`clients/pqvault-core.md`](../clients/pqvault-core.md) (CLI-PQV-*), `clients/pqvault-core/src/` as built on
 `dev`, and `scaas-tui`'s vault screens as built on branch `scaas-tui` (plan T14 part A, `1df54236c` to `18fafe612`; its
 controller calls (a) to (n) in the `scaas-tui` branch's `docs/decisions.md` §42 under CLI-TUI-01; the T13 findings list).
 Other password managers were learned from their **source code and public documentation only, never from screenshots**

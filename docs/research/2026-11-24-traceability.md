@@ -224,7 +224,7 @@ Suppliers do not want volumes, prices and partners public.
 
 [F]:
 - PqVault shares single notes through a **share box**: one shared vault per recipient set, reused
-  ([ua-libraries.md](../clients/ua-libraries.md#pqvault-clients)).
+  ([pqvault-core.md](../clients/pqvault-core.md)).
 - The Zama note's §7a seals a bid to the buyer's KEM key with "the scheme-1 seal of PqChat and PqVault"
   ([2026-11-24-zama-lessons.md](2026-11-24-zama-lessons.md#7a-sealed-bids-where-losers-need-not-open)).
 - ARCH-POS-13's Change of 2026-11-13 puts the hybrid KEM (ML-KEM-1024 + X25519, [CTR-UA-32](../contracts/accounts.md#CTR-UA-32))

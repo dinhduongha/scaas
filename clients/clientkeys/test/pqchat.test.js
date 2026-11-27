@@ -695,6 +695,11 @@ test("canonical JSON rows: UTF-16 key order, escapes, the safe-integer bound; re
     );
 });
 
+test("canonical JSON: integer-like keys stay in UTF-16 order (review C-9, 2026-11-27; the Rust writers give the same)", () => {
+  assert.equal(pc.canonicalJson({ 2: 2, 10: 1, " ": 3, a: 4 }), '{" ":3,"10":1,"2":2,"a":4}');
+  assert.equal(pc.canonicalJson({ b: [{ 1: 1, 0: 0 }], a: undefined }), '{"b":[{"0":0,"1":1}]}');
+});
+
 test("unpad refusal rows: each refused, its positive twin opens", () => {
   assert.deepEqual(
     M.unpadRefused.map((r) => r.name),
