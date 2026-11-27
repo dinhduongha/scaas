@@ -1025,10 +1025,17 @@ fn row_file(f: &serde_json::Value) -> Vec<u8> {
         .map(|i| {
             let b = match i[1].as_str() {
                 Some(h) => unhex(h),
-                None => filler(
-                    i[1]["filler"].as_str().unwrap(),
-                    i[1]["len"].as_u64().unwrap() as usize,
-                ),
+                // the filler item: `{"rev":<rev>,"f":"<hex>"}` of exactly `len` bytes (export.json's comment)
+                None => {
+                    let f = &i[1];
+                    let head = format!("{{\"rev\":{},\"f\":\"", f["rev"].as_u64().unwrap());
+                    let k = f["len"].as_u64().unwrap() as usize - head.len() - 2;
+                    let hex: String = filler(f["filler"].as_str().unwrap(), k.div_ceil(2))
+                        .iter()
+                        .map(|b| format!("{b:02x}"))
+                        .collect();
+                    [head.as_bytes(), &hex.as_bytes()[..k], b"\"}"].concat()
+                }
             };
             (i[0].as_str().unwrap().to_string(), b)
         })
@@ -1057,7 +1064,8 @@ fn row_file(f: &serde_json::Value) -> Vec<u8> {
     .unwrap()
 }
 
-/// The refusal row `r`'s file (export.json's comment): `file`, `file_len` zeros led by `prefix_bytes`, or `base` with `edit`.
+/// The refusal row `r`'s file (export.json's comment): `file`, built from `build`, `file_len` zeros led by `prefix_bytes`, or
+/// `base` with `edit`.
 fn refusal_file(
     r: &serde_json::Value,
     bases: &std::collections::HashMap<String, Vec<u8>>,
@@ -1065,6 +1073,9 @@ fn refusal_file(
     const STEP: usize = 1_048_576 + 16;
     if let Some(h) = r["file"].as_str() {
         return unhex(h);
+    }
+    if r["build"].is_object() {
+        return row_file(&r["build"]);
     }
     if let Some(len) = r["file_len"].as_u64() {
         let mut f = vec![0u8; len as usize];
@@ -1145,7 +1156,7 @@ async fn g9_every_refusal_row_is_import_open() {
         assert_eq!(got, "ProfileImportOpen", "{}", r["case"]);
         n += 1;
     }
-    assert_eq!(n, 26);
+    assert_eq!(n, 31);
     assert!(snapshot(&root) == before, "nothing written");
 }
 
