@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# cargo-audit of scaas-node: the vulnerabilities deny.toml ignores, with the same reasons, and one cargo audit alone sees.
+[advisories]
+ignore = [
+  "RUSTSEC-2026-0387", # crypto-bigint 0.5.5 via alloy 1.6 (k256 0.13); no alloy release on k256 0.14 (deny.toml)
+  "RUSTSEC-2026-0459", # libsqlite3-sys 0.30.1: local-only WAL page-size bug; fix needs sqlx 0.9.1, from 2026-12-02 (deny.toml)
+  # rsa 0.9.10 (Marvin; no fixed release): in Cargo.lock only, through sqlx's optional sqlx-mysql, which cargo locks for
+  # sqlx's weak `sqlx-mysql?/...` features although the node enables no `mysql` feature; it is never built (`cargo tree -i
+  # rsa --target all -e all` prints nothing, so cargo deny, which reads the feature graph, does not see it). Remove with
+  # sqlx-mysql's lock entry, or before the node enables MySQL (store.md P1b).
+  "RUSTSEC-2023-0071",
+]
