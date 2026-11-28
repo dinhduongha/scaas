@@ -87,8 +87,9 @@ fn chainstore(contract: &str) -> Value {
     chainstore_on("31337", contract)
 }
 
-/// `contract` answers `supportsInterface(IPqChatStore)` with `yes`.
+/// `contract` holds the pinned `PqChatStore` code and answers `supportsInterface(IPqChatStore)` with `yes`.
 fn store_at(w: &World, contract: &str, yes: bool) {
+    w.net.code(contract, STORE_CODE);
     w.net.answer(
         contract,
         "PqChatStore.supportsInterface",
@@ -886,6 +887,7 @@ async fn test_chain_store_warned() {
         chain: "sepolia-testnet".into(),
         chain_uid: hex(&[0x5e; 32]),
         chain_id: Some(11155111),
+        chainstore_code_hash: None,
         registry: REGISTRY.into(),
         factory: FACTORY.into(),
         tree_gas: None,
@@ -1258,4 +1260,66 @@ async fn chainstore_unconfirmed_neither_read_nor_written() {
     bob.confirm_stores(&ep).unwrap();
     assert_eq!(bob.read_chain_store(&ep, &st).await.unwrap(), 0);
     assert_eq!(w.net.reads_of("IPqChat.storedRange"), 1);
+}
+
+/// Spec 2026-11-21 §5.5 (C4): a `chainstore` contract is trusted only when its runtime code hash (a trusted read) equals the
+/// one the chain pins: other code that claims the interface is neither written nor read (`InstanceUnlisted`, its interface not
+/// even asked), and a chain that pins no hash serves no `chainstore` entry; the pinned store beside them is written.
+#[tokio::test(flavor = "multi_thread")]
+async fn chainstore_code_hash_pinned() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    store_at(&w, STORE, true);
+    store_at(&w, UNLISTED, true);
+    w.net.code(UNLISTED, &hex(&[0xbd; 32]));
+    let (b, s) = alice_sends(&w, vec![chainstore(STORE), chainstore(UNLISTED)]).await;
+    let rep =
+        w.pq.send_content(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
+            .await
+            .unwrap();
+    assert!(sent(&rep.stores[0].1), "{rep:?}");
+    assert!(
+        matches!(&rep.stores[1].1, Delivery::Failed(c) if *c == "InstanceUnlisted"),
+        "{rep:?}"
+    );
+    assert_eq!(
+        stored(&w).iter().map(|x| x.0.as_str()).collect::<Vec<_>>(),
+        [STORE]
+    );
+    let asked: Vec<_> = w
+        .net
+        .reads
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|x| x.1 == "PqChatStore.supportsInterface")
+        .map(|x| x.0.clone())
+        .collect();
+    assert_eq!(asked, [STORE], "the other code's interface not asked");
+    let (bob, ep) = bob_reads(&w, &s, &b, true).await;
+    let e = bob
+        .read_chain_store(&ep, &entry(&chainstore(UNLISTED)))
+        .await;
+    assert_eq!(code(e), "InstanceUnlisted");
+    // a chain that pins no `PqChatStore` hash: the pinned code there is not trusted either
+    let mut c = conf();
+    c.chains[0].chainstore_code_hash = None;
+    let carol = PqChat::with_net(
+        w.app.clone(),
+        w.net.clone(),
+        Arc::new(MemoryStore::new()),
+        c,
+    );
+    let ep = carol
+        .open_epoch(&s, &b.e.id, &w.bob.key, &w.bob.ua, None)
+        .await
+        .unwrap();
+    let ep = carol.use_epoch(&s, ep).await.unwrap();
+    carol.confirm_stores(&ep).unwrap();
+    carol.accept(&s, false).unwrap();
+    let e = carol
+        .read_chain_store(&ep, &entry(&chainstore(STORE)))
+        .await;
+    assert_eq!(code(e), "InstanceUnlisted");
+    assert_eq!(w.net.reads_of("IPqChat.storedRange"), 0);
 }

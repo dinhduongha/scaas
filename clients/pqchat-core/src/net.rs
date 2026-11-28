@@ -244,6 +244,13 @@ pub trait Net: Send + Sync {
         let _ = (chain, contract, item, args);
         Err(PqChatError::RelayUnavailable)
     }
+    /// The keccak-256 of `contract`'s runtime code on `chain` at the final block (`eth_getCode`), `0x` + 64 hex: a trusted read
+    /// (`Purpose::FeedsDecryption`), agreed where the port's trusted instance reads are (CLI-PQC-16); spec 2026-11-21 §5.5 (C4)
+    /// pins a `PqChatStore` by it. A port without one answers `Internal`.
+    async fn code_hash(&self, chain: &str, contract: &str) -> Result<String, PqChatError> {
+        let _ = (chain, contract);
+        Err(PqChatError::Internal)
+    }
     /// R13 (CLI-PQC-17): the view `item` read by a strict majority of the chain's **named** endpoints at the final block
     /// (CLI-RPC-05 over the named ones only: discovered and default endpoints do not count), with how many named endpoints the
     /// chain lists. A port without an agreed read answers `TreeInfoUnconfirmed`.
@@ -325,6 +332,13 @@ impl Net for SdkNet {
 
     async fn submit(&self, call: AppCall) -> Result<String, PqChatError> {
         Ok(self.sdk.wallet().submit_native_send(call.quote).await?)
+    }
+
+    async fn code_hash(&self, chain: &str, contract: &str) -> Result<String, PqChatError> {
+        Ok(self
+            .app
+            .code_hash_app(chain.into(), contract.into(), false)
+            .await?)
     }
 
     async fn quote(
@@ -462,6 +476,15 @@ impl Net for AgreedNet {
 
     async fn submit(&self, call: AppCall) -> Result<String, PqChatError> {
         self.0.submit(call).await
+    }
+
+    /// agreed, as the trusted instance reads (CLI-PQC-16)
+    async fn code_hash(&self, chain: &str, contract: &str) -> Result<String, PqChatError> {
+        Ok(self
+            .0
+            .app
+            .code_hash_app(chain.into(), contract.into(), true)
+            .await?)
     }
 
     async fn quote(

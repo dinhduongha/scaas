@@ -64,7 +64,8 @@ device linking and the epoch-key export (UA-7 P6, §14 O5), and records authored
 an `msig` topic owner), whose co-signers need the full record on other devices (`MsigAuthorPlanned`). A content of a type out of
 scope is shown as unsupported and never acted on (UA-7 P49).
 
-<a id="chainstore-entry"></a>**The `chainstore` entry is served** (owner 2026-11-28): a session that lists
+<a id="chainstore-entry"></a>**The `chainstore` entry is served** (owner 2026-11-28: implemented before the tag; its means
+controller calls, CLI-PQC-02's Change in [decisions](../decisions.md)): a session that lists
 `{"kind": "chainstore", "chainId", "chainUid", "contract"}` (a `PqChatStore`,
 [CTR-CHAT-22](../contracts/pqchat.md#CTR-CHAT-22)) sends and reads through it, where the build refused it before
 (`StoreUnsupported`). `PqChatStore` has `PqChat`'s store selectors, event and error, so the crate writes and reads it by the
@@ -72,13 +73,18 @@ path of a `chain` store at the store's own address: `storeMessage(1, hint, env)`
 offset, 16)` paged from the kept position (trusted reads, [ARCH-POS-15](../decisions.md#ARCH-POS-15)), each payload checked
 as any message (CLI-PQC-07). No factory lists it, so before each use the crate checks the contract itself: the entry resolves
 only to a chain the app serves whose `chain_uid` **and** chain id (`ChainConf.chain_id`) it names (C-Chain and Fuji share
-`chain_uid`), and the address answers `supportsInterface(type(IPqChatStore).interfaceId = 0xf33ad180)` true by a trusted read
-(an address without code answers no decodable value); otherwise `InstanceUnlisted`, nothing written or read there. Every rule of a
-`chain` store holds: its gas only under the session's spend consent (`ChainCostUnconfirmed`), a store the user has not
-confirmed neither written nor read (`StoreUnconfirmed`), the same envelope to every store of the list (CLI-PQC-06). Its blob is
-at most 24,576 B (`env` ≤ 24,416 B); the largest envelope the crate sends (a 16,000-B text in the 16,384-B bucket) fits it, a
-test. BUILT (`src/chain_store.rs`, `src/session.rs`, `src/stores.rs`; tests `tests/stores.rs` `chainstore_*`, on anvil
-`tests/chain_chainstore.rs`, the store deployed by `smartcontracts/evm/script/deploy_pqchatstore.py local --rpc`), UNAUDITED.
+`chain_uid`); the runtime code hash at the address (`eth_getCode` at the final block, a trusted read through the SDK's
+`code_hash_app`, agreed under `agreed_reads`) equals the one the chain's release data pins (`ChainConf.chainstore_code_hash`,
+`release-data/PqChatStore.json` `runtimeCodeHash`: spec 2026-11-21-avax-polkadot-arweave §5.5, C4); and the address answers
+`supportsInterface(type(IPqChatStore).interfaceId = 0xf33ad180)` true by a trusted read. A chain without the id or the pin
+serves no `chainstore` entry; any check failing is `InstanceUnlisted`, nothing written or read there. Every rule of a `chain`
+store holds: its gas only under the session's spend consent (`ChainCostUnconfirmed`), a store the user has not confirmed neither
+written nor read (`StoreUnconfirmed`), the same envelope to every store of the list (CLI-PQC-06). Its blob is at most 24,576 B
+(`env` ≤ 24,416 B); the largest envelope the crate sends (a 16,000-B text in the 16,384-B bucket) fits it, a test. BUILT
+(`src/chain_store.rs`, `src/session.rs`, `src/stores.rs`, the SDK's `AppCore::code_hash_app`; tests `tests/stores.rs`
+`chainstore_*`, on anvil `tests/chain_chainstore.rs`, the store deployed by
+`smartcontracts/evm/script/deploy_pqchatstore.py local --rpc`, its pin equal to the forge build and the chain's code),
+UNAUDITED.
 
 ## 2. Secrets and signing
 

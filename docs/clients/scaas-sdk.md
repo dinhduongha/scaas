@@ -395,7 +395,11 @@ named JSON (outputs and tuple components by name, integers as decimal strings, b
 (entry 64 KiB, arguments 128 KiB, answer 1 MiB, output types nesting at most 16 levels: `Argument`), as a read that feeds a
 decryption by default (`read_app`; `read_app_plain` for a read that never feeds one, T26 B-17); `read_app_agreed`, the same
 read as an agreed read (CLI-RPC-05) whatever the chain's list policy, an app core's explicit option, also a read that feeds a
-decryption (CTR-CHAT-23 (d), owner 2026-11-23; `src/app_core/agreed.rs`, BUILT on `pqchat-sigs`). `read_app_agreed_named`
+decryption (CTR-CHAT-23 (d), owner 2026-11-23; `src/app_core/agreed.rs`, BUILT on `pqchat-sigs`). `code_hash_app(chain, contract, agreed)` is the keccak-256 of
+a contract's runtime code at the profile's final block (scaas-rpc `code_at`, `eth_getCode`), a read that feeds a decryption,
+agreed on the option as `read_app_agreed`: an app core's check of a contract its release data pins by code hash
+(pqchat-core's `PqChatStore`, spec 2026-11-21-avax-polkadot-arweave §5.5 C4; controller call 2026-11-28; BUILT on
+`pqchat-chainstore`, test `tests/app_core.rs` `code_hash_app_is_a_trusted_code_read`). `read_app_agreed_named`
 is that agreed read over the chain's named endpoints only (scaas-rpc `read_at_block_agreed_named`: at least 3 named, else
 `AgreementNeedsThree`), the read the TreeKEM ruling 13 asks for; `read_app_latest` is `read_app` at the latest block instead of
 the final one, for what a sender already landed (C37); both BUILT, UNAUDITED (the TreeKEM T4-T9 review's D-4, D-14). PqChat's key entries

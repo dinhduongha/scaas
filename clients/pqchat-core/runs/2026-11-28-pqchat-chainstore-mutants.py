@@ -21,8 +21,32 @@ CS = "clients/pqchat-core/src/chain_store.rs"
 ST = "clients/pqchat-core/src/stores.rs"
 CD = "cd clients/pqchat-core && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 "
 STORES = CD + "--test stores "
+CHAIN = CD + "--test chain_chainstore -- --ignored --test-threads 1 "
+REL = "smartcontracts/evm/release-data/PqChatStore.json"
 
 MUTANTS = [
+    # spec 2026-11-21 §5.5 (C4): the pinned runtime code hash
+    (
+        "the code hash check skipped",
+        [(CS, "        if !code.eq_ignore_ascii_case(pin) {", "        if false && !code.eq_ignore_ascii_case(pin) {")],
+        STORES + "chainstore_code_hash_pinned",
+    ),
+    (
+        "a code hash other than the pin accepted",
+        [
+            (
+                CS,
+                "        if !code.eq_ignore_ascii_case(pin) {",
+                "        if !code.eq_ignore_ascii_case(pin) && code.len() != pin.len() {",
+            )
+        ],
+        STORES + "chainstore_code_hash_pinned",
+    ),
+    (
+        "a pin that is not the build's accepted (the release data's hash)",
+        [(REL, '"runtimeCodeHash": "0xb7c1', '"runtimeCodeHash": "0xb7c2')],
+        CHAIN + "chain_chainstore_over_matrix_and_pqchatstore",
+    ),
     (
         "implemented() leaves chainstore out again",
         [
@@ -44,7 +68,7 @@ MUTANTS = [
         [
             (
                 CS,
-                "            Some(_) => self.is_chat_store(&c.chain, &contract).await?,",
+                "            Some(_) => self.is_chat_store(&c, &contract).await?,",
                 "            Some(_) => true,",
             )
         ],

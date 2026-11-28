@@ -171,6 +171,18 @@ fn sec(s: &str) -> Arc<SecretBytes> {
     Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(s.as_bytes().to_vec())).unwrap())
 }
 
+/// `PqChatStore`'s runtime code hash as its release data pins it (`smartcontracts/evm/release-data/PqChatStore.json`).
+pub fn store_code_hash() -> String {
+    let rel: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(format!("{}/release-data/PqChatStore.json", sc())).unwrap(),
+    )
+    .unwrap();
+    rel["runtimeCodeHash"]
+        .as_str()
+        .unwrap()
+        .to_ascii_lowercase()
+}
+
 /// A deployed local chain with the SDK over it: anvil, or (the path-less delta P8, P8b) a node the runner started and
 /// deployed to, named by `PQCHAT_CHAIN_RPC` with its book `PQCHAT_CHAIN_BOOK` and a funded key `PQCHAT_CHAIN_FUNDER`
 /// (runs/2026-11-27-treekem-pathless-nethermind.sh: the local copy of the SCaaS testnet's chain, chain id 31337).
@@ -193,6 +205,8 @@ impl Local {
                 chain: CHAIN.into(),
                 chain_uid: self.uid.clone(),
                 chain_id: Some(31337),
+                // the release data's `PqChatStore` runtime code hash (spec 2026-11-21 §5.5, C4)
+                chainstore_code_hash: Some(store_code_hash()),
                 registry: self.registry.clone(),
                 factory: self.factory.clone(),
                 // the chain's TreeKEM gas rows, the release data an app ships (the path-less delta P8: on a node that

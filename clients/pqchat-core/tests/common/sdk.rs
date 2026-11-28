@@ -37,6 +37,8 @@ pub const HOME: &str = "0x5ca00000000000000000000000000000000000c1";
 pub const REPLICA: &str = "0x5ca00000000000000000000000000000000000c2";
 pub const UNLISTED: &str = "0x5ca00000000000000000000000000000000000c3";
 pub const CHAIN: &str = "local";
+/// the `PqChatStore` runtime code hash the tests' chain pins (an app takes it from the release data)
+pub const STORE_CODE: &str = "0xc0dec0dec0dec0dec0dec0dec0dec0dec0dec0dec0dec0dec0dec0dec0dec0de";
 pub const KIND: u16 = 0x0131;
 /// One live scope declares PqChat's prefix at a time (the SDK refuses overlapping live prefixes): every test holds this.
 pub static ONE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -256,6 +258,7 @@ pub fn conf() -> PqChatConfig {
             chain: CHAIN.into(),
             chain_uid: hex(&[7; 32]),
             chain_id: Some(31337),
+            chainstore_code_hash: Some(STORE_CODE.into()),
             registry: REGISTRY.into(),
             factory: FACTORY.into(),
             tree_gas: None,

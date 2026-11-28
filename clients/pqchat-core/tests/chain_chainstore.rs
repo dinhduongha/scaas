@@ -3,8 +3,9 @@
 //! smartcontracts/evm/lib): `PqChatStore` (CTR-CHAT-22) deployed at its pinned address by its own deploy path
 //! (`deploy_pqchatstore.py local --rpc`: deploy, deploy again with no send, the probe), a session over a Matrix room (the
 //! in-memory fake) and that store; the crate over the SDK writes the same envelope to both, the store's state holds it, bob
-//! opens the session and reads it from the store, the room's copy a duplicate. An address without code and a `PqChat` (code,
-//! another interface) listed as `chainstore` entries are neither written nor read (`InstanceUnlisted`), beside the store that is.
+//! opens the session and reads it from the store, the room's copy a duplicate. The pinned code hash (spec 2026-11-21 §5.5, C4)
+//! is the release data's, the forge build's and the chain's. An address without code and a `PqChat` (other code) listed as
+//! `chainstore` entries are neither written nor read (`InstanceUnlisted`), beside the store that is.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -46,8 +47,8 @@ async fn landed(l: &Local, d: &Delivery) {
 }
 
 /// `PqChatStore` deployed on the chain at `rpc` by `deploy_pqchatstore.py local --rpc` (its forge build in a temp dir made
-/// here and removed); its pinned address, lower case.
-fn deploy_store(rpc: &str) -> String {
+/// here and removed); its pinned address, lower case, and the build's runtime code hash.
+fn deploy_store(rpc: &str) -> (String, String) {
     let dir = std::env::temp_dir().join(format!("pqchat-chainstore-{}", std::process::id()));
     let (out, cache) = (dir.join("out"), dir.join("cache"));
     let built = Command::new("forge")
@@ -66,6 +67,13 @@ fn deploy_store(rpc: &str) -> String {
         ])
         .status()
         .expect("forge in PATH");
+    let runtime = built.success().then(|| {
+        let a: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(out.join("PqChatStore.sol/PqChatStore.json")).unwrap(),
+        )
+        .unwrap();
+        cast(&["keccak", a["deployedBytecode"]["object"].as_str().unwrap()])
+    });
     let deployed = built.success()
         && Command::new("python3")
             .current_dir(sc())
@@ -88,7 +96,10 @@ fn deploy_store(rpc: &str) -> String {
         &std::fs::read_to_string(format!("{}/release-data/PqChatStore.json", sc())).unwrap(),
     )
     .unwrap();
-    rel["address"].as_str().unwrap().to_ascii_lowercase()
+    (
+        rel["address"].as_str().unwrap().to_ascii_lowercase(),
+        runtime.unwrap().to_ascii_lowercase(),
+    )
 }
 
 fn chainstore(l: &Local, contract: &str) -> StoreEntry {
@@ -164,8 +175,17 @@ async fn session(
 async fn chain_chainstore_over_matrix_and_pqchatstore() {
     let (l, m) = local(&[(0, true), (1, true)]).await;
     let (alice, bob) = (m[0].clone(), m[1].clone());
-    let store = deploy_store(&l.rpc);
-    println!("[chainstore] PqChatStore at {store}");
+    let (store, built) = deploy_store(&l.rpc);
+    // C4's pin: the release data's runtime code hash (the chain's conf) is the forge build's (`bytecode_hash = none`) and the
+    // code at the store's address
+    let code = cast(&["code", "--rpc-url", &l.rpc, &store]);
+    let onchain = cast(&["keccak", &code]).to_ascii_lowercase();
+    assert_eq!(
+        (store_code_hash(), onchain),
+        (built.clone(), built),
+        "the pin, the build, the chain"
+    );
+    println!("[chainstore] PqChatStore at {store}, its code hash the pinned one");
     let app = pqchat_core::scope(&l.sdk).unwrap();
     let net = Arc::new(SdkNet {
         sdk: l.sdk.clone(),

@@ -330,6 +330,52 @@ async fn read_app_feeds_decryption_by_default() {
     assert_eq!(read(true).await.unwrap(), r#"{"g":"1"}"#);
 }
 
+/// Spec 2026-11-21-avax-polkadot-arweave §5.5 (C4; pqchat-core's `chainstore` entry): `code_hash_app` is the keccak-256 of the
+/// contract's code at the profile's final block (`eth_getCode`), a read that feeds a decryption (a list of discovered nodes only:
+/// `NoTrustedEndpoint`, nothing asked); an address without code answers the empty code's hash; `agreed` is the agreed read's own
+/// check (`Argument` on a one-endpoint list, the control answering).
+#[tokio::test(flavor = "multi_thread")]
+async fn code_hash_app_is_a_trusted_code_read() {
+    let hash = |a: Arc<AppCore>, k: &str, agreed: bool| {
+        let k = k.to_string();
+        async move { a.code_hash_app("local".into(), k, agreed).await }
+    };
+    let (s, _seed, chain) = on_fake(None, scaas_rpc::Class::Discovered).await;
+    let a = AppCore::new(s, desc(Some(APP_ID), &["scaas/code/v1/"])).unwrap();
+    assert_eq!(
+        code(hash(a, APP_CONTRACT, false).await),
+        "NoTrustedEndpoint"
+    );
+    assert!(!chain
+        .lock()
+        .unwrap()
+        .requests
+        .iter()
+        .any(|r| r.contains("eth_getCode")));
+    let (s, _seed, chain) = on_fake(None, scaas_rpc::Class::Named).await;
+    let a = AppCore::new(s, desc(Some(APP_ID), &["scaas/code/v1/"])).unwrap();
+    let runtime = [0x60u8, 0x80, 0x60, 0x40, 0x52];
+    chain.lock().unwrap().code.insert(
+        APP_CONTRACT.into(),
+        format!("0x{}", alloy::hex::encode(runtime)),
+    );
+    assert_eq!(
+        hash(a.clone(), APP_CONTRACT, false).await.unwrap(),
+        keccak_hex(&runtime)
+    );
+    assert_eq!(
+        hash(
+            a.clone(),
+            "0x00000000000000000000000000000000000000bb",
+            false
+        )
+        .await
+        .unwrap(),
+        keccak_hex(&[])
+    );
+    assert_eq!(code(hash(a, APP_CONTRACT, true).await), "Argument");
+}
+
 /// T26 A-5: an app record is prepared (its review and digest, nothing signed) and signed apart; the review is the SDK's from
 /// the parsed typed data, so a typed-data text holding `message` twice shows the value that is signed.
 #[tokio::test(flavor = "multi_thread")]

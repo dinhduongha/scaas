@@ -34,7 +34,12 @@ pub struct FakeNet {
     pub quotes: Mutex<Vec<(String, String, Value)>>,
     /// the writes relayed by the gateways: (contract, item, arguments)
     pub relayed: Mutex<Vec<(String, String, Value)>>,
+    /// contract → its runtime code hash (`code_hash`); another address answers the empty code's
+    pub codes: Mutex<HashMap<String, String>>,
 }
+
+/// keccak-256 of the empty code: an address without code.
+pub const NO_CODE: &str = "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470";
 
 /// A prepared write as the fake answers it: nothing in it is sent.
 pub fn call(chain: &str, contract: &str, payer: &KeyRef) -> AppCall {
@@ -100,6 +105,13 @@ impl FakeNet {
         )]
             .clone()
     }
+    /// `contract`'s runtime code hash set to `hash`.
+    pub fn code(&self, contract: &str, hash: &str) {
+        self.codes
+            .lock()
+            .unwrap()
+            .insert(contract.to_ascii_lowercase(), hash.into());
+    }
     pub fn reads_of(&self, item: &str) -> usize {
         self.reads
             .lock()
@@ -149,6 +161,20 @@ impl Net for FakeNet {
             .get(&k)
             .cloned()
             .ok_or(PqChatError::Internal)
+    }
+    async fn code_hash(&self, _chain: &str, contract: &str) -> Result<String, PqChatError> {
+        let c = contract.to_ascii_lowercase();
+        self.reads
+            .lock()
+            .unwrap()
+            .push((c.clone(), "code".into(), Value::Null));
+        Ok(self
+            .codes
+            .lock()
+            .unwrap()
+            .get(&c)
+            .cloned()
+            .unwrap_or(NO_CODE.into()))
     }
     async fn prepare(
         &self,
@@ -246,6 +272,9 @@ impl Net for Counting {
         args: Value,
     ) -> Result<Value, PqChatError> {
         self.inner.read_latest(chain, contract, item, args).await
+    }
+    async fn code_hash(&self, chain: &str, contract: &str) -> Result<String, PqChatError> {
+        self.inner.code_hash(chain, contract).await
     }
     async fn read_majority(
         &self,

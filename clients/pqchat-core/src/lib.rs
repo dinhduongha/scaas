@@ -93,6 +93,11 @@ pub struct ChainConf {
     /// `chain_uid` it names (C-Chain and Fuji share `chain_uid`); absent, no `chainstore` entry is served here
     #[serde(default)]
     pub chain_id: Option<u64>,
+    /// the `PqChatStore` runtime code hash the chain's release data pins (`release-data/PqChatStore.json` `runtimeCodeHash`,
+    /// spec 2026-11-21 §5.5 C4): a `chainstore` contract is trusted only with this code; absent, no `chainstore` entry is served
+    /// here
+    #[serde(default)]
+    pub chainstore_code_hash: Option<String>,
     pub registry: String,
     pub factory: String,
     /// The chain's TreeKEM gas rows (release data, the SDK's `PqTreeGas` as JSON; spec §13): the plan of a tree commit and the

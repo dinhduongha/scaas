@@ -68,4 +68,35 @@ impl AppCore {
         )
         .await
     }
+
+    /// The keccak-256 of `contract`'s runtime code on `chain` at the profile's final block (`eth_getCode`), `0x` + 64 hex: an app
+    /// core's check of a contract it trusts by the code hash its release data pins (pqchat-core's `PqChatStore`, spec
+    /// 2026-11-21-avax-polkadot-arweave §5.5 C4); an address without code answers the empty code's hash. Always a read that feeds
+    /// a decryption, as [`AppCore::read_app`] (ARCH-POS-15); `agreed`: the same answer from a strict majority, as
+    /// [`AppCore::read_app_agreed`].
+    pub async fn code_hash_app(
+        self: &Arc<Self>,
+        chain: String,
+        contract: String,
+        agreed: bool,
+    ) -> Result<String, SdkError> {
+        let to =
+            alloy::primitives::Address::from(crate::op::addr20(&contract.to_ascii_lowercase())?);
+        let (profile, _, pool) = crate::op::evm(&self.sdk, &chain)?;
+        let pool = &pool;
+        let call = |at| async move {
+            pool.code_at(&at, to)
+                .await
+                .map(|code| scaas_ua::keccak256(&code))
+        };
+        let choice = crate::op::final_block(&profile);
+        let purpose = Purpose::FeedsDecryption;
+        let hash = if agreed {
+            pool.read_at_block_agreed(choice, purpose, call).await?
+        } else {
+            pool.read_at_block(choice, purpose, call).await?
+        }
+        .value;
+        Ok(format!("0x{}", alloy::hex::encode(hash)))
+    }
 }

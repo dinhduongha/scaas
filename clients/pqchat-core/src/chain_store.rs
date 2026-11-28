@@ -54,7 +54,7 @@ impl PqChat {
         let contract = contract.to_ascii_lowercase();
         let known = match chainstore {
             None => self.listed(&c.chain, &contract).await?,
-            Some(_) => self.is_chat_store(&c.chain, &contract).await?,
+            Some(_) => self.is_chat_store(&c, &contract).await?,
         };
         if !known {
             return Err(PqChatError::InstanceUnlisted);
@@ -62,23 +62,31 @@ impl PqChat {
         Ok((c, contract))
     }
 
-    /// Whether `contract` on `chain` is a `PqChatStore`: it answers `supportsInterface(IPqChatStore)` true (a trusted read). An
-    /// address without code answers empty bytes, which do not decode as the answer (the SDK's `Argument`): not a store.
-    pub async fn is_chat_store(&self, chain: &str, contract: &str) -> Result<bool, PqChatError> {
+    /// Whether `contract` on `c` is a `PqChatStore`: its runtime code hash equals the one `c`'s release data pins (spec
+    /// 2026-11-21 §5.5 C4; none pinned: no store) and it answers `supportsInterface(IPqChatStore)` true, both trusted reads.
+    /// An address without code has the empty code's hash.
+    pub(crate) async fn is_chat_store(
+        &self,
+        c: &ChainConf,
+        contract: &str,
+    ) -> Result<bool, PqChatError> {
+        let Some(pin) = c.chainstore_code_hash.as_deref() else {
+            return Ok(false);
+        };
+        let code = self.net.code_hash(&c.chain, contract).await?;
+        if !code.eq_ignore_ascii_case(pin) {
+            return Ok(false);
+        }
         let v = self
             .net
             .read(
-                chain,
+                &c.chain,
                 contract,
                 "PqChatStore.supportsInterface",
                 json!({ "id": IPQCHATSTORE_ID }),
             )
-            .await;
-        match v {
-            Ok(v) => Ok(at(&v, "0").as_bool() == Some(true)),
-            Err(PqChatError::Sdk(scaas_sdk::SdkError::Argument)) => Ok(false),
-            Err(e) => Err(e),
-        }
+            .await?;
+        Ok(at(&v, "0").as_bool() == Some(true))
     }
 
     /// `out` written to the chain store `e` (`storeMessage`, prepared and submitted under the session's spend consent): the

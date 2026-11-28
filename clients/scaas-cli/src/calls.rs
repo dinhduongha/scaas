@@ -855,6 +855,7 @@ calls! { cx;
     "app-core read-app" "AppCore::read_app" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app(chain, contract, entry, args).await?));
     "app-core read-app-plain" "AppCore::read_app_plain" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app_plain(chain, contract, entry, args).await?));
     "app-core read-app-agreed" "AppCore::read_app_agreed" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app_agreed(chain, contract, entry, args).await?));
+    "app-core code-hash-app" "AppCore::code_hash_app" {chain: String, contract: String, agreed: bool} => named("codeHash", cx.app()?.code_hash_app(chain, contract, agreed).await?);
     "app-core pqchat-epoch-key" "AppCore::pqchat_epoch_key" {seed: String} => handle(cx.app()?.pqchat_epoch_key(&seed)?, key_shown());
     "app-core pqchat-wrap" "AppCore::pqchat_wrap" {chain: String, k: H<Arc<AppKey>>, session_id: String, epoch_id: String, member: String, key_id: u64} => js(cx.app()?.pqchat_wrap(chain, k.0, session_id, epoch_id, member, key_id).await?);
     "app-core pqchat-unwrap" "AppCore::pqchat_unwrap" {account: KeyRef, session_id: String, epoch_id: String, wrap: PqWrap} => handle(cx.app()?.pqchat_unwrap(account, session_id, epoch_id, wrap)?, key_shown());
