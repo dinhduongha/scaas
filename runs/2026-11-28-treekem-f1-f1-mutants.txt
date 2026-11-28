@@ -1,4 +1,10 @@
-# f1 mutants at commit b13e2d1d7 (name | outcome | test)
-ua-rs: the own record read as C45 | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_secrets_every_row
+# f1 mutants at commit 0bc25d395 (name | outcome | test)
+ua-rs: the own record read as C45 | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_pathless_own_wrong_tag_is_the_warning
+ua-rs: the own test below the unanchored test | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_pathless_own_wrong_tag_is_the_warning
+ua-rs: the own test at an anchored device only | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_pathless_own_wrong_tag_is_the_warning
+ua-rs: the key kept after the warning | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_pathless_own_wrong_tag_is_the_warning
 clientkeys: the own record read as C45 | killed | ../../scripts/capped node --test --test-name-pattern='F-1 \(owner' test/treekem.test.js
-2 mutants, 2 killed, 0 survived (0 killed elsewhere), 0 not loaded
+clientkeys: the own test below the unanchored test | killed | ../../scripts/capped node --test --test-name-pattern='F-1 \(owner' test/treekem.test.js
+clientkeys: the own test at an anchored device only | killed | ../../scripts/capped node --test --test-name-pattern='F-1 \(owner' test/treekem.test.js
+clientkeys: the key kept after the warning | killed | ../../scripts/capped node --test --test-name-pattern='F-1 \(owner' test/treekem.test.js
+8 mutants, 8 killed, 0 survived (0 killed elsewhere), 0 not loaded

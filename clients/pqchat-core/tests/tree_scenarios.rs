@@ -2432,8 +2432,9 @@ async fn the_pathless_form_from_the_state() {
     );
 }
 
-/// ARCH-POS-13, the path-less delta's read / write trace (§13): every faulty row of `pathless-faults` (C45's bad tag at 3
-/// and 6, the joiner's bad tag at 3 (B2), "followed, info not taken" at 5, not followed through a run (D), "Welcome may not
+/// ARCH-POS-13, the path-less delta's read / write trace (§13): every faulty row of `pathless-faults` (the bad tags at 3
+/// and 6: C45 at the other members, the compromise warning at their authors B and A (F-1, owner 2026-11-28), B's epochs 4
+/// to 6 then "parent not followed"; the joiner's bad tag at 3 (B2), "followed, info not taken" at 5, not followed through a run (D), "Welcome may not
 /// match" (C2, F), the path commit's bad tag at 8) reads, device by device, the same contract views in the same order as in
 /// `pathless-faults-control` (the same commits with no fault, every epoch followed); a later poll the same again; nothing
 /// sent.
@@ -2514,5 +2515,38 @@ async fn a_path_commit_over_leaves_under_review_asks_first() {
     assert!(
         d.replay.review.is_empty(),
         "control: D has none under review"
+    );
+    // at a head whose last state is A's F-1 warning (its own wrong-tag record at 6; owner 2026-11-28): no head held, the
+    // warning's leaf under review, and the restoring path commit asks first too (treekem-f1 review, fable-D-7)
+    let home = Home::scenario(&v, &scenario(&v, "pathless-faults"), Some(6));
+    let s = sref(&home);
+    let net = HomeNet::new(home);
+    let r = crate_over(&w, net.clone());
+    let st = replay(&r, &v, &s, "A").await.unwrap();
+    assert!(!st.replay.holds_head, "A holds no head after its warning");
+    assert_eq!(
+        st.replay.review,
+        vec![4, 7],
+        "the warning's leaf 7 under review"
+    );
+    let mut c = commit_req(&w, &v, "A", None, vec![]);
+    c.admins = vec![v["devices"]["A"]["ua"]
+        .as_str()
+        .unwrap()
+        .to_ascii_lowercase()];
+    c.refresh = true;
+    let e = confirmed(&r.pq, r.pq.tree_commit(&s, &st, c, 0).await)
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(
+        e.code(),
+        "TreeLeavesUnderReview",
+        "the restoring path commit"
+    );
+    assert_eq!(
+        *net.writes.lock().unwrap(),
+        0,
+        "nothing sent at the warned head"
     );
 }

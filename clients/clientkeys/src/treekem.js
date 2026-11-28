@@ -1381,7 +1381,8 @@ function pathlessCommit(sc, a, dev, p, chain, joining) {
   );
   if (sameTag(sch, c.confirmTag)) return taken(sc, a, epochId, c.sealedInfo, sch, chain.anchored);
   // F-1 (owner 2026-11-28): its own record, the nonce reproduced, a tag this device could not have written: someone holding
-  // its UA's key and the epoch signed it; the compromise warning, no key and no chain until a path commit (fail closed)
+  // its UA's signing key signed it, the nonce copied from an own record that has not landed (or made from the seed), without
+  // the epoch state; the compromise warning, anchored or not, no key and no chain until a path commit (fail closed)
   if (p.own) return { state: "compromise" };
   if (!chain.anchored) return { state: "not followed", reason: "welcome may not match" };
   return { state: "author did not hold", K: sch.K, chain: { next: sch.next, anchored: true } };

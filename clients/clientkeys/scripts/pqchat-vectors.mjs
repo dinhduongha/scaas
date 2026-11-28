@@ -1872,7 +1872,9 @@ write("tree.json", {
       "treeId ‖ parentEpochId ‖ parentTreeHash ‖ hash(adds) ‖ be32 try) (a uint64, written as a bare integer). The tag " +
       "decides the key state, sealedInfo only the info ('not taken' when it fails). States: followed; not followed with a " +
       "reason (tag, parent not followed, welcome may not match, opening failed, ...); author did not hold (C45: the " +
-      "chain's key kept, no info in force); compromise (an own path-less record whose nonce no try reproduces, C47). " +
+      "chain's key kept, no info in force); compromise (an own path-less record whose nonce no try reproduces, C47, or " +
+      "whose nonce is reproduced but whose tag the device's chain does not give, F-1, owner 2026-11-28, anchored or not: " +
+      "no key, and no chain until a path commit). " +
       "Replays also give suspects (the C45 epochs), review (the still-live leaves those and the warnings name), sincePath, " +
       "pathWarning (an admin's device at sincePath >= W(N)) and head (the head's handle with its next, when held). pathless: " +
       "addNonce rows (try 0 and 1), addJoiner rows, twins (two children of one parent, a twin under one id), exitNext (a " +
