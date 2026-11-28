@@ -42,7 +42,7 @@ flowchart TB
   end
   ACR -->|"every build"| PROF
   ACR -->|"every build"| MX
-  ACR -->|"every build, core"| QR
+  ACR -->|"every build, feature image"| QR
   ACR -->|"feature scaas"| SDK
   ACR -->|"feature scaas"| PQC
   ACR -->|"feature scaas"| PQV
@@ -99,7 +99,7 @@ Status: SPECIFIED.
 9. **Byte formats change everywhere at once:** `ua-rs` and clientkeys read the same vector rows (AGENTS.md "Clients and
    vectors").
 10. **`scaas-qr` is one QR format for every client, and its format core stands alone** (owner 2026-11-28,
-   [CLI-QR-01](../decisions.md#CLI-QR-01)): the core depends on no image library, no `scaas-sdk` and no signing code, and builds
-   for `wasm32`; `scaas-sdk` depends on it, never the reverse; scaas-app's every build may link the core (a receive QR without
-   the SDK); the image layer is its feature `image`, linked by `scaas-tui` and the CLI. The crate signs, verifies, encrypts and
-   decrypts nothing: digests and signature checks stay `ua-rs`'s, through the SDK (rule 1).
+   [CLI-QR-01](../decisions.md#CLI-QR-01)): the core depends on no image library, no `scaas-sdk` and no `ua-rs`, and builds for
+   `wasm32`; `scaas-sdk` depends on the core, never the reverse, and takes no image crate. The image layer is the crate's feature
+   `image` (pure Rust, native and `wasm32`), linked by `scaas-tui`, the CLI and scaas-app where they draw or scan a symbol. The
+   crate signs, verifies, encrypts and decrypts nothing: digests and signature checks stay `ua-rs`'s, through the SDK (rule 1).
