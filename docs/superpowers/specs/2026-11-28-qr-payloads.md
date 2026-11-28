@@ -639,7 +639,7 @@ phones for each class and for signature parts above version 30, reported, not a 
 - **Q6. The default error correction level.** Ruled (owner 2026-11-28): as recommended. Recommendation: L by default (screens and files, fewer parts: the `mldsa65`
   vector is 2 signature parts), M as an export option for print.
 - **Q7. Confidential imports.** Ruled (owner 2026-11-28): a confidential operation (PQZ or Zether, kept apart) is importable
-  for scan and submit only, with `relayer` bound to the scanner, under `Limits::max_native_cost`; the review shows a fixed line
+  for scan and submit only, under `Limits::max_native_cost`; `relayer` is not bound to the scanner: the signer chooses, unbound by default (any relayer, the scanner or a gateway, may submit it, fee 0 allowed) or bound to a named relayer (owner 2026-11-28); the review shows a fixed line
   "amount hidden: you pay <quote>, and this client cannot tell whether you receive anything". **No amount travels in the QR for
   a confidential transfer** — no claimed, declared or signed amount field in the info QR or anywhere else in the payload: a
   number shown beside a hidden amount invites fraud (the amount paid on chain differs from the one in the QR), and a scanner
