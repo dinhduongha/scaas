@@ -512,7 +512,6 @@ dependencies = [
  "alloy-primitives",
  "alloy-signer",
  "async-trait",
- "eth-keystore",
  "k256 0.13.4",
  "rand 0.8.8",
  "thiserror 2.0.21",
@@ -3800,7 +3799,9 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "eth-keystore",
  "flate2",
+ "k256 0.14.0",
  "pqcrypto-falcon",
  "pqcrypto-traits",
  "pqz-ffi",
@@ -3813,6 +3814,7 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
+ "zeroize",
 ]
 
 [[package]]

@@ -4,9 +4,9 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use alloy::signers::local::PrivateKeySigner;
 use anyhow::Context;
-use scaas_pqz_verifier::{chain::Rpc, http, Config, Service};
+use scaas_pqz_verifier::{chain::Rpc, http, Config, Service, VerdictKey};
+use zeroize::Zeroizing;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -20,10 +20,13 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|| "pqz-verifier.toml".into());
     let cfg =
         Config::parse(&std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?)?;
-    let password = std::env::var(&cfg.keystore_password_env)
-        .with_context(|| format!("the keystore password: env {}", cfg.keystore_password_env))?;
-    let signer =
-        PrivateKeySigner::decrypt_keystore(&cfg.keystore, password).context("the keystore")?;
+    // the password and the key's secret bytes live in Zeroizing only until the k256 key is built (CTR-PQZ-28 Change)
+    let password =
+        Zeroizing::new(std::env::var(&cfg.keystore_password_env).with_context(|| {
+            format!("the keystore password: env {}", cfg.keystore_password_env)
+        })?);
+    let signer = VerdictKey::decrypt_keystore(&cfg.keystore, password.as_bytes())?;
+    drop(password);
     // T13 S11: block 0 of every node is the pinned chain_uid
     let rpc = Rpc::connect_pinned(&cfg.rpc_urls, cfg.chain_id, cfg.chain_uid).await?;
     scaas_pqz_verifier::check_pins(&rpc, &cfg).await?;

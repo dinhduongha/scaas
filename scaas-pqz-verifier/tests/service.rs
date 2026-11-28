@@ -25,6 +25,7 @@ use scaas_pqz_verifier::abi::{
     IPqzToken as T, IUARegistry as R, KemKey, PqzVerdict, PqzVerifyConfig, UAAttrs,
 };
 use scaas_pqz_verifier::chain::{Block, Chain, ChainError, Rpc};
+use scaas_pqz_verifier::VerdictKey;
 use scaas_pqz_verifier::{
     body_limit, check_pins, http, pqz_key_hash, purpose_pqz_verdict, registry_domain,
     statement_lengths, verdict_auth_digest, verdict_digest, Config, Pqz, ProbeRequest, Service,
@@ -356,8 +357,8 @@ impl Chain for Fake {
 
 // ------------------------------------------------------------------ the service under test
 
-fn signer() -> PrivateKeySigner {
-    PrivateKeySigner::from_bytes(&TEST_KEY).unwrap()
+fn signer() -> VerdictKey {
+    VerdictKey::from_secret(zeroize::Zeroizing::new(TEST_KEY.to_vec())).unwrap()
 }
 
 /// An OFFCHAIN token naming this verifier at `EPOCH`; `uas[i]` holds the statement's key `i` (at `640 + i·PK`) as

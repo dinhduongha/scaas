@@ -15,14 +15,18 @@ alloy = { version = "~1.6", default-features = false, features = [
   "std",
   "provider-http",
   "rpc-types",
-  "signer-local",
-  "signer-keystore",
   "sol-types",
   "network",
   "reqwest",
   "json-rpc",
 ] }
 anyhow = "1"
+# the verdict key (owner 2026-11-28, CTR-PQZ-28 Change): k256 0.14 (crypto-bigint 0.7, RUSTSEC-2026-0387 fixed) signs
+# every PqzVerdict, its secret read raw from the keystore by eth-keystore (alloy's own keystore reader) and held in
+# Zeroizing; alloy's PrivateKeySigner (k256 0.13) signs nothing here. All three were already in Cargo.lock.
+eth-keystore = "=0.5.0"
+k256 = { version = "=0.14.0", default-features = false, features = ["ecdsa", "arithmetic"] }
+zeroize = "1"
 async-trait = "0.1"
 axum = "0.8"
 pqz-ffi = { path = "../pqz-core/ffi" }
@@ -37,6 +41,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
+# the alloy signer as the reference the verdict key is checked against (tests/verdict_key.rs) and the anvil tests' wallets;
+# the binary signs with VerdictKey only
+alloy = { version = "~1.6", default-features = false, features = ["signer-local"] }
 # tests/anvil.rs: anvil_dumpState is gzipped, --load-state reads its JSON (the strict-majority case, plan T9)
 flate2 = "1"
 tower = { version = "0.5", features = ["util"] }
