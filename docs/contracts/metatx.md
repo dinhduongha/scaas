@@ -1288,6 +1288,9 @@ two events. (The plan's estimate was ≈ +200–230 k on Amsterdam.)
 
 ## <a id="payee-fee"></a>13. Payee fee
 
+The QR formats carry no payee-fee settlement (owner 2026-11-28, [CLI-QR-02](../decisions.md#CLI-QR-02)): a payee-fee payment
+goes by the paths of this section, never by a QR `pay-request` or `signed-op`.
+
 <a id="receiver-pays"></a>
 <a id="CTR-MTX-05"></a>**CTR-MTX-05** — A named function `mtxPayWithPayeeFee(t, payerAuth, fee, feeRecipient, pfValidUntil,
 payeeAuth, meta)` in `MetaTokenBase` carries the payee's EIP-712 co-signature `UAPayeeFee(UAMetaTransfer payment, uint256

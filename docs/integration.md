@@ -777,8 +777,8 @@ payee signs `UAPayeeFee` over the `paymentDigest` (a `SmartKeyAccount` payee sig
 books payment `N` received and fee `F` paid from `PaymentSettled` + `UAPayeeFeePaid`. The **payer ERP** is unchanged
 (pays `N`, books `N`). **E-cheque flow:** the payee's request names the relayer lane; the payer signs offline with that
 relayer bound and hands the intent to the payee, which co-signs over the digest and pushes it to that node. In a QR
-`pay-request` that relayer is a hint and binding it is the payer's choice (QR spec §3.2; how a payee-fee request meets the unbound
-default is put to the owner, QR spec §12 Q8).
+`pay-request` that relayer is a hint and binding it is the payer's choice (QR spec §3.2). The payee-fee settlement has no QR form
+(owner 2026-11-28, [CLI-QR-02](decisions.md#CLI-QR-02), `QrPayeeFeeRefused`): a payee-fee request goes by the paths above.
 
 Never accept raw subject-signed native transactions (Sui `txBytes`, GRAM BOC from the subject wallet, Stellar envelopes)
 as the integration format: they order operations by the subject's account sequence. Always use the contract-level

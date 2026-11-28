@@ -15,8 +15,8 @@ the PQZ and Zether sizes ([pq-zero-knowledge.md](../../contracts/pq-zero-knowled
 contract or contract byte format changes. Reviewed by Fable on 2026-11-28 (four areas: format, cross-layer clients, security, cryptography); every P1 and P2 is fixed
 in this revision or put to the owner (§12; Q1 to Q7 ruled 2026-11-28); P3s left open: the taxed-token request (§3.2), a component doc
 `docs/clients/scaas-qr.md` when the crate is built, the fountain overhead simulation (§11). Post-review by Fable the same day (four
-areas: spec, cross-layer, adversarial, cryptography) after the owner's rulings: every finding fixed in this revision but one, put
-to the owner (§12 Q8). UNAUDITED.
+areas: spec, cross-layer, adversarial, cryptography) after the owner's rulings: every finding fixed in this revision, the one put
+to the owner ruled the same day (§12 Q8). UNAUDITED.
 
 **Contents**
 
@@ -163,7 +163,14 @@ redirected, since every other field is signed.
 
 **Without `payer`** the request is the payee's to reconcile (owner 2026-11-28, Q2): it is matched on `(token, payee, entryRef)`
 over every payer ([CTR-MTX-03](../../contracts/metatx.md#CTR-MTX-03)'s payer-less case), and a stranger's payment then counts.
-A `pay-request` on a confidential token is `QrConfidentialAmount` (its `amount` is required), as §3.1 judges it. The
+A `pay-request` on a confidential token is `QrConfidentialAmount` (its `amount` is required), as §3.1 judges it.
+
+**No payee-fee settlement** (owner 2026-11-28, §12 Q8). The QR formats carry no payee-fee settlement
+([CTR-MTX-05](../../contracts/metatx.md#CTR-MTX-05), `mtxPayWithPayeeFee`): a `pay-request` has no fee-mode field, and
+`Qr::pay_request` and `Qr::sign_pay_request` refuse a request whose terms say the payee pays the token fee (the integration's
+`fee_paid_by_payee`, `payee_fee_amount`) with `QrPayeeFeeRefused`; on import, a `pay-request` envelope holding such terms
+(`fee_paid_by_payee`, `payee_fee_amount` or `payee_fee`) is `QrPayeeFeeRefused`, named before the unknown-field check. The
+payee-fee settlement stays available outside QR, as metatx §13 and [integration.md](../../integration.md#inbound) state. The
 scanner computes `entryRef` itself with its chain's own `metaPayId` (metatx §6: v3 on the EVM; on a family still on the v1 form
 `pay_no` must be zero, `save` false and `body` within the family's cap, else `QrPayMetaRefused`); the request carries no
 `entryRef` field. `schema` is 0, 1 (note) or 2 (structured reference); a bound call (3) or an encrypted body (4) is
@@ -221,7 +228,10 @@ Both directions of the hand-off use it:
   exports the blob in the forms of §8 and keeps it (public data) until a chain fact ends the row (`Landed`, `Consumed`,
   `Expired`, or the user's cancel), since `Op::hand_off` returns it once.
 
-A fee-bearing relay by a third party is not a hand-off and has no QR form here.
+A fee-bearing relay by a third party is not a hand-off and has no QR form here. Nor has a payee-fee settlement (§3.2, owner
+Q8): `Qr::from_hand_off` refuses a blob whose `entry` is `mtxPayWithPayeeFee` or whose `extra` holds the payee's `UAPayeeFee`
+authorization (`payeeAuth`), and the import refuses such a `signed-op` before any other check of its kind, both with
+`QrPayeeFeeRefused`.
 
 ### 3.4 `link`
 
@@ -787,7 +797,7 @@ one thing.
 | `bulk.json` | a Zether single transfer (k = 6, systematic and the first repair frames); a PQZL transfer at `n2048-kmax1024` (k ≈ 68) with repair frames and a decode from a mixed subset; a class (c) row (pins only, the bulk file beside it); a digest rebuilt from pins for `UAPqzTransfer` (`bytes[]`, `bytes` in a struct array) equal to the full struct's digest in `typed_ops.json` |
 | `link.json` | one `LinkSession` offer |
 | `fountain.json` | the UR fountain algorithm's published reference cases; k = 72 with frame numbers near 2^32 |
-| `negative.json` | one row per refusal of §13 that bytes can show: each refused major type (negative integer, float, tag, `null`, indefinite length, a non-text key, non-ASCII text, trailing bytes), unsorted keys, a non-shortest integer, a duplicate key, an unknown field, a missing field, a wrong type, `u256` with a leading zero or above 2^256 − 1, an uppercase EVM address, depth 10, a map of 65, an array of 257, a text of 65 B, prefix `0x02` and wrong magic, an unknown kind, the URI forms (padding, non-zero trailing bits, `+` or `/`, upper-case scheme, 3,945 characters), an oversized part, an info part above one QR, a foreign part, a second info part, a conflicting part, a count mismatch, a frame number out of range, an incomplete set, 17 parts in a slot, k = 73, a digest mismatch, a flipped signature byte with the digest equal, a signature valid for the bare digest but not for the UA message, a key that does not derive `signer`, a payee signature by another id than `to`, a payee signature over the request with its relayer hint swapped, an explicit zero `payer` and an explicit zero `relayer`, a pin at a path that may not be pinned, a bulk pin mismatch, a missing bulk field, a schema 3 body, a v1-family `pay_no`, an expired request, a stale link offer, another chain, the Fuji `receive` under the C-Chain profile and the reverse (in both URI forms and as bytes), `chain_id` missing on an EVM payload, a `pay-request` for another payer, a `link` from text; the readable form: an unknown, duplicated and out-of-order parameter, upper-case hex, a leading zero in `amount` and `valid_until`, `+`, a `%` escape, an empty value, padding in `body`, both `to_ua` and `to_address`, `save=2`, an unknown `<kind>`, an unknown chain key, `…/native/pay`, upper-case scheme, a readable line in a `.scaasqr` file; `QrNoReadableForm` for a signed request, a `signed-op`, a `link`, a confidential token and a token text outside the set; `QrEip681Refused` for a `to_ua`, a `pay_no`, a `relayer`, a confidential token, an unlisted token, a listed token of another kind, an ERC-20 without `amount`, a non-EVM chain and a pair that is not the active profile's; `QrNotScaas` for an `ethereum:` text and a foreign text longer than 128 characters (shown cut); `QrConfidentialAmount` for a confidential `receive` with `amount` and a confidential `pay-request`; a confidential `signed-op` whose envelope adds an `amount` field (`QrFieldUnknown`) |
+| `negative.json` | one row per refusal of §13 that bytes can show: each refused major type (negative integer, float, tag, `null`, indefinite length, a non-text key, non-ASCII text, trailing bytes), unsorted keys, a non-shortest integer, a duplicate key, an unknown field, a missing field, a wrong type, `u256` with a leading zero or above 2^256 − 1, an uppercase EVM address, depth 10, a map of 65, an array of 257, a text of 65 B, prefix `0x02` and wrong magic, an unknown kind, the URI forms (padding, non-zero trailing bits, `+` or `/`, upper-case scheme, 3,945 characters), an oversized part, an info part above one QR, a foreign part, a second info part, a conflicting part, a count mismatch, a frame number out of range, an incomplete set, 17 parts in a slot, k = 73, a digest mismatch, a flipped signature byte with the digest equal, a signature valid for the bare digest but not for the UA message, a key that does not derive `signer`, a payee signature by another id than `to`, a payee signature over the request with its relayer hint swapped, an explicit zero `payer` and an explicit zero `relayer`, a pin at a path that may not be pinned, a bulk pin mismatch, a missing bulk field, a schema 3 body, a v1-family `pay_no`, an expired request, a stale link offer, another chain, the Fuji `receive` under the C-Chain profile and the reverse (in both URI forms and as bytes), `chain_id` missing on an EVM payload, a `pay-request` for another payer, a `link` from text; the readable form: an unknown, duplicated and out-of-order parameter, upper-case hex, a leading zero in `amount` and `valid_until`, `+`, a `%` escape, an empty value, padding in `body`, both `to_ua` and `to_address`, `save=2`, an unknown `<kind>`, an unknown chain key, `…/native/pay`, upper-case scheme, a readable line in a `.scaasqr` file; `QrNoReadableForm` for a signed request, a `signed-op`, a `link`, a confidential token and a token text outside the set; `QrEip681Refused` for a `to_ua`, a `pay_no`, a `relayer`, a confidential token, an unlisted token, a listed token of another kind, an ERC-20 without `amount`, a non-EVM chain and a pair that is not the active profile's; `QrNotScaas` for an `ethereum:` text and a foreign text longer than 128 characters (shown cut); `QrConfidentialAmount` for a confidential `receive` with `amount` and a confidential `pay-request`; a confidential `signed-op` whose envelope adds an `amount` field (`QrFieldUnknown`); `QrPayeeFeeRefused` for a `pay-request` envelope holding `fee_paid_by_payee`, one holding `payee_fee_amount`, a `signed-op` whose `entry` is `mtxPayWithPayeeFee`, and one whose `extra` holds `payeeAuth`, each beside its positive twin without the payee-fee term, and on export for `Qr::pay_request` given payee-fee terms and `Qr::from_hand_off` given a payee-fee blob |
 
 ## 11. Tests and gates
 
@@ -818,7 +828,7 @@ not know), reported, not a gate.
 
 ## 12. Owner questions
 
-Q1 to Q7 are ruled (2026-11-28); each rule lives in the section named, the text below is the record. Q8 is open.
+Q1 to Q8 are ruled (2026-11-28); each rule lives in the section named, the text below is the record.
 
 - **Q1. The class (b) bound.** Ruled (owner 2026-11-28): as recommended. Recommendation: k ≤ 72 (≈ 82 KB, about 15 to 20 s at 5 frames a second), so a PQZL transfer at
   `n2048-kmax1024` goes by animated QR, fixed after the simulation and measurement of §11; the alternative is k ≤ 24 (≈ 27 KB,
@@ -842,11 +852,10 @@ Q1 to Q7 are ruled (2026-11-28); each rule lives in the section named, the text 
   balance in chain state after the operation lands. The SDK's JSON cap rises to 1 MiB, the figure recorded against the largest
   PQZH transfer of the vectors, when this is built. The rule as specified: §6 (the import's checks, the cost cap, the public
   signed fields), §9 (the fixed line).
-- **Q8. A payee-fee request and the unbound default** (open; post-review D-3 / E-7). A payee that pays its relayer by
-  `UAPayeeFee` needs the payer's payment bound: the contract refuses an unbound one (`PayeeFeeShape`, `MODE_RESTRICT_RELAYER`
-  required, [CTR-MTX-06](../../contracts/metatx.md#CTR-MTX-06)), so a payer who keeps the default cannot settle such a request the way it
-  was meant. Proposed: a `pay-request` whose fee mode is payee-fee requires binding to its relayer hint (forced by the contract);
-  every other mode stays unbound by default. Today a `pay-request` carries no fee mode.
+- **Q8. A payee-fee request and the unbound default.** Ruled (owner 2026-11-28): a QR `pay-request` does not offer the payee-fee
+  mode. The payee-fee settlement needs the payer's payment bound to the relayer (`PayeeFeeShape`, `MODE_RESTRICT_RELAYER`
+  required, [CTR-MTX-06](../../contracts/metatx.md#CTR-MTX-06)), against the unbound default; the QR formats carry none, and it
+  stays available outside them. The rule: §3.2, §3.3.
 
 ## 13. Appendix: refusals
 
@@ -857,7 +866,8 @@ Named refusals of the format core and the SDK's QR calls (the CLI maps each to i
 `QrPartConflict`, `QrPartIndex`, `QrPartCount`, `QrIncomplete`, `QrDigestMismatch`, `QrSignatureInvalid`, `QrPinRefused`,
 `QrBulkMismatch` (a pin or the CRC-32 of an assembled object), `QrBulkMissing`, `QrEip681Refused` (a payload the EIP-681 export
 cannot carry), `QrNotScaas` (an EIP-681 or other non-`scaas:` URI scanned), `QrNoReadableForm` (a payload the readable URI form
-cannot carry), `QrConfidentialAmount` (an `amount` on a confidential token's `receive`, a `pay-request` on one), `QrSchemaRefused`,
+cannot carry), `QrConfidentialAmount` (an `amount` on a confidential token's `receive`, a `pay-request` on one),
+`QrPayeeFeeRefused` (a payee-fee settlement, which no QR form carries, at export and import), `QrSchemaRefused`,
 `QrPayMetaRefused`,
 `QrPayerMismatch`, `QrExpired`, `QrSourceRefused`, `QrNeedsScaas`, `QrNotFound` (no QR in an image), `QrImageTooLarge`,
 `QrTerminalTooSmall`; and the existing `ProfileMismatch` (a chain pair not the active profile's, or an unknown chain key, the

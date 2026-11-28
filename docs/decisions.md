@@ -13576,7 +13576,15 @@ relayer's fallback re-signs the same `PayMeta`, lane and nonce unbound, never a 
 signature** has one type string (spec §3.2); an absent `payer` or `relayer` is hashed as the zero value of its type, and a
 present zero one is `QrNotCanonical`; the domain's `chainId` is the pair's (0 where the family has none). "A known contact" is an
 exact-id match under the active pair, the full id shown, apart from the "signed by" row. (e) A `receive` with `amount`, and any
-`pay-request`, on a confidential token is `QrConfidentialAmount`, judged by the SDK from the profile's token kind.
+`pay-request`, on a confidential token is `QrConfidentialAmount`, judged by the SDK from the profile's token kind. (f) The
+fallback after a silent bound relayer and the hint read from an unsigned text (spec §3.2) are accepted as controller calls
+(post-review E-7 (b)–(d)).
+
+Change (owner 2026-11-28, owner: yes; status: SPECIFIED; the QR spec's §12 Q8, post-review D-3 / E-7 (a)): a QR `pay-request`
+does not offer the payee-fee mode. The QR formats carry no payee-fee settlement (`mtxPayWithPayeeFee`, CTR-MTX-05): export
+refuses a `pay-request` with payee-fee terms and a `signed-op` of the payee-fee entry or holding the payee's `UAPayeeFee`
+authorization, and import refuses either, with `QrPayeeFeeRefused`. Payee-fee settlement stays available outside QR (metatx §13,
+integration.md's inbound payments).
 
 <a id="CLI-QR-03"></a>
 ### CLI-QR-03 — Every QR decode is bounded by length and depth before it allocates, and refuses by name
