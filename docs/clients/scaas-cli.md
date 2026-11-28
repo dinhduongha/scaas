@@ -62,7 +62,8 @@ their reason. One table in `src/calls.rs` produces the dispatch, that list and t
   backup), and later lines pass it by that name. An `op` command in a session keeps its object instead of submitting it; the
   confirm reads the terminal (`/dev/tty`), and with no terminal it refuses (`NoTerminal`). Objects never cross processes,
   except the hand-off blob (`op hand-off`, `op import-signed`). An air-gapped signer uses that blob, which the payee imports,
-  quotes and submits; the CLI has no other offline format (owner 2026-11-27).
+  quotes and submits; the CLI has no other offline format (owner 2026-11-27) than that blob in its JSON form or in the QR forms
+  of [CLI-QR-06](../decisions.md#CLI-QR-06) (`qr export`, `qr show`, `qr import`; owner 2026-11-28, SPECIFIED).
 - **The send.** A submitted operation is followed to its state by the SDK's event, at most 30 s; an operation ends only on a
   chain fact ([CLI-SDK-18](scaas-sdk.md#CLI-SDK-18)); `op state` follows it later and `op resume` sends a row not yet sent.
 - **Shell completion** (PLANNED; owner 2026-11-27). `scaas completions <shell>` for bash, zsh and fish, generated from the same
