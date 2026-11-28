@@ -772,6 +772,12 @@ audit read; (4) `vendor/lazer-3330e48` (the golden-KAT reference) and `vendor/la
 dated exceptions: LaZer moves only with a new fork base, new goldens and a full gate, the estimator only when the
 parameter sets are re-estimated.
 
+Change (owner: yes, 2026-11-28, item (3) above): the replacement of the PQClean Falcon code is `falcon-rs` 0.4.0 with its
+`round3` feature on the native path too, so ua-rs has one Falcon implementation (pure Rust) for wasm32 and native. The
+same Falcon bytes, keys and signatures hold (every Falcon vector, the NIST KATs and the seeded key derivation re-run on
+both targets); if `falcon-rs` cannot reproduce the seeded key generation the PQClean "seeded" code gives, the move stops
+and the gap goes to the owner with what differs.
+
 Change (controller, owner: no, owner may override, 2026-11-28): (1) the `wasm-streams` pin of CLI-SDK-33 (`=0.4.2`, for
 reqwest 0.12) moves with the alloy lane to the 0.5.x line reqwest 0.13 requires, restated there as an exact pin; (2) the
 stark-backup `p3-*` `=0.9.0-rc.1` pins keep a dated exception (backup proof system, not built into any shipped crate),
