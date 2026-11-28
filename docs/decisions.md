@@ -718,7 +718,7 @@ bullet: no `fallback()` routing; every callable entry is declared in the contrac
 library first, a body module only behind declared forwarders.
 
 <a id="ARCH-POS-30"></a>
-### ARCH-POS-30 — Rust dependencies stay current at the major and minor level
+### ARCH-POS-30 — Dependencies stay current at the major and minor level (Rust first, every language)
 - old: — · status: current · owner: yes · date: 2026-11-28 · normative: decisions.md#ARCH-POS-30 · superseded-by: —
 
 **Rule.**
@@ -751,6 +751,12 @@ the v5.7.0 release, with the full forge matrix at the four sets, every gas pin o
 typehash pins; (3) ARCH-POS-25's contract-family clause holds only where the host SDK itself holds the crate's older
 generation; where it does not (NEAR p256, Cosmos sha3 / ripemd), the crate takes the new generation like any other;
 (4) the check fails on a major or minor behind the line and only warns on a patch behind.
+
+Change (owner: yes, 2026-11-28): the rule covers every language and tool, not only Rust: npm, Go modules and the Go
+toolchain, Python, Dart, .NET, C++ / CMake fetches, GitHub Actions and the CI tools, with the same 14-day line, majors
+before the pre-freeze tag, written exceptions, and a check that fails on a major or minor behind and warns on a patch. A
+reproducer's cryptography library (Go `gnark-crypto`, Python `pycryptodome` / `py_ecc`, and the like) re-runs that
+language's vector readers when it moves; a formatter move (`prettier`, `ruff`) lands as a format-only commit.
 
 Change (controller, owner: no, owner may override, 2026-11-28): (1) the `wasm-streams` pin of CLI-SDK-33 (`=0.4.2`, for
 reqwest 0.12) moves with the alloy lane to the 0.5.x line reqwest 0.13 requires, restated there as an exact pin; (2) the
