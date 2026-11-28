@@ -2,8 +2,9 @@
 # cargo-audit of scaas-sdk (plan T1, gate `sdk-deny`): the advisories deny.toml ignores, with the same reasons.
 [advisories]
 ignore = [
-  # owner 2026-11-05 (ua-rs-sign T3c, option (a)): crypto-bigint 0.5.5 via ZF frost-secp256k1 =3.0.0 (k256 0.13.4,
-  # scaas-ua feature `signers`), ZF's latest release, and via alloy 1.6; remove when both are on k256 0.14;
-  # review by 2027-02-28 (deny.toml's entry)
+  # owner 2026-11-05 (option (a)) and 2026-11-28 (owner: yes, CLI-UAL-51's Change): crypto-bigint 0.5.5 via ZF
+  # frost-secp256k1 =3.0.0 (scaas-ua feature `signers`: the user's FROST key share and nonces, signed locally) and via
+  # alloy 1.6; exit a frost-secp256k1 release on k256 >= 0.14 and alloy on k256 >= 0.14; review by 2027-02-28
+  # (deny.toml's entry)
   "RUSTSEC-2026-0387",
 ]

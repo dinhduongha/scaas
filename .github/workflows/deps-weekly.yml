@@ -4,7 +4,8 @@
 # by the next unrelated pull request. Weekly on the default branch and on demand (Actions tab > deps-weekly > Run workflow, or
 # `gh workflow run deps-weekly.yml --ref <branch>`), whatever the paths: every lock with a policy (each committed deny.toml
 # outside legacy/, and the five locks checked by clients/ua-rs/deny.toml, as job ua-deps), then the dated exits of the
-# accepted advisories (scripts/check_advisory_exits.py). Every lock is checked before the job fails, so one run lists all.
+# accepted advisories (scripts/check_advisory_exits.py), and a report of a new frost-secp256k1 release (ua-rs FROST accept).
+# Every lock is checked before the job fails, so one run lists all.
 # Tools as scaas-ci: cargo-deny 0.20.2, cargo-audit 0.22.2, after scripts/vendor.sh install.
 name: deps-weekly
 
@@ -55,3 +56,15 @@ jobs:
       - name: dated exits of the accepted advisories
         if: ${{ !cancelled() }}
         run: python3 -I scripts/check_advisory_exits.py
+      # ua-rs FROST (owner 2026-11-28, CLI-UAL-51's Change): RUSTSEC-2026-0387 stays accepted until ZF publishes a
+      # frost-secp256k1 release on k256 >= 0.14. Reported, never red: the dated exit (review by 2027-02-28) is the step above.
+      - name: a frost-secp256k1 release after 3.0.0
+        if: ${{ !cancelled() }}
+        run: |
+          v=$(curl -fsS -A scaas-deps-weekly https://crates.io/api/v1/crates/frost-secp256k1 \
+            | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["crate"]["max_stable_version"])' 2>/dev/null) \
+            || { echo "::warning::crates.io unreachable: frost-secp256k1 not checked"; exit 0; }
+          echo "frost-secp256k1 latest: $v"
+          if [ "$v" != 3.0.0 ]; then
+            echo "::warning::frost-secp256k1 $v is out: if it is on k256 >= 0.14, move ua-rs to it and drop RUSTSEC-2026-0387's FROST accept"
+          fi
