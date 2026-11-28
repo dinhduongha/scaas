@@ -23,6 +23,8 @@
 #                  warning). Weekly and on demand, whatever the paths: deps-weekly.yml (every lock with a policy, the dated exits).
 #   scaas-node:    first cargo deny --locked check -D index-failure and cargo audit (scaas-node/deny.toml, scaas-node/.cargo/audit.toml);
 #                  then cargo clippy --all-targets -- -D warnings; cargo test; cargo test --test e2e -- --ignored
+#   scaas-pqz-verifier: first cargo deny --locked check -D index-failure and cargo audit (its deny.toml, .cargo/audit.toml);
+#                  cargo clippy --locked --all-targets -- -D warnings; cargo test --locked (tests/anvil.rs, opt-in, stays local)
 #   clients/scaas-rpc: first cargo deny --locked check -D index-failure and cargo audit (its deny.toml, .cargo/audit.toml); cargo test --locked --all-features; cargo clippy --locked --all-targets --all-features -- -D warnings;
 #                  cargo test --locked --features evm --test anvil -- --ignored (three anvils, foundry's);
 #                  cargo check --locked --target wasm32-unknown-unknown --no-default-features --features evm,node-client,arweave (compiles for
@@ -263,6 +265,7 @@ jobs:
       contract_ton: ${{ steps.f.outputs.contract_ton }}
       node: ${{ steps.f.outputs.node }}
       scaas_rpc: ${{ steps.f.outputs.scaas_rpc }}
+      scaas_pqz_verifier: ${{ steps.f.outputs.scaas_pqz_verifier }}
       docs: ${{ steps.f.outputs.docs }}
       clientkeys: ${{ steps.f.outputs.clientkeys }}
       pqz: ${{ steps.f.outputs.pqz }}
@@ -584,6 +587,43 @@ jobs:
         run: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features evm,node-client,arweave
       - name: no tokio timer in the crate (F18)
         run: "! git grep -n 'tokio::time' -- src"
+
+  # the reference PQZ verifier (off-chain, its own binary; 3f spec §11.2): its dependency policy first (owner 2026-11-28),
+  # then clippy and the tests (tests/anvil.rs is opt-in and stays local)
+  scaas-pqz-verifier:
+    needs: changes
+    if: needs.changes.outputs.scaas_pqz_verifier == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scaas-pqz-verifier
+    steps:
+      - uses: actions/checkout@v7
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: scaas-pqz-verifier
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3 (2026-11-08, >= 14 days); its manifests pin each tool's sha256
+        with:
+          tool: cargo-deny@0.20.2,cargo-audit@0.22.2
+      - name: cargo deny and cargo audit
+        run: |
+          cargo deny --locked check -D index-failure
+          cargo audit
+      - name: cargo clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: cargo test
+        run: cargo test --locked
 
   node:
     needs: changes
