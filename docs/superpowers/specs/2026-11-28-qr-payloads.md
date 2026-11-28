@@ -625,18 +625,18 @@ phones for each class and for signature parts above version 30, reported, not a 
 
 ## 12. Open questions for the owner
 
-- **Q1. The class (b) bound.** Recommendation: k ≤ 72 (≈ 82 KB, about 15 to 20 s at 5 frames a second), so a PQZL transfer at
+- **Q1. The class (b) bound.** Ruled (owner 2026-11-28): as recommended. Recommendation: k ≤ 72 (≈ 82 KB, about 15 to 20 s at 5 frames a second), so a PQZL transfer at
   `n2048-kmax1024` goes by animated QR, fixed after the simulation and measurement of §11; the alternative is k ≤ 24 (≈ 27 KB,
   about 5 to 6 s), Zether only, PQZ always by the bulk file.
 - **Q2. Payment requests without a payer.** Ruled (owner 2026-11-28): a `pay-request` only carries what the payer needs to pay; `payer` is optional and anyone may pay it. Whether a request counts as paid (one or several payments by `entryRef`, partial payments, refunds, CTR-MTX-03 / CTR-MTX-31) is the payee's reconciliation from the chain's events, never the QR's or the payer's client's: the scanner pays and shows only its own history of payments to the same payee and `pay_no` as a Caution.
 - **Q3. The payee's signature on a payment request.** Recommendation: keep it optional, under its own off-chain purpose (§3.2);
   the review shows "signed by <UA>, a known contact" or "not a known contact", and an unsigned request carries a Caution that
   anyone can show it.
-- **Q4. Bulk by hash from a node.** Recommendation: not in this frame; the bulk file and a PqChat or Matrix attachment cover it,
+- **Q4. Bulk by hash from a node.** Ruled (owner 2026-11-28): as recommended. Recommendation: not in this frame; the bulk file and a PqChat or Matrix attachment cover it,
   the Arweave store later (§6.4); a node endpoint would be its own node rule if asked for.
-- **Q5. EIP-681 for EVM receive requests**, readable by other wallets. Recommendation: no; `scaas:` only, since another wallet
+- **Q5. EIP-681 for EVM receive requests**, readable by other wallets. Ruled (owner 2026-11-28): as recommended. Recommendation: no; `scaas:` only, since another wallet
   would show neither UA ids nor the SCaaS review.
-- **Q6. The default error correction level.** Recommendation: L by default (screens and files, fewer parts: the `mldsa65`
+- **Q6. The default error correction level.** Ruled (owner 2026-11-28): as recommended. Recommendation: L by default (screens and files, fewer parts: the `mldsa65`
   vector is 2 signature parts), M as an export option for print.
 - **Q7. Confidential imports.** Ruled (owner 2026-11-28): a confidential operation (PQZ or Zether, kept apart) is importable
   for scan and submit only, with `relayer` bound to the scanner, under `Limits::max_native_cost`; the review shows a fixed line
