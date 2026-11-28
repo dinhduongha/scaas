@@ -17,3 +17,16 @@ pqchat-core gen_abi --check / check_reads | 040a9d144 | 0 | equal; 59 reads, 0 r
 clientkeys pqchat.test.js | 040a9d144 | 0 | 22 passed
 format.sh --check (every language) | 040a9d144 | 0 | ok
 docs_check check / paths / test | 040a9d144 | 0 | 0 errors
+# after the dev merge d8756f55f (fc2ebdbaf), D-1 and the E-3 replay negative (6b788e717), the rename to PqChatLib (265249b87):
+rename: forge build src before / after | 265249b87 | 0 | 326 contracts, runtime and init identical (link placeholders zeroed); PqChatLib init hash = PqChatRecordLib's (0xdac7845f…66ac), CREATE2 0xF162b68D0030347A886797328cd607be9409Cf1a unchanged
+size gate | 265249b87 | 0 | 185 contracts, 0 errors; PqChat 33,605 B (T-2 notice)
+forge test/pqchat, test/governance | 265249b87 | 0 | 338 passed (+2 skipped); 1013 passed
+onchain matrix local without DEPLOY_PQCHAT | 265249b87 | 0 | deploy 116 txs; PqChat txs 44/44, negatives 10/10 (the replay negative: PqChatNonceUsed)
+onchain matrix local with DEPLOY_PQCHAT | 265249b87 | 0 | deploy 124 txs; PqChat txs 36/36, negatives 10/10
+pqchat-core (all) + chain_tree (--ignored, one thread) | 265249b87 | 0 | 154 passed in 24 binaries; chain_tree 3 passed
+gen_abi --check | 265249b87 | 0 | equal
+scaas-node lib pqchat / pqvault rows | 265249b87 | 0 | 11 passed
+scaas-cli | 265249b87 | 0 | 22 passed
+clientkeys pqchat.test.js | 265249b87 | 0 | 22 passed
+vcheck offline tests | 265249b87 | 0 | ok (linked libraries shown)
+format.sh --check, docs_check check / paths / test | 265249b87 | 0 | ok; 0 errors
