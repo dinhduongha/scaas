@@ -13452,6 +13452,181 @@ It said: a profile's Matrix logins, session, store, crypto keys and device id ar
 **Cost if wrong.** Signing code, PQ kinds or group signers linked into an app build that signs nothing; a later feature edit pulling `wallet` back in unnoticed.
 **Source.** Owner ruling 2026-11-27 (chat): scaas-app's default build links ua-rs only with the profile-crypto features; no signing code is compiled into it. [spec](superpowers/specs/2026-11-27-user-profiles.md) §1 O15, §11. Owner ruling 2026-11-27: the verify-only identity layer stays in the profile build of `ua-rs`.
 
+<a id="CLI-QR-01"></a>
+### CLI-QR-01 — One QR format in the crate `scaas-qr`: a format core with no image library and no SDK, and an image layer behind its feature `image`
+- old: — · status: current · owner: yes · date: 2026-11-28 · normative: decisions.md#CLI-QR-01 · superseded-by: —
+
+**Rule.** Every SCaaS client (scaas-app, `scaas-tui`, the CLI) reads and writes QR payloads through one crate,
+`clients/scaas-qr`. Its format core (default features) holds the payload types, the canonical bytes and the `scaas:` URI, the
+split into info, signature and bulk parts and their assembly, the fountain coder, the part binding and bulk pin checks and every
+bounded decode; it depends on no image library, no `scaas-sdk` and no signing code, and builds for `wasm32-unknown-unknown`. Its
+image layer, the feature `image`, adds QR symbol encoding, PNG / SVG / APNG writing and PNG / JPEG / APNG decoding and the
+terminal renderer; `scaas-tui` and the CLI link it. `scaas-sdk` depends on the format core, never the reverse; scaas-app's
+default build may link the format core without the SDK. The crate signs, verifies, encrypts and decrypts nothing; the digest a
+signer signs and its check are `ua-rs`'s, called by the SDK. New dependencies pinned exactly at their newest release at least
+14 days old, under the crate's own `cargo deny` and `cargo audit` gate.
+**Status.** SPECIFIED, nothing built; built after the pre-freeze tag, before the freeze. UNAUDITED.
+**Why.** One format in one place keeps three front-ends byte-equal; the dependency pointing one way lets an app build without
+the SDK show a receive QR; a feature rather than a sibling crate keeps one version, one vector reader and one dependency gate for
+two layers that change together, and the feature's only risk (unification pulling image crates into a build) costs size, not
+safety, and is checked by `cargo tree -e features`.
+**Cost if wrong.** Front-ends that drift apart in bytes; image crates or signing code in a build that needs neither.
+**Source.** Owner ruling 2026-11-28: QR codes in SCaaS clients, specified now as a frame and built after the pre-freeze tag,
+before the freeze; the crate layout `clients/scaas-qr` in two layers (format core without image library or SDK dependency,
+wasm32-clean, the SDK depending on it; image layer behind a feature or a sibling crate, the spec to pick). The pick (a feature)
+is the controller's, owner may override. [QR spec](superpowers/specs/2026-11-28-qr-payloads.md) §2;
+[stack.md](clients/stack.md) rule 10.
+
+<a id="CLI-QR-02"></a>
+### CLI-QR-02 — Four payload kinds in one typed, versioned, chain-bound format: canonical bytes `SQ ‖ 0x01 ‖` a deterministic CBOR map of named fields, and the `scaas:` URI of the same bytes
+- old: — · status: current · owner: no · date: 2026-11-28 · normative: decisions.md#CLI-QR-02 · superseded-by: —
+
+**Rule.** The kinds are `receive` (a receiver's UA id or native address, chain uid, token, optional amount and `pay_no`),
+`pay-request` (the payee's named fields of CTR-MTX-03 and CTR-MTX-26: token, payee, amount, `PayMeta`, `valid_until`, optional
+payer and relayer; the scanner computes `entryRef` itself; `PayMeta.schema` 0, 1 or 2 only, else `QrSchemaRefused`; an optional
+payee signature over an off-chain typed record no contract accepts), `signed-op` (the hand-off object `SignedOpBlob`, both
+directions: scan and submit with the scanner paying the gas, or show the user's own for a partner; plus the signed `digest`) and
+`link` (a `LinkSession`'s public offer). A part's canonical bytes are `SQ`, the version byte `0x01` and one map in the
+deterministic CBOR subset: text keys sorted by their encoded bytes, shortest unsigned integers, byte strings, NFC text, arrays,
+booleans; no negative integers, floats, tags, null, indefinite lengths, duplicate keys or trailing bytes; a decode re-encodes and
+refuses any difference (`QrNotCanonical`). Named fields only, typed per kind (`bytes32`, `bytes`, `uint`, `u256` as decimal digits,
+`address` text, `text`, `bool`, struct, list), field for field the SDK's JSON forms; one crypto object per byte string; a frame's
+data is a transport slice of one object's canonical bytes, never a parameter. The URI form is `scaas:` and the unpadded base64url
+of the canonical bytes. Every info part carries `v`, `kind` and `chain_uid`; no payload carries a secret.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Explicit parameters (AGENTS.md) in a form a QR holds densely: CBOR byte strings carry an ML-DSA-65 signature with its key
+in two QR parts where hex needs four; one canonical form gives every language the same bytes.
+**Cost if wrong.** Two encoders that disagree on one payload; a format with a field a secret could travel in.
+**Source.** Controller design in the [QR spec](superpowers/specs/2026-11-28-qr-payloads.md) §3, §4, owner may override; the four
+kinds from the owner's ruling of 2026-11-28 (receive request, payment request optionally signed by the payee, a signed intent
+someone else submits and pays the gas for, the user's signed intent shown for a partner to relay; one versioned typed format with
+a URI form and a canonical byte form, chain-bound).
+
+<a id="CLI-QR-03"></a>
+### CLI-QR-03 — Every QR decode is bounded by length and depth before it allocates, and refuses by name
+- old: — · status: current · owner: no · date: 2026-11-28 · normative: decisions.md#CLI-QR-03 · superseded-by: —
+
+**Rule.** One part at most 2,953 bytes (one QR, version 40, level L) or one URI line of 3,944 characters; CBOR depth 8, 64 entries
+a map, 256 elements an array; `text` 64 bytes, `PayMeta.body` 1,024 bytes, `u256` 78 digits; at most 16 signature parts; a bulk of
+at most 72 source symbols in QR form and a bulk file of at most 768 KiB; at most 2 · k + 16 fountain frames held; one payload held
+at a time, a foreign part dropped; a `.scaasqr` file 1 MiB and 128 lines; an image 8,192 pixels a side, 64 MiB decoded, 256 APNG
+frames, 128 files a set. Unknown or missing fields, a wrong type, a non-canonical encoding and trailing bytes are refused. One fuzz
+target covers every decode path.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** A QR is attacker-chosen input; a stack overflow or an unbounded allocation in a scanner aborts the app.
+**Cost if wrong.** A crafted QR that crashes or exhausts the scanning device.
+**Source.** Controller design in the [QR spec](superpowers/specs/2026-11-28-qr-payloads.md) §7, owner may override; the owner's
+ruling of 2026-11-28 asks for size and depth bounds on decode.
+
+<a id="CLI-QR-04"></a>
+### CLI-QR-04 — A payload too large for one QR is split by meaning: a complete info QR first, signature parts bound to it, the digest rebuilt and the signature verified before any submit
+- old: — · status: current · owner: yes · date: 2026-11-28 · normative: decisions.md#CLI-QR-04 · superseded-by: —
+
+**Rule.** (1) The info part holds every named field of the intent (chain uid, contract, entry, the operation's fields,
+`valid_until`, the payer and relayer bindings, the signed digest, the bulk pins) and is always one QR; a scanner shows the full
+review from it before any other part arrives; an info part above one QR is `QrInfoTooLarge` (file form). (2) Each signature or
+bulk part carries `info = keccak256("scaas.qr.info.v1" ‖ the info part's canonical bytes)`, its index and its count; parts are
+accepted in any order; a part of another info part is `QrPartForeign`, a different part at a held index `QrPartConflict`, an
+index or count that does not agree `QrPartIndex` / `QrPartCount`. (3) The SDK has `ua-rs` rebuild the digest from the info part's
+fields with the signer's own builder, refuses a different `digest` field (`QrDigestMismatch`), and verifies the signature against
+the rebuilt digest before offering to submit (`QrSignatureInvalid`); where the check needs chain state (ERC-1271, a registered
+`msig`) the chain's simulation is the check and the review says so. (4) Only a signature larger than one QR is chunked, into the
+fewest equal plain numbered chunks of its canonical bytes, which are the systematic frames of the fountain coder; at most 16
+signature parts (`QrTooLarge` above, file form). (5) The same split, in the same order (info, signature parts, bulk parts), in
+every form: the PNG set, the animated APNG, the text file and a live display.
+**Status.** SPECIFIED, nothing built; vectors PLANNED, an info part and a 2-part `mldsa65` signature among them (CLI-QR-08).
+UNAUDITED.
+**Why.** A post-quantum signature (ML-DSA-65 with its key, 5,261 bytes) does not fit one QR; splitting by meaning keeps the review
+whole and the signature checkable, where a blind cut would leave a scanner holding half an intent.
+**Cost if wrong.** A review shown from a partial payload; parts of two intents mixed; a forged digest field trusted.
+**Source.** Owner ruling 2026-11-28: when a payload is too big for one QR, split it by meaning first, the information in its own
+QR complete and reviewable, the signature (and the signer's key if needed) in its own QRs, each bound to the info QR by a digest
+or hash with its part index and count, in any scan order, a mismatched part refused by name; the scanner recomputes the digest
+from the info QR's fields, never trusting a digest field alone, and verifies the signature before offering submit; only a
+signature above one QR is chunked; the same split in every export form. Plain chunks for signatures, the fountain code for bulk
+only: the controller's recommendation the ruling asked for, owner may override. [QR spec](superpowers/specs/2026-11-28-qr-payloads.md) §5.
+
+<a id="CLI-QR-05"></a>
+### CLI-QR-05 — Proofs and ciphertexts travel as bulk pinned by `keccak256` in the info part: animated with a fountain code up to 72 source symbols, by another channel above
+- old: — · status: current · owner: no · date: 2026-11-28 · normative: decisions.md#CLI-QR-05 · superseded-by: —
+
+**Rule.** For a `signed-op` with a proof or ciphertexts (PQZ, Zether), the funds' owner's client makes the proof and signs; the
+partner who scans it relays and pays the gas only. The large `bytes` fields of the signed struct leave the info part, which pins
+each by path, length and `keccak256` (EIP-712 hashes dynamic bytes, so `ua-rs` rebuilds the digest from the pins); the bulk is one
+map of exactly the pinned fields, each checked against its pin (`QrBulkMismatch`, `QrBulkMissing`). Classes by measured size: none
+(info and signature parts); up to 72 source symbols of 1,152 bytes, animated with the UR fountain algorithm (systematic frames
+first, then repair frames; a printed set holds the systematic ones); above, or by choice, the bulk goes as the `.scaasbulk` file,
+a PqChat or Matrix attachment, or the Arweave store (an `ar://` id at most; never an `http` locator), integrity by the pins alone.
+A family that signs such a field in full has no pinned form; its operation goes as a file. Nothing in a bulk is ever decrypted
+by the scanner. One rule on every chain and set: the class follows the operation's size.
+**Status.** SPECIFIED for the rule; the confidential kinds' QR forms PLANNED with their families. UNAUDITED. The bound of 72 is a
+proposal (spec §12 Q1).
+**Why.** A PQZL transfer is about 77 KB and a PQZH transfer about 264 KB: tens to hundreds of frames, where a fountain code saves
+whole loops and a pin keeps the review and the digest check independent of how the bulk arrives.
+**Cost if wrong.** A scan that never completes; a bulk swapped in transit and submitted; a relayer asked to hold or open what is
+the owner's.
+**Source.** Controller design in the [QR spec](superpowers/specs/2026-11-28-qr-payloads.md) §6, on the owner's question of
+2026-11-28 about QR for proofs, owner may override; sizes from pq-zero-knowledge.md and the Zether prover's vectors.
+
+<a id="CLI-QR-06"></a>
+### CLI-QR-06 — Export as PNG or SVG for one QR, as a numbered PNG set or an animated APNG for several, as a `.scaasqr` text file always; import from text, image files and the camera
+- old: — · status: current · owner: yes · date: 2026-11-28 · normative: decisions.md#CLI-QR-06 · superseded-by: —
+
+**Rule.** One QR: PNG or SVG, dark modules on a light background in every theme, a quiet zone of 4 modules. Several parts: a
+numbered PNG set (`<stem>-00-info.png`, `<stem>-sNN-of-NN.png`, `<stem>-bNNN-of-NNN.png`, the systematic bulk frames only) and an
+animated APNG: frame 1 the info part for 1,000 ms, then the signature parts, then for a bulk the k systematic and ⌈k/2⌉ repair
+frames, each 200 ms (5 frames a second, 2 to 10 as an option), looping without end; a live display keeps the order and timing
+with ever new repair frames. GIF is not offered. Every payload: a `.scaasqr` UTF-8 file, one `scaas:` URI a line, info first;
+a class (c) bulk as `.scaasbulk`. Import from a `.scaasqr` file or pasted lines in any order, from PNG, JPEG or APNG files or a
+numbered set, from scaas-app's camera, and from a `scaas:` URI the platform opens; an import ends in a review, never a signature.
+The TUI draws QRs with Unicode half blocks (two modules a cell; `#` in its ASCII mode), refuses one that does not fit
+(`QrTerminalTooSmall`), imports by paste or path and exports as above. The CLI has `qr export`, `qr show` and `qr import`.
+**Status.** SPECIFIED, nothing built; the camera PLANNED with scaas-app. UNAUDITED.
+**Why.** The owner asked for files as well as screens; APNG is lossless and a viewer that cannot animate it shows the info part,
+which is complete for review.
+**Cost if wrong.** An exported set that cannot be scanned back; a viewer showing a part that cannot be reviewed alone.
+**Source.** Owner ruling 2026-11-28: export to file, PNG and SVG for one QR, for several an animated form and a numbered PNG set,
+the raw payload as a text file; import from text, image files and the camera; the TUI draws, exports and imports; CLI commands
+`qr show / export / import`; an animated APNG accepted as the animated form, preferred over GIF, with the frame order info first
+then signature parts. Frame timing and file names: the controller's, owner may override.
+[QR spec](superpowers/specs/2026-11-28-qr-payloads.md) §8.
+
+<a id="CLI-QR-07"></a>
+### CLI-QR-07 — A scanned QR is untrusted: never signed on scan, reviewed and quoted in full, chain mismatch refused, expiry shown, replay as the contracts rule, nothing decrypted, no secret in any payload
+- old: — · status: current · owner: no · date: 2026-11-28 · normative: decisions.md#CLI-QR-07 · superseded-by: —
+
+**Rule.** A scan ends in the SDK's `SignReview` and quote (CLI-SDK-35); any signature, the payer's or the scanner's native
+transaction, is made only on the user's confirm (CLI-SDK-36), and a fresh quote above the reviewed one asks again (CLI-PQV-18).
+Another `chain_uid` than the active profile's: `ProfileMismatch`; a `signed-op` on an unlisted contract: refused as the import
+refuses; an unlisted token in a `receive` or `pay-request`: a Caution; a `pay-request` naming another payer: `QrPayerMismatch`.
+`valid_until` is shown; a `pay-request` less than 120 s ahead is `QrExpired`, a `signed-op` the import's `ImportExpired`. A
+signature runs at most once; a consumed `signed-op` is `ImportConsumed`; a `pay-request` is paid on `payLane(entryRef)` at nonce 0
+by default, so a second scan cannot pay it twice. Nothing in a scanned payload or its bulk is decrypted, trial-decrypted or opened
+(ARCH-POS-13); a confidential review says "amount hidden". A confidential `receive` carries the recipient's UA only, its key read
+from the chain. No payload carries a seed, key, opening, blinding, sender randomness or encrypted body's plaintext. A `scaas:` URI
+only starts an import; `link` is accepted from the camera only (`QrSourceRefused`), the authenticated channel of CLI-UAL-12.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Whoever made a QR chose its bytes; a scanner that signs, decrypts or trusts what it reads becomes the attacker's tool.
+**Cost if wrong.** A signature the user did not review; a decryption oracle over a scanned ciphertext; a link key swapped through a
+pasted string.
+**Source.** Controller design in the [QR spec](superpowers/specs/2026-11-28-qr-payloads.md) §9, owner may override; the owner's
+ruling of 2026-11-28 lists the safety points (untrusted data, bounded decode, the full review before signing, never sign on scan,
+chain and contract mismatch, expiry, the contracts' replay rules, no decryption oracle, what a confidential QR may carry).
+
+<a id="CLI-QR-08"></a>
+### CLI-QR-08 — QR vectors in `smartcontracts/vectors/qr/`, generated by clientkeys and read by `scaas-qr` and the SDK
+- old: — · status: current · owner: no · date: 2026-11-28 · normative: decisions.md#CLI-QR-08 · superseded-by: —
+
+**Rule.** clientkeys holds the JS reference of the format core and generates `smartcontracts/vectors/qr/` (`receive`,
+`pay_request`, `signed_op` with an info part and a 2-part `mldsa65` signature, `bulk` with a Zether and a PQZL transfer, `link`,
+`fountain` with the UR algorithm's reference cases, `negative` with a row per refusal bytes can show); `scaas-qr` and the SDK's
+import tests read the same rows; a change to the format changes the generator and every reader at once, never one reproducer.
+**Status.** PLANNED. UNAUDITED.
+**Why.** The byte-format rule (AGENTS.md "Clients and vectors").
+**Cost if wrong.** A Rust and a JS encoder that disagree and both pass their own tests.
+**Source.** Owner ruling 2026-11-28 (vectors in `smartcontracts/vectors/qr/` by clientkeys, read by ua-rs / the SDK; an info QR
+and a 2-part ML-DSA-65 signature among them); [QR spec](superpowers/specs/2026-11-28-qr-payloads.md) §10.
+
 ## 42. Clients — terminal UI (`scaas-tui`)
 
 The rules are in [clients/scaas-tui.md](clients/scaas-tui.md); the design is the [scaas-tui spec](superpowers/specs/2026-11-17-scaas-tui.md), a frame whose parts that wait on unsettled SDK sections are marked (its §15), with open points in its §16 (Q-T2, Q-T5, Q-T6 and Q-T7 answered on 2026-11-24) and Fable's review of 2026-11-17 applied (its §18). Owner entries carry the owner's words only; the controller's means and proposals have entries of their own (Fable U14).

@@ -10,7 +10,8 @@ Which client crate depends on which, across this repository and scaas-app (a sep
 Status: SPECIFIED. `ua-rs`, `scaas-rpc`, `scaas-sdk`, `pqchat-core`, `pqvault-core`, `scaas-tui` and the CLI are BUILT;
 `scaas-profile` is being built (branch `user-profiles`); `scaas-matrix` and `pqchat-transport` are PLANNED (branch
 `scaas-matrix`); the CLI's links to `pqchat-core`, `pqvault-core` and `scaas-matrix` are PLANNED (owner 2026-11-27,
-[CLI-SDK-17](scaas-cli.md#CLI-SDK-17)); scaas-app's crates are planned in that repository.
+[CLI-SDK-17](scaas-cli.md#CLI-SDK-17)); `scaas-qr` is SPECIFIED (owner 2026-11-28,
+[CLI-QR-01](../decisions.md#CLI-QR-01)); scaas-app's crates are planned in that repository. The SVG above predates `scaas-qr`.
 
 An arrow reads "depends on". A dotted arrow is a data dependency only (a pinned commit, no Rust dependency), except the
 CLI's three arrows labelled "planned", which are Rust dependencies not built yet.
@@ -32,6 +33,7 @@ flowchart TB
     SDK["scaas-sdk"]
     RPC["scaas-rpc"]
     PROF["scaas-profile"]
+    QR["scaas-qr (format core; feature image)"]
     MX["scaas-matrix"]
     TR["pqchat-transport (trait only)"]
     UAF["ua-rs (all features): the only signer"]
@@ -40,6 +42,7 @@ flowchart TB
   end
   ACR -->|"every build"| PROF
   ACR -->|"every build"| MX
+  ACR -->|"every build, core"| QR
   ACR -->|"feature scaas"| SDK
   ACR -->|"feature scaas"| PQC
   ACR -->|"feature scaas"| PQV
@@ -47,8 +50,10 @@ flowchart TB
   TUI --> PQC
   TUI --> PQV
   TUI --> MX
+  TUI -->|"feature image"| QR
   TUI -.->|"pinned commit, fixtures"| VM
   CLI --> SDK
+  CLI -->|"feature image"| QR
   CLI -.->|"planned"| PQC
   CLI -.->|"planned"| PQV
   CLI -.->|"planned"| MX
@@ -58,6 +63,7 @@ flowchart TB
   MX --> TR
   MX --> MSDK["matrix-sdk (matrix-rust-sdk)"]
   SDK --> PROF
+  SDK -->|"core"| QR
   SDK --> RPC
   SDK --> UAF
   RPC --> UAF
@@ -92,3 +98,8 @@ Status: SPECIFIED.
    scaas-app's view-model fixtures by a pinned commit only (CLI-TUI-19).
 9. **Byte formats change everywhere at once:** `ua-rs` and clientkeys read the same vector rows (AGENTS.md "Clients and
    vectors").
+10. **`scaas-qr` is one QR format for every client, and its format core stands alone** (owner 2026-11-28,
+   [CLI-QR-01](../decisions.md#CLI-QR-01)): the core depends on no image library, no `scaas-sdk` and no signing code, and builds
+   for `wasm32`; `scaas-sdk` depends on it, never the reverse; scaas-app's every build may link the core (a receive QR without
+   the SDK); the image layer is its feature `image`, linked by `scaas-tui` and the CLI. The crate signs, verifies, encrypts and
+   decrypts nothing: digests and signature checks stay `ua-rs`'s, through the SDK (rule 1).
