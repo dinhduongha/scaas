@@ -717,6 +717,30 @@ Change (owner: yes, 2026-11-28): the rule stands in `AGENTS.md`, "Smart contract
 bullet: no `fallback()` routing; every callable entry is declared in the contract's ABI; a size split is a linked external
 library first, a body module only behind declared forwarders.
 
+<a id="ARCH-POS-30"></a>
+### ARCH-POS-30 — Rust dependencies stay current at the major and minor level
+- old: — · status: current · owner: yes · date: 2026-11-28 · normative: decisions.md#ARCH-POS-30 · superseded-by: —
+
+**Rule.**
+- **Current major and minor.** Every direct Rust dependency of every crate outside `legacy/` is on the newest major and minor
+  release that is at least 14 days old and not yanked. Patch releases follow the same 14-day rule.
+- **An exception is written down.** A dependency held below that line names its reason beside the pin and in this file: an
+  owner ruling (its id, e.g. ARCH-POS-12 for the toolchain cargo-near caps), or an upstream constraint (the crate and version
+  that holds it, e.g. a parent requiring the older line), with the release that ends it and a review date. No exception
+  without a reason.
+- **Checked, not remembered.** A check lists every direct Rust dependency behind that line without a written exception, and
+  fails on one; it runs in CI on a schedule beside the advisory checks.
+
+**Status.** SPECIFIED: the inventory of 2026-11-28 and the first bump round run before the pre-freeze tag; the check is
+built with that round.
+**Why.** Pins set once and never revisited left the workspace a major behind on core crates (alloy 1.6 while 2.x shipped
+since 2026-04-13); the advisory gates see only published advisories, not age.
+**Cost if wrong.** A major bump changes APIs and may move bytes; each bump runs its crate's suites, the vectors it reads and
+the pins it touches, and a bump that moves a pinned byte format follows the byte-format rule (every reader at once).
+**Source.** Owner ruling 2026-11-28 (Rust libraries are kept up to date at least at the major and minor level).
+
+Change (owner: yes, 2026-11-28): one exception to the 14-day line: alloy 2.6.1 (released 2026-11-16, its 14th day 2026-11-30; 2.6.0 of the same day is yanked) may be used now, with the alloy crates of the same release.
+
 ## 2. Node — General
 
 ### NODE-GEN-01 — Node holds no subject funds or keys
