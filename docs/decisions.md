@@ -12169,6 +12169,25 @@ falcon-rs's keygen cap named `FalconKeygenCap` (FR-9). The gate gains the encodi
 796 refuse) and the key pairs of 1,000 seeds per degree (FR-5, FR-11), and runs in CI (job `ua-rs-fndsa-wasm`, FR-4). Evidence:
 `clients/runs/2026-11-26-falcon-rs-fixes-summary.txt`.
 
+### CLI-UAL-67 — Every exact `serde_json` pin is `=1.0.154`
+- old: — · status: current · owner: no · date: 2026-11-28 · normative: clients/ua-libraries.md#CLI-UAL-67 · superseded-by: —
+
+**Rule.** (Summary; normative [ua-libraries.md](clients/ua-libraries.md#CLI-UAL-67).) `ua-rs` (feature `json`), `ua-qt`,
+`ua-rs/fuzz`, `ua-rs/tests/fndsa/wasm` and `smartcontracts/evm/script/pqz/wallet` pin `serde_json = "=1.0.154"` (was `=1.0.145`);
+every lock file that resolved 1.0.145 resolves 1.0.154.
+**Status.** BUILT on branch `serde-json-pin`. 1.0.154 writes what 1.0.145 wrote byte for byte except a float with a positive
+exponent (`1e+20` for `1e20`; a differential run over 2,000,000 f64 and f32 values, 2,000,000 parses, integers, 100,000 strings,
+both key orders), and nothing here writes a float through `serde_json`; the vector readers and canonical forms of `ua-rs`, `ua-c`,
+`ua-cxx`, `ua-qt`, `ua-dart-frb`, `scaas-sdk`, `pqvault-core` and `pqchat-core` pass, and `ua-rs`'s `write_wallet_rows` regenerates
+`wallet_state.json` unchanged. Evidence: `clients/runs/2026-11-28-serde-json-pin-summary.txt`.
+**Why.** `scaas-matrix` (matrix-sdk `=0.19.1`) needs `serde_json ^1.0.151`, and `ua-rs`'s exact `=1.0.145` (resolved even with
+feature `json` off) kept every build that links `scaas-sdk` from linking it: `scaas-tui` and scaas-app's `scaas` build. 1.0.154
+(2026-10-11) is the highest release at least 14 days old (1.0.151 2026-07-20, 1.0.152 2026-10-10, 1.0.153 and 1.0.154
+2026-10-11); it formats floats with `zmij` 1.0.23 (MIT, 2026-07-13) in place of `ryu`.
+**Cost if wrong.** A vector or canonical form written by `serde_json` changes bytes, and a signature or digest over it differs
+between clients.
+**Source.** Controller call 2026-11-28 (owner: no; owner may override).
+
 ## 40. Clients — network crate (`scaas-rpc`)
 
 The rules are in [clients/scaas-rpc.md](clients/scaas-rpc.md); the design is the [scaas-rpc spec](superpowers/specs/2026-11-17-scaas-rpc.md), reviewed by Fable on 2026-11-17 (findings F1–F28, I1–I3, all applied before any code).

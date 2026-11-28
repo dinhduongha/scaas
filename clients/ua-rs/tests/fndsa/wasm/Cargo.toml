@@ -17,7 +17,7 @@ path = "lib.rs"
 [dependencies]
 scaas-ua = { path = "../../..", default-features = false, features = ["vectors"] }
 hex = "0.4"
-serde_json = "=1.0.145"
+serde_json = "=1.0.154"
 sha3 = "0.12"
 shake = "0.1"
 wasm-bindgen = "=0.2.130"
