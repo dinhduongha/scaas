@@ -763,6 +763,15 @@ stable release (not yanked, not a pre-release) of every dependency and tool, so 
 0.9.1, soroban-sdk 30.0.0) end now. The 14-day line applies again after this round. The Rust toolchain stays at 1.97.1
 (the ruling above).
 
+Change (owner: yes, 2026-11-28, on the inventory supplement for Move, C vendor and Go / Dart): (1) the contract toolchain
+targets stay solc 0.8.38 and Foundry 1.9.0, as ruled before, not the newest releases; (2) the vendored `falcon-rs` moves from
+0.3.1 to 0.4.0 with its `round3` feature (today's Falcon bytes), now, with every Falcon vector re-run and the new code read
+in an audit round (ARCH-POS-14; UNAUDITED until then); (3) the archived PQClean Falcon code (`pqcrypto-falcon` 0.4.1,
+`pqcrypto-internals` 0.2.11) is replaced before the pre-freeze tag by a maintained implementation, with its vectors and an
+audit read; (4) `vendor/lazer-3330e48` (the golden-KAT reference) and `vendor/lattice-estimator-53da598` (research) keep
+dated exceptions: LaZer moves only with a new fork base, new goldens and a full gate, the estimator only when the
+parameter sets are re-estimated.
+
 Change (controller, owner: no, owner may override, 2026-11-28): (1) the `wasm-streams` pin of CLI-SDK-33 (`=0.4.2`, for
 reqwest 0.12) moves with the alloy lane to the 0.5.x line reqwest 0.13 requires, restated there as an exact pin; (2) the
 stark-backup `p3-*` `=0.9.0-rc.1` pins keep a dated exception (backup proof system, not built into any shipped crate),
