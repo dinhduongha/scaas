@@ -115,7 +115,7 @@ impl Seed {
         let child = master
             .derive_path(path)
             .map_err(|e| anyhow!("bip32 {path}: {e}"))?;
-        let sk: &alloy::signers::k256::ecdsa::SigningKey = child.as_ref();
+        let sk: &coins_bip32::ecdsa::SigningKey = child.as_ref();
         let mut out = Zeroizing::new([0u8; 32]);
         out.copy_from_slice(&sk.to_bytes());
         Ok(out)
@@ -348,6 +348,39 @@ mod tests {
             hexs(cosmos.as_slice()),
             "8088c2ed2149c34f6d6533b774da4e1692eb5cb426fdbaef6898eeda489630b7"
         );
+    }
+
+    /// The secp256k1 lane keys across a `coins-bip32` move (0.12 on k256 0.13 -> 0.17 on k256 0.14,
+    /// RUSTSEC-2026-0387): BIP-32 known answers from clients/zether-prover/tools/bip32_ref.py, the 12-word
+    /// "abandon … about" key at m/44'/60'/0'/0/0, ART24 lanes 7 and 2^31 - 1 (the last non-hardened index).
+    #[test]
+    fn secp256k1_lane_keys_are_known_answers() {
+        let twelve = Seed::from_words(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            hexs(lane_secret(&twelve, "evm", 0).unwrap().1.as_slice()),
+            "1ab42cc412b618bdea3a599e3c9bae199ebf030895b039e9db1e30dafb12b727"
+        );
+        let s = Seed::from_phrase(ART24.as_bytes(), None).unwrap();
+        for (i, want) in [
+            (
+                7,
+                "e39ab523839806453291649e2f489b21af89f57b509de019251f104a80bb77e0",
+            ),
+            (
+                (1 << 31) - 1,
+                "1592927729109c6595d47e278b15254e34cdd7b1bcd817331f8ba4ed23fe7e19",
+            ),
+        ] {
+            assert_eq!(
+                hexs(lane_secret(&s, "evm", i).unwrap().1.as_slice()),
+                want,
+                "lane {i}"
+            );
+        }
     }
 
     #[test]

@@ -518,7 +518,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-signer",
  "async-trait",
- "coins-bip32",
+ "coins-bip32 0.12.0",
  "coins-bip39",
  "eth-keystore",
  "k256 0.13.4",
@@ -1278,6 +1278,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa"
 dependencies = [
  "hybrid-array",
+ "zeroize",
 ]
 
 [[package]]
@@ -1438,7 +1439,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2073678591747aed4000dd468b97b14d7007f7936851d3f2f01846899f5ebf08"
 dependencies = [
  "bs58",
- "coins-core",
+ "coins-core 0.12.0",
  "digest 0.10.7",
  "hmac 0.12.1",
  "k256 0.13.4",
@@ -1448,13 +1449,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "coins-bip32"
+version = "0.17.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31c4749610cee30c0ee56863a59a88cfb22eb6164d2c9cc5c9fc69edfedafe7b"
+dependencies = [
+ "bs58",
+ "coins-core 0.17.2",
+ "digest 0.11.3",
+ "hmac 0.13.0",
+ "k256 0.14.0",
+ "primeorder",
+ "serde",
+ "sha2 0.11.1",
+ "subtle",
+ "thiserror 1.0.69",
+ "zeroize",
+]
+
+[[package]]
 name = "coins-bip39"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74b169b26623ff17e9db37a539fe4f15342080df39f129ef7631df7683d6d9d4"
 dependencies = [
  "bitvec",
- "coins-bip32",
+ "coins-bip32 0.12.0",
  "hmac 0.12.1",
  "once_cell",
  "pbkdf2 0.12.2",
@@ -1480,6 +1500,18 @@ dependencies = [
  "sha2 0.10.9",
  "sha3 0.10.9",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "coins-core"
+version = "0.17.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91ceb7d87350259e6532a1d5ada71863f2f9014e0c4dfa180f0edc2b3c5439cd"
+dependencies = [
+ "digest 0.11.3",
+ "hybrid-array",
+ "ripemd 0.2.0",
+ "sha2 0.11.1",
 ]
 
 [[package]]
@@ -1902,6 +1934,7 @@ dependencies = [
  "const-oid 0.10.2",
  "crypto-common 0.2.2",
  "ctutils",
+ "zeroize",
 ]
 
 [[package]]
@@ -1943,7 +1976,7 @@ dependencies = [
  "digest 0.10.7",
  "elliptic-curve 0.13.8",
  "rfc6979 0.4.0",
- "serdect",
+ "serdect 0.2.0",
  "signature 2.2.0",
  "spki 0.7.3",
 ]
@@ -1959,6 +1992,7 @@ dependencies = [
  "elliptic-curve 0.14.3",
  "rfc6979 0.6.0",
  "signature 3.0.0",
+ "spki 0.8.1",
  "zeroize",
 ]
 
@@ -2022,7 +2056,7 @@ dependencies = [
  "pkcs8 0.10.2",
  "rand_core 0.6.4",
  "sec1 0.7.3",
- "serdect",
+ "serdect 0.2.0",
  "subtle",
  "zeroize",
 ]
@@ -2040,6 +2074,7 @@ dependencies = [
  "ff 0.14.0",
  "group 0.14.0",
  "hybrid-array",
+ "pkcs8 0.11.0",
  "rand_core 0.10.1",
  "sec1 0.8.1",
  "subtle",
@@ -2964,7 +2999,7 @@ dependencies = [
  "ecdsa 0.16.9",
  "elliptic-curve 0.13.8",
  "once_cell",
- "serdect",
+ "serdect 0.2.0",
  "sha2 0.10.9",
  "signature 2.2.0",
 ]
@@ -3611,7 +3646,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c9f42978c78a00e3d68f69fc03e57a234debae69da4020a4fb588fcdcd07b06"
 dependencies = [
  "elliptic-curve 0.14.3",
+ "once_cell",
  "primefield",
+ "serdect 0.4.3",
  "wnaf",
 ]
 
@@ -4215,7 +4252,7 @@ dependencies = [
  "base64 0.22.1",
  "blake2",
  "bs58",
- "coins-bip32",
+ "coins-bip32 0.17.2",
  "ed25519-dalek",
  "eth-keystore",
  "hmac 0.13.0",
@@ -4343,7 +4380,7 @@ dependencies = [
  "der 0.7.10",
  "generic-array",
  "pkcs8 0.10.2",
- "serdect",
+ "serdect 0.2.0",
  "subtle",
  "zeroize",
 ]
@@ -4541,6 +4578,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a84f14a19e9a014bb9f4512488d9829a68e04ecabffb0f9904cd1ace94598177"
 dependencies = [
  "base16ct 0.2.0",
+ "serde",
+]
+
+[[package]]
+name = "serdect"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66cf8fedced2fcf12406bcb34223dffb92eaf34908ede12fed414c82b7f00b3e"
+dependencies = [
+ "base16ct 1.0.0",
  "serde",
 ]
 
@@ -5082,7 +5129,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

@@ -58,7 +58,8 @@ wasm-bindgen = "0.2"
 getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
-bip32 = { version = "0.5", features = ["secp256k1"] }
+# 0.6 (k256 0.14, out of RUSTSEC-2026-0387): `derive_from_path` sits behind `alloc`
+bip32 = { version = "0.6.0", features = ["secp256k1", "alloc"] }
 # tests/secret_mul.rs: the ladder's record (test-only feature; never in a release build, check_test_features.py)
 scaas-ct = { path = "../scaas-ct", features = ["vectors"] }
 

@@ -15,16 +15,16 @@ yanked = "deny"
 unsound = "all"
 ignore = [
   # crypto-bigint 0.5.5 (timing variability in constant-time operations; fix only in 0.7.6+) reaches the graph through
-  # k256 0.13.4 -> elliptic-curve 0.13.8 (the last 0.13), held by alloy 1.6 (alloy-signer / alloy-primitives) and by the
-  # node's own coins-bip32 0.12 (src/keys.rs: the mnemonic's BIP-32 derivation of every secp256k1 lane key; coins-bip32
-  # 0.14+ is on k256 0.14). Every alloy release, 2.6.1 included, still requires k256 ^0.13, so no bump fixes it. The
-  # secrets on this path: k256 0.13.4 signs with crypto-bigint's sbb / sub_mod / add_mod / neg_mod on the secret scalar and
-  # nonce (the advisory's subtraction class, which may branch depending on compiler and CPU), and a remote party can make a
-  # lane sign on demand (one signature per job); the BIP-32 master key is used once at start, never on request. Bound: a
+  # k256 0.13.4 -> elliptic-curve 0.13.8 (the last 0.13), held by alloy 1.6 (alloy-signer / alloy-primitives, and
+  # alloy-signer-local's own coins-bip32 0.12, which the node no longer calls). The node's BIP-32 derivation of every
+  # secp256k1 lane key (src/keys.rs) is on coins-bip32 0.17.2 / k256 0.14 (branch deps-k256). No alloy release is on
+  # k256 0.14: checked on crates.io 2026-11-28, alloy 2.6.1 (2026-11-16) and alloy-primitives 1.7.3 still require k256
+  # ^0.13, so moving to alloy 2 does not fix it. The secrets on this path: k256 0.13.4 signs with crypto-bigint's sbb /
+  # sub_mod / add_mod / neg_mod on the secret scalar and nonce (the advisory's subtraction class, which may branch
+  # depending on compiler and CPU), and a remote party can make a lane sign on demand (one signature per job). Bound: a
   # lane key holds gas only (never a contract role, never subject funds). The id covers any parent of elliptic-curve 0.13:
-  # re-check this entry on any new one (`cargo tree -i crypto-bigint@0.5.5`). Remove when alloy is on k256 0.14 and
-  # coins-bip32 >= 0.14.
-  { id = "RUSTSEC-2026-0387", reason = "via alloy 1.6 and coins-bip32 0.12 (k256 0.13.4 -> elliptic-curve 0.13.8); no alloy release on k256 0.14 yet; lane keys hold gas only; review by 2027-02-28" },
+  # re-check this entry on any new one (`cargo tree -i crypto-bigint@0.5.5`). Remove when alloy is on k256 >= 0.14.
+  { id = "RUSTSEC-2026-0387", reason = "via alloy 1.6 (k256 0.13.4 -> elliptic-curve 0.13.8); alloy 2.6.1 still on k256 ^0.13 (crates.io 2026-11-28); lane keys hold gas only; remove when alloy is on k256 >= 0.14; review by 2027-02-28" },
   # sqlx 0.8.6 -> sqlx-sqlite 0.8.6 -> libsqlite3-sys 0.30.1 (bundled SQLite): stale page-cache bytes when a process opens a
   # database together with a crafted `-wal` file of another page size. Local only: the node opens only the store URL its
   # operator configures (`sqlite:`, never created, one owner by lock file): the file it writes in its data directory, or a
@@ -36,8 +36,10 @@ ignore = [
   { id = "RUSTSEC-2026-0459", reason = "SQLite WAL page-size bug: a crafted pair in the node's data volume or a restored backup leaks process heap into rows; fix needs sqlx 0.9.1, under 14 days old; remove from 2026-12-02" },
   # lru 0.16.4 (unsound: `LruCache::pop` may use freed memory when a key's Drop panics and the panic is caught) via
   # alloy-provider 1.6.3, whose caches key on u64 block numbers and B256 hashes: no key Drop can panic, and the node has no
-  # catch_unwind. Fixed in lru 0.18.2, which needs alloy-provider >= 2.6 (alloy 2, its own round): remove with that move.
-  { id = "RUSTSEC-2026-0253", reason = "lru 0.16.4 via alloy-provider 1.6.3, u64 / B256 keys whose Drop cannot panic; fix needs alloy 2; review by 2027-02-28" },
+  # catch_unwind. Fixed in lru 0.18.2, which alloy-provider requires from 2.4.0 (2026-08-12; 2.0-2.3 still take lru
+  # ^0.16; checked on crates.io 2026-11-28, latest 2.6.1): remove with the move to alloy-provider >= 2.4 (alloy 2, its own
+  # round).
+  { id = "RUSTSEC-2026-0253", reason = "lru 0.16.4 via alloy-provider 1.6.3, u64 / B256 keys whose Drop cannot panic; fix needs alloy-provider >= 2.4 (alloy 2); review by 2027-02-28" },
   # unmaintained, no vulnerability
   { id = "RUSTSEC-2024-0436", reason = "paste: proc macro of alloy-primitives and ark-ff 0.5 (scaas-ua), build-time only, not in the runtime" },
   { id = "RUSTSEC-2026-0441", reason = "pin-utils: wasm32 only (wasmtimer 0.4.3 of alloy 1.6), never built for the node; unmaintained, no vulnerability" },
