@@ -15,6 +15,8 @@
     clippy::too_many_arguments
 )]
 
+#[path = "../../scaas-sdk/tests/common/fake_http.rs"]
+mod fake_http;
 #[path = "../../scaas-sdk/tests/common/prepared.rs"]
 mod prepared;
 use pqvault_core::records::*;
@@ -2170,4 +2172,109 @@ async fn pqvault_records_on_a_two_generation_line() {
     let st = acc.msig_state("g2".into(), m.clone()).await.unwrap();
     assert!(st.version == 1 && st.active, "{st:?}");
     say("M's updateMsig with its native member landed at generation 1");
+}
+
+/// C14 (owner 2026-11-28) on anvil, with the SDK's Arweave test path: in-process fakes of a bundler and a gateway
+/// (`scaas-sdk/tests/common/fake_http.rs`, as `scaas-sdk/tests/arweave.rs` uses them). A `file` item of a personal vault: the
+/// file sealed by the SDK, its item posted by `ArweaveFiles::upload_file` on the free tier, read back once through the
+/// gateway (the `ctSha256` check) before the record is signed and sent; then the vault read from state, the item's object
+/// fetched on the user's action and its file opened, equal byte for byte.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib"]
+async fn file_item_on_arweave() {
+    let c = chain().await;
+    let at = instance(&c);
+    let d = device(&c, REPO).await;
+    let (pv, _seam) = seamed(&d);
+    let k1 = PqVault::vault_key(&d.seed, 1);
+    register(&d, &k1).await;
+    let me = pv.ua(&k1).unwrap();
+    let s = create(
+        &pv,
+        &d,
+        &at,
+        &k1,
+        &[member(me)],
+        Mode::Portable,
+        &Passphrase::Off,
+        &info("files", false),
+    )
+    .await;
+    let u = pv.unlock(&k1, s, &Passphrase::Off).await.unwrap();
+    say("personal vault created");
+    // the fakes: the bundler keeps the item it is sent under the id the test expects; the gateway serves its object
+    type Kept = Arc<Mutex<(String, usize, Option<Vec<u8>>)>>;
+    let kept: Kept = Arc::new(Mutex::new((String::new(), 0, None)));
+    let k2 = kept.clone();
+    let (bundler, _) = fake_http::serve(Arc::new(move |m: &str, p: &str, b: &[u8]| {
+        let mut k = k2.lock().unwrap();
+        if m == "POST" && p == "/tx" {
+            k.2 = Some(b.to_vec());
+            return (
+                200,
+                json!({"id": k.0, "owner": "o"}).to_string().into_bytes(),
+            );
+        }
+        (404, vec![])
+    }))
+    .await;
+    let k3 = kept.clone();
+    let (gw, _) = fake_http::serve(Arc::new(move |_: &str, p: &str, _: &[u8]| {
+        if p == "/info" {
+            return (
+                200,
+                json!({"network": "arweave.N.1", "height": 1})
+                    .to_string()
+                    .into_bytes(),
+            );
+        }
+        let k = k3.lock().unwrap();
+        match &k.2 {
+            Some(item) if p == format!("/raw/{}", k.0) => (200, item[item.len() - k.1..].to_vec()),
+            _ => (404, vec![]),
+        }
+    }))
+    .await;
+    let cfg: scaas_sdk::arweave::ArweaveConfig = serde_json::from_value(json!({
+        "gateways": {"rpc": [{"url": gw, "class": "default"}]},
+        "operators": ["op0"],
+        "bundlers": {"rpc": [{"url": bundler, "class": "default"}]},
+        "max_object": (1u64 << 17) + 16,
+    }))
+    .unwrap();
+    let files = scaas_sdk::arweave::ArweaveFiles::new(&cfg, |_| None).unwrap();
+    let f = pqvault_core::file::FileToSave {
+        file: (0..5000u32).map(|i| (i * 7 % 256) as u8).collect(),
+        title: "Recovery sheet".into(),
+        media_type: "application/pdf".into(),
+        name: "sheet.pdf".into(),
+        max_object: (1u64 << 17) + 16,
+    };
+    let mut p = pv.prepare_file(&u, &f, d.payer.clone()).await.unwrap();
+    {
+        let up = p.upload();
+        let mut k = kept.lock().unwrap();
+        k.0 = up.url.strip_prefix("ar://").unwrap().to_string();
+        k.1 = scaas_ua::file::object_len(up.size, scaas_ua::file::CAP).unwrap() as usize;
+    }
+    let out = files.upload_file(p.upload().item.clone()).await.unwrap();
+    assert_eq!(out.url, p.upload().url);
+    assert_eq!(out.paid, scaas_sdk::arweave::Paid::FreeTier);
+    pv.check_uploaded(&mut p, &files).await.unwrap();
+    let c = pv.confirm_file(p).await.unwrap();
+    send(&d, c.call.unwrap()).await;
+    say("file item written after its object was read back");
+    let latest = pv.open_latest(&u).await.unwrap();
+    let v = latest
+        .iter()
+        .find(|x| x.value.as_ref().is_ok_and(|i| i.ty == "file"))
+        .unwrap();
+    let fi = pqvault_core::file::file_info(v.value.as_ref().unwrap()).unwrap();
+    let object = files
+        .fetch_file(&fi.url, fi.size, fi.ct_sha256)
+        .await
+        .unwrap();
+    let opened = pv.open_file(&u, v, object).unwrap();
+    assert_eq!(opened.with(|b| b.to_vec()), f.file);
+    say("fetched on action and opened, equal byte for byte");
 }

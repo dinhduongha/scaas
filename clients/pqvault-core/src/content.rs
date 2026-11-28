@@ -299,6 +299,37 @@ pub fn check_item(v: &Value) -> Result<(), Bad> {
                 Some("text/plain" | "text/markdown")
             ) && o.get("hideBody").is_none_or(Value::is_boolean)
         }
+        // C14: an Arweave object (`ar://` and 43 base64url characters), its hashes and its 60-B key wrap
+        "file" => {
+            let hex_of = |k: &str, n: usize| {
+                o.get(k).and_then(Value::as_str).is_some_and(|s| {
+                    s.len() == 2 + 2 * n
+                        && s.starts_with("0x")
+                        && s.bytes()
+                            .skip(2)
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
+            };
+            let url_ok = o
+                .get("url")
+                .and_then(Value::as_str)
+                .and_then(|u| u.strip_prefix("ar://"))
+                .is_some_and(|id| {
+                    id.len() == 43
+                        && id
+                            .bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                });
+            len_in(o.get("mediaType"), 1, 64)
+                && len_in(o.get("name"), 1, 255)
+                && o.get("size")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|n| (1..=SAFE).contains(&n))
+                && hex_of("sha256", 32)
+                && hex_of("ctSha256", 32)
+                && hex_of("keyWrap", 60)
+                && url_ok
+        }
         "vaultRef" => {
             o.get("vaultId").and_then(Value::as_str).is_some()
                 && matches!(

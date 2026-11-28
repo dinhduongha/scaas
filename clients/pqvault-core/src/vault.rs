@@ -160,7 +160,7 @@ impl EpochState {
             .flat_map(|r| r.record.members.iter().copied())
             .collect()
     }
-    fn member_at(&self, ua: B32) -> Option<usize> {
+    pub(crate) fn member_at(&self, ua: B32) -> Option<usize> {
         self.members.iter().position(|m| m.ua == ua)
     }
 }
@@ -233,8 +233,8 @@ fn path_of(mode: Mode, at: &Instance) -> AppPath {
 pub struct Unlocked {
     pub state: VaultState,
     pub account: KeyRef,
-    seed: String,
-    keys: BTreeMap<B32, Arc<AppKey>>,
+    pub(crate) seed: String,
+    pub(crate) keys: BTreeMap<B32, Arc<AppKey>>,
     /// `P_k` per `(passKdf, passSalt)` this unlock computed
     pass_keys: Vec<((u16, B32), Arc<AppKey>)>,
     pub infos: BTreeMap<B32, Value>,
@@ -266,7 +266,7 @@ impl Unlocked {
             .find(|e| self.keys.contains_key(&e.id))
     }
     /// The epoch a write goes under: the newest, if it opened.
-    fn write_epoch(&self) -> Result<&EpochState> {
+    pub(crate) fn write_epoch(&self) -> Result<&EpochState> {
         let n = self.state.newest().ok_or(Error::ChainUnverified)?;
         if let Some((epoch, author)) = self.unopenable {
             return Err(Error::EpochUnopenable { epoch, author });
@@ -276,7 +276,7 @@ impl Unlocked {
             .then_some(n)
             .ok_or(Error::Unreadable)
     }
-    fn at(&self, epoch: B32, item: B32, version: u32, author: B32) -> ItemAt {
+    pub(crate) fn at(&self, epoch: B32, item: B32, version: u32, author: B32) -> ItemAt {
         ItemAt {
             vault: self.state.vault_id,
             epoch,
@@ -1085,7 +1085,7 @@ impl PqVault {
     }
 
     /// [`Self::prepare`] of a record of `v` signed by the unlocking account.
-    async fn prepare_in<R: Record>(
+    pub(crate) async fn prepare_in<R: Record>(
         &self,
         v: &Unlocked,
         r: R,
@@ -1433,11 +1433,26 @@ impl PqVault {
     }
 
     fn item_record(&self, v: &Unlocked, value: &Item) -> Result<ItemRecord> {
+        let nonce = self.item_nonce(v)?;
+        self.item_record_at(v, value, nonce)
+    }
+
+    /// A fresh item nonce of `v` (53 bits).
+    pub(crate) fn item_nonce(&self, v: &Unlocked) -> Result<u64> {
+        Ok(nonce_of(&self.core.random_bytes(&v.seed, 8)?))
+    }
+
+    /// The record of a new item of `v` at `nonce` (its id `itemId(vaultId, me, nonce)`), version 1 under the newest epoch.
+    pub(crate) fn item_record_at(
+        &self,
+        v: &Unlocked,
+        value: &Item,
+        nonce: u64,
+    ) -> Result<ItemRecord> {
         let e = v.write_epoch()?;
         if e.member_at(v.state.me).is_none() || e.removed().contains(&v.state.me) {
             return Err(Error::NotMember);
         }
-        let nonce = nonce_of(&self.core.random_bytes(&v.seed, 8)?);
         let iid = item_id(v.state.vault_id, v.state.me, nonce);
         Ok(ItemRecord {
             vault_id: v.state.vault_id,
@@ -1476,6 +1491,8 @@ impl PqVault {
             return Err(Error::NotMember);
         }
         let version = base.version_count.checked_add(1).ok_or(Error::Shape)?;
+        // a `file` item's key re-sealed under the new version's `kFile` (spec §6.8: bound to the epoch and the version)
+        let value = &self.rewrap_file(v, base, e.id, version, value)?;
         let nonce = nonce_of(&self.core.random_bytes(&v.seed, 8)?);
         let rec = EditRecord {
             item_id: base.item_id,

@@ -295,8 +295,9 @@ pub fn decrypt_item(
     pt.with(Item::from_plaintext).map_err(|_| Error::Unreadable)
 }
 
-/// A `file` item's key (spec §6.8): `seal_key` of the file key (a `Data` handle) under `kFile = HKDF(K_v, "…/file" ‖ vaultId ‖
-/// epochId ‖ itemId ‖ be32(version))`, usage `KeyWrap`, never under `K_v` itself.
+/// A `file` item's key (spec §6.8, C14): `seal_key` of the file key (the generic file seal's `File` handle, CLI-UAL-65: the
+/// key `seal_for_arweave` drew) under `kFile = HKDF(K_v, "…/file" ‖ vaultId ‖ epochId ‖ itemId ‖ be32(version))`, usage
+/// `KeyWrap`, never under `K_v` itself; the wrap's usage byte is `File` (4).
 pub fn seal_file_key(
     core: &AppCore,
     kv: &Arc<AppKey>,
@@ -314,7 +315,7 @@ pub fn seal_file_key(
     Ok(core.seal_key(kf, file_key, x.ctx())?)
 }
 
-/// The file key of a `file` item's `keyWrap`, a `Data` handle.
+/// The file key of a `file` item's `keyWrap`, a `File` handle (a wrap of another usage does not open: `Unreadable`).
 pub fn open_file_key(
     core: &AppCore,
     kv: &Arc<AppKey>,
@@ -329,7 +330,7 @@ pub fn open_file_key(
         U::KeyWrap,
         false,
     )?;
-    core.open_key(kf, wire.to_vec(), U::Data, x.ctx())
+    core.open_key(kf, wire.to_vec(), U::File, x.ctx())
         .map_err(|_| Error::Unreadable)
 }
 

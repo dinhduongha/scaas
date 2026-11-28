@@ -17,6 +17,7 @@
 )]
 
 pub mod content;
+pub mod file;
 pub mod item;
 pub mod keys;
 pub mod records;
@@ -87,6 +88,8 @@ pub enum Error {
     NotMember,
     /// The version the edit started from is not the latest any more: the merge against the latest.
     Conflict(Merge),
+    /// A `file` item confirmed before one gateway read of its object passed the `ctSha256` check (C14): nothing signed.
+    FileNotRead,
     Sdk(SdkError),
 }
 

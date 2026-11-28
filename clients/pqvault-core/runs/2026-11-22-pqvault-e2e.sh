@@ -9,7 +9,7 @@ export PATH="$HOME/.foundry/bin:$PATH" CARGO_INCREMENTAL=0
 log=runs/2026-11-22-pqvault-e2e.log
 : >"$log"
 tests=("$@")
-[ ${#tests[@]} -gt 0 ] || tests=(personal_vault_recovery_conflict_passphrase shared_vault_both_modes a_second_app_core_is_kept_apart kem_rotation_and_msig_admin)
+[ ${#tests[@]} -gt 0 ] || tests=(personal_vault_recovery_conflict_passphrase shared_vault_both_modes a_second_app_core_is_kept_apart kem_rotation_and_msig_admin pqvault_records_on_a_two_generation_line file_item_on_arweave)
 for t in "${tests[@]}"; do
     echo "[pqvault-e2e] start $t"
     start=$SECONDS
