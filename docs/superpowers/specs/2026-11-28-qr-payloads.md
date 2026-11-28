@@ -501,6 +501,14 @@ every other frame 200 ms (5 frames a second), until the measurement of §11 fixe
 live display (scaas-app, the TUI) keeps the order and timing, but its repair frames keep their numbers rising from loop to
 loop, so each loop brings new ones.
 
+**EIP-681 export (owner 2026-11-28; SPECIFIED, built with the crate).** For a `receive` only, to an EVM `to_address` (never a
+`to_ua`, never a `pay_no`), in the native coin or a standard ERC-20, the user may also export an EIP-681 URI for other wallets:
+`ethereum:<to_address>@<chainId>?value=<amount>` for the native coin, `ethereum:<token>@<chainId>/transfer?address=<to_address>&uint256=<amount>`
+for an ERC-20, the amount in the smallest unit as digits only. It is labelled on screen and in the file name as "for other
+wallets: no UA, no payment reference, the payee reconciles it itself". A payload carrying a UA, a `pay_no`, a confidential token
+or a token whose transfer is not the plain ERC-20 `transfer` is refused for this export (`QrEip681Refused`). Import reads
+`scaas:` only; an EIP-681 URI scanned by a SCaaS client is shown as such and refused (`QrNotScaas`), never mapped.
+
 ### 8.2 Import sources
 
 From a `.scaasqr` file or pasted lines (in any order); from one or more image files (PNG, JPEG, the frames of an APNG, a
@@ -636,8 +644,8 @@ phones for each class and for signature parts above version 30, reported, not a 
   anyone can show it.
 - **Q4. Bulk by hash from a node.** Ruled (owner 2026-11-28): as recommended. Recommendation: not in this frame; the bulk file and a PqChat or Matrix attachment cover it,
   the Arweave store later (§6.4); a node endpoint would be its own node rule if asked for.
-- **Q5. EIP-681 for EVM receive requests**, readable by other wallets. Ruled (owner 2026-11-28): as recommended. Recommendation: no; `scaas:` only, since another wallet
-  would show neither UA ids nor the SCaaS review.
+- **Q5. EIP-681 for EVM receive requests**, readable by other wallets. Ruled (owner 2026-11-28, revised the same day): `scaas:`
+  stays the canonical form; an **optional EIP-681 export** is added for a `receive` only (§8.1).
 - **Q6. The default error correction level.** Ruled (owner 2026-11-28): as recommended. Recommendation: L by default (screens and files, fewer parts: the `mldsa65`
   vector is 2 signature parts), M as an export option for print.
 - **Q7. Confidential imports.** Ruled (owner 2026-11-28): a confidential operation (PQZ or Zether, kept apart) is importable
@@ -656,6 +664,6 @@ Named refusals of the format core and the SDK's QR calls (the CLI maps each to i
 `QrNotCanonical` (the CBOR or the URI form), `QrFieldUnknown`, `QrFieldDuplicate`, `QrVersion`, `QrKindUnknown`, `QrDepth`,
 `QrTooLarge` (a part, a line, a file, a count above its bound), `QrInfoTooLarge`, `QrInfoConflict`, `QrPartForeign`,
 `QrPartConflict`, `QrPartIndex`, `QrPartCount`, `QrIncomplete`, `QrDigestMismatch`, `QrSignatureInvalid`, `QrPinRefused`,
-`QrBulkMismatch` (a pin or the CRC-32 of an assembled object), `QrBulkMissing`, `QrSchemaRefused`, `QrPayMetaRefused`,
+`QrBulkMismatch` (a pin or the CRC-32 of an assembled object), `QrBulkMissing`, `QrEip681Refused` (a payload the EIP-681 export cannot carry), `QrNotScaas` (an EIP-681 or other non-`scaas:` URI scanned), `QrSchemaRefused`, `QrPayMetaRefused`,
 `QrPayerMismatch`, `QrExpired`, `QrSourceRefused`, `QrNeedsScaas`, `QrNotFound` (no QR in an image), `QrImageTooLarge`,
 `QrTerminalTooSmall`; and the existing `ProfileMismatch` and `Import*` refusals of the hand-off import.
