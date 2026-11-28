@@ -7,20 +7,28 @@ all-features = true
 
 [advisories]
 # Every advisory in the RustSec database fails the check, unmaintained and unsound included; an exception needs an
-# `ignore` entry with its reason.
+# `ignore` entry with its reason. `unsound = "all"`: cargo-deny's default checks unsound advisories of direct dependencies
+# only (node-deps review A-1, 2026-11-28).
 version = 2
 yanked = "deny"
+unsound = "all"
 ignore = [
   # owner 2026-11-05 (plan "Owner answers after T0"): `paste` 1.0.15 is a proc macro of ark-ff 0.5 (unmaintained)
   { id = "RUSTSEC-2024-0436", reason = "build-time only, not in the runtime" },
   # owner 2026-11-05 (ua-rs-sign T3c, option (a)): `crypto-bigint` 0.5.5 (timing variability in constant-time operations)
-  # reaches the graph only through ZF `frost-secp256k1` =3.0.0 (k256 0.13.4 -> elliptic-curve 0.13.8 -> crypto-bigint
-  # 0.5.5), feature `signers`; that is ZF's latest release. Every other k256 / p256 use is on 0.14 (crypto-bigint 0.7, T3a).
+  # reaches the graph through ZF `frost-secp256k1` =3.0.0 (k256 0.13.4 -> elliptic-curve 0.13.8 -> crypto-bigint
+  # 0.5.5), feature `signers`; that is ZF's latest release. Every other k256 / p256 use of scaas-ua is on 0.14 (crypto-bigint 0.7, T3a).
   # Remove this entry when ZF releases on k256 0.14.
   # scaas-sdk T1: `pin-utils` 0.1.1 (unmaintained, archived 2026-10-01; no advisory against its code) reaches the graph only on
   # wasm32, through `wasmtimer` 0.4.3 of alloy 1.6 (scaas-rpc's `evm`). Remove when alloy's timer drops it.
   { id = "RUSTSEC-2026-0441", reason = "wasm32 only, via wasmtimer 0.4.3 of alloy 1.6 (scaas-rpc evm); unmaintained, no vulnerability" },
-  { id = "RUSTSEC-2026-0387", reason = "only via ZF frost-secp256k1 =3.0.0 (k256 0.13.4, feature signers), ZF's latest release; remove when ZF releases on k256 0.14 (owner 2026-11-05)" },
+  # node-deps review 2026-11-28: crypto-bigint 0.5.5 also reaches the graph through alloy 1.6 (scaas-rpc's `evm`:
+  # alloy-signer / alloy-primitives -> k256 0.13.4); every alloy release still requires k256 ^0.13.
+  { id = "RUSTSEC-2026-0387", reason = "via ZF frost-secp256k1 =3.0.0 (feature signers, ZF's latest release; owner 2026-11-05) and alloy 1.6 (k256 0.13.4); remove when both are on k256 0.14; review by 2027-02-28" },
+  # lru 0.16.4 (unsound: `LruCache::pop` may use freed memory when a key's Drop panics and the panic is caught) via
+  # alloy-provider 1.6.3 (scaas-rpc's `evm`), whose caches key on u64 block numbers and B256 hashes: no key Drop can panic.
+  # Fixed in lru 0.18.2, which needs alloy-provider >= 2.6 (alloy 2, its own round): remove with that move.
+  { id = "RUSTSEC-2026-0253", reason = "lru 0.16.4 via alloy-provider 1.6.3, u64 / B256 keys whose Drop cannot panic; fix needs alloy 2; review by 2027-02-28" },
 ]
 
 [licenses]

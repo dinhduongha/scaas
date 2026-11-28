@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# The dependency gate against unchanged code (node-deps review B-2 = E-2, E-3; 2026-11-28): scaas-ci runs cargo deny and
+# cargo audit only when a path a job reads changes, so a new RustSec advisory against a committed lock is otherwise seen only
+# by the next unrelated pull request. Weekly on the default branch and on demand (Actions tab > deps-weekly > Run workflow, or
+# `gh workflow run deps-weekly.yml --ref <branch>`), whatever the paths: every lock with a policy (each committed deny.toml
+# outside legacy/, and the five locks checked by clients/ua-rs/deny.toml, as job ua-deps), then the dated exits of the
+# accepted advisories (scripts/check_advisory_exits.py). Every lock is checked before the job fails, so one run lists all.
+# Tools as scaas-ci: cargo-deny 0.20.2, cargo-audit 0.22.2, after scripts/vendor.sh install.
+name: deps-weekly
+
+on:
+  schedule:
+    - cron: "17 5 * * 1" # Mondays 05:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RUST_TOOLCHAIN: "1.97.1" # the root rust-toolchain.toml (ARCH-POS-12)
+  RUSTUP_TOOLCHAIN: "1.97.1"
+
+jobs:
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # cargo metadata needs vendor/falcon-rs-0.3.1 for every crate over ua-rs (ARCH-POS-24, scripts/vendor.sh)
+      - name: vendor/ at its pins
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3 (2026-11-08, >= 14 days); its manifests pin each tool's sha256
+        with:
+          tool: cargo-deny@0.20.2,cargo-audit@0.22.2
+      - name: cargo deny and cargo audit, every lock with a policy
+        run: |
+          fail=
+          # gate <dir> <policy>: cargo audit reads <dir>/.cargo/audit.toml, else takes the policy's ignores (as job ua-deps)
+          gate() {
+            ignore=
+            [ -f "$1/.cargo/audit.toml" ] || ignore=$(python3 -I -c 'import sys, tomllib; print(" ".join("--ignore " + a["id"] for a in tomllib.load(open(sys.argv[1], "rb"))["advisories"]["ignore"]))' "$2")
+            echo "== $1 ($2)"
+            # shellcheck disable=SC2086 # $ignore is a list of flags
+            (cd "$1" && cargo deny --locked --all-features --config "$2" check -D index-failure && cargo audit $ignore) || fail="$fail $1"
+          }
+          for f in $(git ls-files '*deny.toml' | grep -v legacy/); do gate "$(dirname "$f")" "$GITHUB_WORKSPACE/$f"; done
+          for d in clients/ua-c clients/ua-cxx clients/ua-qt clients/ua-dart-frb/rust clients/zether-prover; do
+            gate "$d" "$GITHUB_WORKSPACE/clients/ua-rs/deny.toml"
+          done
+          if [ -n "$fail" ]; then echo "::error::red:$fail"; exit 1; fi
+      - name: dated exits of the accepted advisories
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/check_advisory_exits.py

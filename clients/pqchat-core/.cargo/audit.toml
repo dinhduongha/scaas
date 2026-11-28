@@ -2,7 +2,8 @@
 # cargo-audit of pqchat-core (plan T2, gate `pqc-deny`; scaas-sdk's as it stands): the advisories deny.toml ignores, with the same reasons.
 [advisories]
 ignore = [
-  # owner 2026-11-05 (ua-rs-sign T3c, option (a)): crypto-bigint 0.5.5 only via ZF frost-secp256k1 =3.0.0 (k256 0.13.4,
-  # scaas-ua feature `signers`), ZF's latest release; remove when ZF releases on k256 0.14 (deny.toml's entry)
+  # owner 2026-11-05 (ua-rs-sign T3c, option (a)): crypto-bigint 0.5.5 via ZF frost-secp256k1 =3.0.0 (k256 0.13.4,
+  # scaas-ua feature `signers`), ZF's latest release, and via alloy 1.6; remove when both are on k256 0.14;
+  # review by 2027-02-28 (deny.toml's entry)
   "RUSTSEC-2026-0387",
 ]

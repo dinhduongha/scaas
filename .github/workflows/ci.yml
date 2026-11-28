@@ -17,9 +17,13 @@
 #   contract-sui:      test.sh sui (sui move test; sui CLI 1.81.0, testnet-v1.81.0)
 #   contract-cosmos:   test.sh cosmos (cargo test)
 #   contract-ton:      test.sh ton (npm ci; npm test = tact build + jest; Node 26.8.1)
-#   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored;
-#                  cargo deny check and cargo audit (scaas-node/deny.toml, scaas-node/.cargo/audit.toml)
-#   clients/scaas-rpc: cargo test --locked --all-features; cargo clippy --locked --all-targets --all-features -- -D warnings;
+#   Every cargo deny / cargo audit below: cargo-deny 0.20.2, cargo-audit 0.22.2 (taiki-e/install-action at the pinned SHA), after
+#                  scripts/vendor.sh install (cargo metadata needs vendor/falcon-rs-0.3.1; without it cargo deny fails with no advisory output);
+#                  cargo deny --locked ... check -D index-failure (without the crates.io index the yanked check is otherwise skipped with a
+#                  warning). Weekly and on demand, whatever the paths: deps-weekly.yml (every lock with a policy, the dated exits).
+#   scaas-node:    first cargo deny --locked check -D index-failure and cargo audit (scaas-node/deny.toml, scaas-node/.cargo/audit.toml);
+#                  then cargo clippy --all-targets -- -D warnings; cargo test; cargo test --test e2e -- --ignored
+#   clients/scaas-rpc: first cargo deny --locked check -D index-failure and cargo audit (its deny.toml, .cargo/audit.toml); cargo test --locked --all-features; cargo clippy --locked --all-targets --all-features -- -D warnings;
 #                  cargo test --locked --features evm --test anvil -- --ignored (three anvils, foundry's);
 #                  cargo check --locked --target wasm32-unknown-unknown --no-default-features --features evm,node-client,arweave (compiles for
 #                  wasm32, not run); ! git grep -n 'tokio::time' -- src (no tokio timer in the crate, F18)
@@ -65,7 +69,7 @@
 #                          --target wasm32-unknown-unknown -- -D warnings; ./run.sh (ua-rs for wasm32, falcon-rs: every FN-DSA row, the wallet's Falcon
 #                          keys and signatures, the key pairs of 1,000 seeds per degree, against PQClean's digests)
 #   ua-deps:               cargo tree --locked -e normal for ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node (no lockfile moves);
-#                          cargo deny --all-features check in ua-rs; cargo deny --all-features --config <ua-rs>/deny.toml check in ua-c, ua-cxx, ua-qt,
+#                          cargo deny --locked --all-features check in ua-rs; cargo deny --locked --all-features --config <ua-rs>/deny.toml check in ua-c, ua-cxx, ua-qt,
 #                          ua-dart-frb/rust and zether-prover (cargo-deny 0.20.2; T21 L68: the three binding locks too);
 #                          cargo audit --ignore <each ignore of ua-rs/deny.toml> in the same six (cargo-audit 0.22.2)
 #   clients/ua-py:         (cd clients/ua-c && cargo build --release --locked); python3 -m unittest tests.test_vectors tests.test_wallet (the wallet over libscaas_ua_c, no_oracle included)
@@ -80,7 +84,8 @@
 #   clients/ua-dart-frb:   dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; cargo test --locked --manifest-path rust/Cargo.toml
 #                          (the binding's own Rust tests: secrets never cross frb's codec; T15o); dart test
 #   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
-#   scaas-sdk:             in clients/scaas-sdk: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton;
+#   scaas-sdk:             in clients/scaas-sdk: first cargo deny --locked check -D index-failure and cargo audit (its deny.toml, .cargo/audit.toml);
+#                          cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton;
 #                          cargo test --locked --no-default-features --features vault,file-store; without evm (T41.evm step 0) cargo test and cargo clippy --all-targets
 #                          -- -D warnings --no-default-features --features vault,account,wallet,file-store,mlock,near,algorand,cosmos,aptos,solana,soroban,sui,ton,native-networks,raw-native;
 #                          with arweave (T41.arweave) the same set's test --test arweave --test feature_tree and clippy, and --features
@@ -146,13 +151,13 @@
 #   pqchat-core:           in clients/pqchat-core (pqchat-core plan T2-T12): cargo test --locked; the vectors (--features vectors
 #                          --test vectors); cargo clippy --locked --all-targets -- -D warnings; cargo check --target wasm32-unknown-unknown;
 #                          python3 -I runs/check_reads.py (gate pqc-reads); python3 -I ../scaas-sdk/gas/pqchat_tree_rows.py
-#                          ../scaas-sdk/gas/pqchat-tree-forge.txt --check; cargo deny check and cargo audit (its deny.toml, .cargo/audit.toml);
+#                          ../scaas-sdk/gas/pqchat-tree-forge.txt --check; cargo deny --locked check and cargo audit (its deny.toml, .cargo/audit.toml);
 #                          the chain_ and e2e runs (anvil, Docker, Synapse: gates pqc-chain, pqc-e2e) stay local
 #   scaas-profile:         in clients/scaas-profile (the profile store, owner 2026-11-27): cargo test --locked; cargo test --locked
 #                          --features test-hooks; cargo clippy --locked --all-targets -- -D warnings, default and --features test-hooks;
-#                          cargo deny check (its deny.toml) and cargo audit (user-profiles review E-12)
+#                          cargo deny --locked check (its deny.toml) and cargo audit (user-profiles review E-12)
 #   scaas-matrix:          in clients/scaas-matrix (CLI-MTX-01): cargo test --locked --features testing (tests/deps.rs: no SDK or pqchat-core
-#                          in its graph; the policy, record, profile and store-key tests); cargo clippy --locked --all-targets --features testing -- -D warnings; cargo deny check
+#                          in its graph; the policy, record, profile and store-key tests); cargo clippy --locked --all-targets --features testing -- -D warnings; cargo deny --locked check
 #                          and cargo audit (its deny.toml, .cargo/audit.toml); in clients/pqchat-transport cargo clippy --locked; the e2e
 #                          against Synapse in Docker (cargo test --test e2e -- --ignored) stays local
 #   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
@@ -559,6 +564,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: clients/scaas-rpc
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3 (2026-11-08, >= 14 days); its manifests pin each tool's sha256
+        with:
+          tool: cargo-deny@0.20.2,cargo-audit@0.22.2
+      - name: cargo deny and cargo audit
+        run: |
+          cargo deny --locked check -D index-failure
+          cargo audit
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: v1.8.5
@@ -596,12 +608,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: scaas-node
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3 (2026-11-08, >= 14 days); its manifests pin each tool's sha256
         with:
           tool: cargo-deny@0.20.2,cargo-audit@0.22.2
       - name: cargo deny and cargo audit
         run: |
-          cargo deny check
+          cargo deny --locked check -D index-failure
           cargo audit
       - uses: foundry-rs/foundry-toolchain@v1
         with:
@@ -884,7 +896,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: clients/zether-prover
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3 (2026-11-08, >= 14 days); its manifests pin each tool's sha256
         with:
           tool: wasm-bindgen@0.2.129
       - uses: actions/setup-node@v7
@@ -1177,7 +1189,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3 (2026-11-08, >= 14 days); its manifests pin each tool's sha256
         with:
           tool: cargo-deny@0.20.2,cargo-audit@0.22.2
       - name: cargo tree --locked
@@ -1188,11 +1200,11 @@ jobs:
       # T21 L68: ua-cxx, ua-qt and ua-dart-frb ship their own locks (another resolution than ua-rs's): checked as well
       - name: cargo deny (ua-rs; ua-c, ua-cxx, ua-qt, ua-dart-frb/rust and zether-prover by ua-rs's deny.toml)
         run: |
-          (cd clients/ua-rs && cargo deny --all-features check)
+          (cd clients/ua-rs && cargo deny --locked --all-features check -D index-failure)
           for d in clients/ua-c clients/ua-cxx clients/ua-qt clients/zether-prover; do
-            (cd "$d" && cargo deny --all-features --config ../ua-rs/deny.toml check)
+            (cd "$d" && cargo deny --locked --all-features --config ../ua-rs/deny.toml check -D index-failure)
           done
-          (cd clients/ua-dart-frb/rust && cargo deny --all-features --config ../../ua-rs/deny.toml check)
+          (cd clients/ua-dart-frb/rust && cargo deny --locked --all-features --config ../../ua-rs/deny.toml check -D index-failure)
       - name: cargo audit (the same six, deny.toml's ignores)
         run: |
           ignore=$(python3 -c 'import tomllib; print(" ".join("--ignore " + a["id"] for a in tomllib.load(open("clients/ua-rs/deny.toml", "rb"))["advisories"]["ignore"]))')
@@ -1469,6 +1481,13 @@ jobs:
           workspaces: |
             clients/scaas-sdk
             clients/scaas-sdk/ffi
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3 (2026-11-08, >= 14 days); its manifests pin each tool's sha256
+        with:
+          tool: cargo-deny@0.20.2,cargo-audit@0.22.2
+      - name: cargo deny and cargo audit
+        run: |
+          cargo deny --locked check -D index-failure
+          cargo audit
       - name: cargo test (full feature set)
         run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton
       - name: the test feature vectors (pqchat-core T1 rows, PqVault V9 rows)
@@ -1637,7 +1656,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: clients/pqchat-core
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3 (2026-11-08, >= 14 days); its manifests pin each tool's sha256
         with:
           tool: cargo-deny@0.20.2,cargo-audit@0.22.2
       - name: cargo test
@@ -1656,7 +1675,7 @@ jobs:
         run: python3 -I clients/scaas-sdk/gas/pqchat_tree_rows.py clients/scaas-sdk/gas/pqchat-tree-forge.txt --check
       - name: cargo deny and cargo audit
         run: |
-          cargo deny check
+          cargo deny --locked check -D index-failure
           cargo audit
 
   # the Matrix client crate (CLI-MTX-01, CLI-PQC-20): its tests, its dependency rule, deny and audit; only when it, the trait
@@ -1677,7 +1696,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: clients/scaas-matrix
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3 (2026-11-08, >= 14 days); its manifests pin each tool's sha256
         with:
           tool: cargo-deny@0.20.2,cargo-audit@0.22.2
       - name: cargo test
@@ -1688,7 +1707,7 @@ jobs:
           cd ../pqchat-transport && cargo clippy --locked --all-targets -- -D warnings
       - name: cargo deny and cargo audit
         run: |
-          cargo deny check
+          cargo deny --locked check -D index-failure
           cargo audit
 
   # the profile store (owner 2026-11-27, decisions CLI-UPR-02's Change): its own crate over ua-rs, below the SDK; its tests with
@@ -1716,7 +1735,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: clients/scaas-profile
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3 (2026-11-08, >= 14 days); its manifests pin each tool's sha256
         with:
           tool: cargo-deny@0.20.2,cargo-audit@0.22.2
       - name: cargo test
@@ -1729,7 +1748,7 @@ jobs:
           cargo clippy --locked --all-targets --features test-hooks -- -D warnings
       - name: cargo deny and cargo audit
         run: |
-          cargo deny check
+          cargo deny --locked check -D index-failure
           cargo audit
 
   # the bindings (plan T20, T20b-T20h; spec §16.1, §16.4), one matrix cell per language enabled in

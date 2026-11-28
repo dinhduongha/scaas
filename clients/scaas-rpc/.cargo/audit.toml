@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# cargo-audit of scaas-rpc (node-deps review B-3, 2026-11-28): the vulnerabilities deny.toml ignores, with the same reasons.
+[advisories]
+ignore = [
+  "RUSTSEC-2026-0387", # crypto-bigint 0.5.5 only via alloy 1.6 (k256 0.13); scaas-rpc signs nothing; review by 2027-02-28 (deny.toml)
+]

@@ -8,9 +8,11 @@ all-features = true
 
 [advisories]
 # Every advisory in the RustSec database fails the check, unmaintained and unsound included; an exception needs an
-# `ignore` entry with its reason.
+# `ignore` entry with its reason. `unsound = "all"`: cargo-deny's default checks unsound advisories of direct dependencies
+# only (node-deps review A-1, 2026-11-28).
 version = 2
 yanked = "deny"
+unsound = "all"
 ignore = [
   # owner 2026-11-05 (plan "Owner answers after T0"): `paste` 1.0.15 is a proc macro of ark-ff 0.5 (unmaintained)
   { id = "RUSTSEC-2024-0436", reason = "build-time only, not in the runtime" },

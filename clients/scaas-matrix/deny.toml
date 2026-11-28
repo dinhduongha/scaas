@@ -7,9 +7,11 @@ all-features = true
 
 [advisories]
 # Every advisory in the RustSec database fails the check, unmaintained and unsound included; an exception needs an
-# `ignore` entry with its reason.
+# `ignore` entry with its reason. `unsound = "all"`: cargo-deny's default checks unsound advisories of direct dependencies
+# only (node-deps review A-1, 2026-11-28).
 version = 2
 yanked = "deny"
+unsound = "all"
 ignore = [
   # matrix-sdk 0.19.1 -> matrix-sdk-sqlite -> rusqlite 0.40.2 -> libsqlite3-sys 0.38.2 (bundled SQLite 3.53.2): stale page-cache
   # bytes when a process opens a database together with a crafted `-wal` file of another page size. Local only: the files
