@@ -158,3 +158,12 @@ confirm-merged | bind | 5feb86838 | 0 | -
 # clippy --all-targets clean; scaas-node e2e --ignored 27 passed (zether-cli built --release --features hazmat); scaas-sdk
 # app_core 15 passed; scaas-cli cargo test 11 + 13 (dev-profiles) and clippy --all-targets --features dev-profiles clean at
 # 3252b5b2b; format.sh --check every part but tact (unchanged from dev) clean.
+chainstore | pqc-reads | 5e268b138 | 0 | reads 61 (50 trusted), writes 19, R2 50; 0 refused
+chainstore | docs | 5e268b138 | 0 | -
+chainstore | pqc-clippy | 5e268b138 | 0 | -
+chainstore | pqc-wasm | 5e268b138 | 0 | -
+chainstore | pqc-tree | 5e268b138 | 0 | 2 passed, 0 failed, 0 ignored (1 binaries)
+chainstore | pqc-test | 5e268b138 | 0 | 156 passed, 0 failed, 9 ignored (24 binaries)
+chainstore | mutants-check | 605060077 | 0 | -
+chainstore | bind | 605060077 | 0 | -
+chainstore | pqc-chain | 605060077 | 0 | 9 passed, 0 failed, 0 ignored (24 binaries)
