@@ -758,6 +758,11 @@ before the pre-freeze tag, written exceptions, and a check that fails on a major
 reproducer's cryptography library (Go `gnark-crypto`, Python `pycryptodome` / `py_ecc`, and the like) re-runs that
 language's vector readers when it moves; a formatter move (`prettier`, `ruff`) lands as a format-only commit.
 
+Change (owner: yes, 2026-11-28): the pre-tag bump round of 2026-11-28 is exempt from the 14-day line: it takes the newest
+stable release (not yanked, not a pre-release) of every dependency and tool, so the dated waits (matrix-sdk 0.20, sqlx
+0.9.1, soroban-sdk 30.0.0) end now. The 14-day line applies again after this round. The Rust toolchain stays at 1.97.1
+(the ruling above).
+
 Change (controller, owner: no, owner may override, 2026-11-28): (1) the `wasm-streams` pin of CLI-SDK-33 (`=0.4.2`, for
 reqwest 0.12) moves with the alloy lane to the 0.5.x line reqwest 0.13 requires, restated there as an exact pin; (2) the
 stark-backup `p3-*` `=0.9.0-rc.1` pins keep a dated exception (backup proof system, not built into any shipped crate),
