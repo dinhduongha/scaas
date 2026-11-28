@@ -76,7 +76,7 @@ MUTANTS = [
     ),
     (
         "resolve re-seals from the latest version always (E-3)",
-        [(V, '                    merged.ty == "file" && i.ty == "file" && wrap(i) == wrap(merged)', "                    false")],
+        [(V, '.is_ok_and(|i| merged.ty == "file" && i.ty == "file" && wrap(i) == wrap(merged))', ".is_ok_and(|_| false)")],
         E2E,
     ),
     (
@@ -96,7 +96,7 @@ MUTANTS = [
     ),
     (
         "a non-canonical ar:// id (F-6)",
-        [(C, '            && id.bytes().last().is_some_and(|b| b"AEIMQUYcgkosw048".contains(&b))\n', "")],
+        [(C, '.is_some_and(|b| b"AEIMQUYcgkosw048".contains(&b))', ".is_some_and(|_| true)")],
         VEC + "a_file_items_bounds",
     ),
     (

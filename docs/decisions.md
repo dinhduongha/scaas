@@ -12128,6 +12128,13 @@ writer's bounds of a `file` item: `url` is `ar://` and 43 base64url characters, 
 version's `kFile` to the new version's (`kFile` binds the epoch and the version); the object is not uploaded again.
 (4) `confirm_file` before `check_uploaded` passed is `FileNotRead`, with no signature; the bytes read back are dropped.
 (5) The upload key's signature type is 2 (ed25519), as PqChat's.
+After the Fable review (2026-11-28, areas cryptography and adversarial): (6) the SDK's `seal_for_arweave` and `seal_file`
+refuse a file above `SECRET_MAX` (16 MiB), what `open_file` can hand back (`FileTooLarge`), and wipe the file they seal;
+(7) `create_item` / `create_items` refuse a `file` item (`Shape`): `prepare_file` is its one writer; (8) an edit of a `file`
+item keeps `url`, `size`, `sha256`, `ctSha256` (`Shape` otherwise) and re-seals from the version whose wrap it carries
+(`resolve` against a tombstone: the newest version with that wrap); (9) `confirm_file` borrows the `PreparedFile`, a failed
+signing call retried on the same upload; (10) the writer's url bound is the reader's canonical `ar_url` form; `file_info` is
+`None` for another url; (11) the vector row carries its file, and every reader opens it under the row's key.
 **Status.** BUILT, UNAUDITED.
 **Source.** Coordinator, on [CLI-PQV-19](clients/pqvault-core.md#CLI-PQV-19).
 
