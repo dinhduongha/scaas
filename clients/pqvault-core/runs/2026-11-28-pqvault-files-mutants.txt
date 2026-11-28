@@ -1,0 +1,12 @@
+# files mutants (name | outcome | commit | test | first failure line)
+confirm_file signs without the read | killed | 6106a3106 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test devices a_file_item_is_signed_only_after_its_object_was_read | panicked at tests/devices.rs:794:5:
+a failed read counts as read | killed | 6106a3106 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test devices a_file_item_is_signed_only_after_its_object_was_read | panicked at tests/devices.rs:803:5:
+the file key opened as a Data key | killed | 6106a3106 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test devices a_file_item_is_signed_only_after_its_object_was_read | panicked at tests/devices.rs:844:58:
+an edit keeps the base version's wrap | killed | 6106a3106 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test devices a_file_item_is_signed_only_after_its_object_was_read | panicked at tests/devices.rs:855:5:
+a file read under the author's epoch at version 1 | killed | 6106a3106 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test devices a_file_item_is_signed_only_after_its_object_was_read | panicked at tests/devices.rs:856:58:
+any url accepted | killed | 6106a3106 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test vectors a_file_items_bounds | panicked at tests/vectors.rs:590:9:
+an ar:// id of any length | killed | 6106a3106 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test vectors a_file_items_bounds | panicked at tests/vectors.rs:590:9:
+ctSha256 of any length | killed | 6106a3106 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test vectors a_file_items_bounds | panicked at tests/vectors.rs:590:9:
+keyWrap of any length | killed | 6106a3106 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test vectors a_file_items_bounds | panicked at tests/vectors.rs:590:9:
+a size 0 | killed | 6106a3106 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test vectors a_file_items_bounds | panicked at tests/vectors.rs:590:9:
+10 mutants, 10 killed, 0 survived, 0 not loaded, 0 other failure

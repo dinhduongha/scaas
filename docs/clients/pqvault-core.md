@@ -104,6 +104,24 @@ figure that does not parse) asks the second. Tests `tests/devices.rs`
 `a_fresh_quote_within_the_review_needs_no_second_confirm`. The rule is [CLI-SDK-36](../decisions.md#CLI-SDK-36); the SDK's side is
 [scaas-sdk.md](scaas-sdk.md) ("Sign after confirm").
 
+<a id="CLI-PQV-19"></a>**CLI-PQV-19** — **A `file` item's file lives on Arweave; the item naming it is signed only after one
+gateway read of the object passed the `ctSha256` check** (owner 2026-11-28, spec 2026-11-21-avax-polkadot-arweave §7.10, C14;
+BUILT, UNAUDITED; `src/file.rs`). `prepare_file(v, FileToSave, payer)` seals the file through the SDK's `seal_for_arweave`
+under the vault account's PqVault app root key (signature type 2, ed25519), seals the returned `File` key handle under the
+item's `kFile` into `keyWrap` (the handle wiped after), builds the item (`title`, `mediaType`, `name`, `size`, `sha256`,
+`ctSha256`, `url = ar://<id>`, `keyWrap`; every field plain, `keyWrap` a wrap and never a key) and prepares its record:
+nothing signed, nothing posted. The app posts `PreparedFile::upload().item` with `ArweaveFiles::upload_file` and keeps it with
+`keep_up` until settled (CLI-SDK-21); `check_uploaded(&mut p, &files)` reads the object back once (`fetch_file`: the exact
+length, its SHA-256 the item's `ctSha256`); `confirm_file(p)` signs only after that read passed, else `FileNotRead` and no
+signature. A reader fetches on its user's action only ([CLI-PQV-05](#CLI-PQV-05)), with `file_info(item)`'s `url`, `size`
+and `ctSha256`, and `open_file(v, version, object)` opens the key under that version's `kFile` and the file through the SDK's
+`open_file` (the length and `ctSha256` checked before any decryption); a failure stays on the device (ARCH-POS-13). An edit
+of a `file` item re-seals the file key under the new version's `kFile`; the object stays. Small attachments still live inline
+in the 16 KiB item. Tests `tests/devices.rs` `a_file_item_is_signed_only_after_its_object_was_read` (offline, an in-process
+gateway), `tests/e2e.rs` `file_item_on_arweave` (anvil, an in-process bundler and gateway: the SDK's Arweave test path,
+`scaas-sdk/tests/common/fake_http.rs`), `tests/vectors.rs` (row `personal1/ui-4`). The calls the code made are
+[CLI-PQV-20](../decisions.md#CLI-PQV-20).
+
 ## 5. Stores
 
 Status: the crate holds **no store** (BUILT): a vault's state is read whole from the contract's views each time
@@ -117,7 +135,7 @@ search index in memory or the device's encrypted store, dropped at the lock (spe
 Status: **BUILT** locally, UNAUDITED. `tests/vectors.rs` (feature `vectors`) reproduces `smartcontracts/vectors/pqvault/`
 (`records.json`, `keys.json`, `items.json`, `pass.json`) through the SDK's vectors build; `tests/core.rs`, `tests/devices.rs`,
 `tests/exits.rs` and the unit tests run offline on seams; `tests/e2e.rs` runs the real client on a local `anvil`
-(`runs/2026-11-22-pqvault-e2e.sh`, capped, foreground). Mutants: `runs/*-mutants.py` through `scripts/mutant_guard.py`, their
+(`runs/2026-11-22-pqvault-e2e.sh`, capped, foreground; `file_item_on_arweave` with in-process Arweave fakes). Mutants: `runs/*-mutants.py` through `scripts/mutant_guard.py`, their
 records beside them.
 
 ## 7. The client rules

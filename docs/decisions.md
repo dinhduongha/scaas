@@ -12102,6 +12102,35 @@ rose, the payer changed or the review was unquoted).
 **Source.** Owner ruling 2026-11-27 on the open point D-6 of the Fable review of `pqvault-ui-rules` (relayed by the
 coordinator); [CLI-SDK-36](#CLI-SDK-36).
 
+### CLI-PQV-19 — PqVault `file` items on Arweave before the pre-freeze tag; the item signed only after one gateway read passed
+- old: — · status: current · owner: yes · date: 2026-11-28 · normative: clients/pqvault-core.md#CLI-PQV-19 · superseded-by: —
+
+**Rule.** (Summary; normative [pqvault-core.md](clients/pqvault-core.md#CLI-PQV-19).) PqVault's `file` items are built on
+Arweave before the pre-freeze tag, as spec 2026-11-21-avax-polkadot-arweave §7.10 (C14) states: the SDK's `seal_for_arweave`,
+`upload_file`, `fetch_file` and `open_file` with PqVault's app root key; the item naming the object is signed only after one
+gateway read passed the `ctSha256` check; files are fetched on the user's action only. O4 stays: no Arweave message store kind.
+**Status.** BUILT, UNAUDITED (branch `pqvault-files`).
+**Why.** A vault holds documents too large for the 16 KiB item; one upload path for PqChat and PqVault.
+**Cost if wrong.** A vault item naming an object nobody can read, or a file fetched before the user asked.
+**Source.** Owner ruling 2026-11-28 (relayed by the coordinator); [C14](superpowers/specs/2026-11-21-avax-polkadot-arweave.md).
+
+<a id="CLI-PQV-20"></a>
+### CLI-PQV-20 — Controller calls of PqVault `file` items on Arweave, 2026-11-28
+- old: — · status: current · owner: no · date: 2026-11-28 · normative: decisions.md#CLI-PQV-20 · superseded-by: —
+
+**Calls.** (1) The file key sealed in `keyWrap` has usage `File` (4), the key `seal_for_arweave` draws (CLI-UAL-65); spec §6.8
+had pinned `Data` (2) for a file key nothing yet drew. The wrap's AAD usage byte is 4; a `Data` wrap does not open as a file key
+(`Unreadable`). The two earlier `file` rows of `items.json` (`shared0/batch-1`, `shared1/batch-1`, an https url, a `Data` key)
+keep their bytes, since `records.json` binds them; every reader still checks them, and `pqvault-core` reads them but refuses to
+write them (`Shape`). The new row `personal1/ui-4` is the Arweave form (clientkeys' `sealFile`, `ar://`, usage 4). (2) The
+writer's bounds of a `file` item: `url` is `ar://` and 43 base64url characters, `sha256` and `ctSha256` 32 B, `keyWrap` 60 B,
+`size` 1 to 2^53 − 1, `mediaType` 1 to 64 B, `name` 1 to 255 B. (3) An edit of a `file` item re-seals the file key from the base
+version's `kFile` to the new version's (`kFile` binds the epoch and the version); the object is not uploaded again.
+(4) `confirm_file` before `check_uploaded` passed is `FileNotRead`, with no signature; the bytes read back are dropped.
+(5) The upload key's signature type is 2 (ed25519), as PqChat's.
+**Status.** BUILT, UNAUDITED.
+**Source.** Coordinator, on [CLI-PQV-19](clients/pqvault-core.md#CLI-PQV-19).
+
 <a id="CLI-UAL-62"></a>
 ### CLI-UAL-62 — Owner rulings of the native round, 2026-11-17
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-UAL-62 · superseded-by: —
