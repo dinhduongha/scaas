@@ -731,8 +731,8 @@ library first, a body module only behind declared forwarders.
 - **Checked, not remembered.** A check lists every direct Rust dependency behind that line without a written exception, and
   fails on one; it runs in CI on a schedule beside the advisory checks.
 
-**Status.** SPECIFIED: the inventory of 2026-11-28 and the first bump round run before the pre-freeze tag; the check is
-built with that round.
+**Status.** SPECIFIED: the inventory of 2026-11-28 and the bump round, majors included, run before the pre-freeze tag; the
+check is built with that round.
 **Why.** Pins set once and never revisited left the workspace a major behind on core crates (alloy 1.6 while 2.x shipped
 since 2026-04-13); the advisory gates see only published advisories, not age.
 **Cost if wrong.** A major bump changes APIs and may move bytes; each bump runs its crate's suites, the vectors it reads and
@@ -740,6 +740,9 @@ the pins it touches, and a bump that moves a pinned byte format follows the byte
 **Source.** Owner ruling 2026-11-28 (Rust libraries are kept up to date at least at the major and minor level).
 
 Change (owner: yes, 2026-11-28): one exception to the 14-day line: alloy 2.6.1 (released 2026-11-16, its 14th day 2026-11-30; 2.6.0 of the same day is yanked) may be used now, with the alloy crates of the same release.
+
+Change (owner: yes, 2026-11-28): major bumps are not deferred: every Rust major behind the line moves before the pre-freeze
+tag, like the minors; only a written exception (a ruling or an upstream constraint) keeps one behind.
 
 ## 2. Node — General
 
