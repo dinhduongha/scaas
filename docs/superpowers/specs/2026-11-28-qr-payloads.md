@@ -134,8 +134,10 @@ review before its own confirm. Every rule of §9 holds there except the SDK's re
 
 A payee's request, in the named fields of [CTR-MTX-03](../../contracts/metatx.md#CTR-MTX-03) and
 [CTR-MTX-26](../../contracts/metatx.md#CTR-MTX-26): `chain_uid`, `token`, `to` (the payee id), `amount`, `meta` (`salt`,
-`pay_no`, `save`, `schema`, `body`), `valid_until` (the request's `issued_valid_until`), optionally `payer` (the payer the request is for; without it anyone may pay it, owner 2026-11-28), and optionally `relayer` (the address the
-payee asks the payment to be bound to when the payee self-relays it, so the payer hands the signed payment back, §8.6). The
+`pay_no`, `save`, `schema`, `body`), `valid_until` (the request's `issued_valid_until`), optionally `payer` (the payer the request is for; without it anyone may pay it, owner 2026-11-28), and optionally `relayer`, a **hint** (owner 2026-11-28): the relayer the payee suggests, e.g. one it hired to pay the gas, or
+itself when it self-relays and wants the signed payment handed back (§8.6). The payer's review offers it as an option: by
+default the payment is signed with `relayer` unbound (any relayer may submit it); the payer may choose to bind it to the
+suggested relayer, and the review then names that relayer. The hint never binds anything by itself. The
 scanner computes `entryRef` itself with its chain's own `metaPayId` (metatx §6: v3 on the EVM; on a family still on the v1 form
 `pay_no` must be zero, `save` false and `body` within the family's cap, else `QrPayMetaRefused`); the request carries no
 `entryRef` field. `schema` is 0, 1 (note) or 2 (structured reference); a bound call (3) or an encrypted body (4) is
