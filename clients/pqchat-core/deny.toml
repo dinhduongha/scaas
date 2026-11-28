@@ -14,17 +14,23 @@ unsound = "all"
 ignore = [
   # owner 2026-11-05 (plan "Owner answers after T0"): `paste` 1.0.15 is a proc macro of ark-ff 0.5 (unmaintained)
   { id = "RUSTSEC-2024-0436", reason = "build-time only, not in the runtime" },
-  # owner 2026-11-05 (ua-rs-sign T3c, option (a)): `crypto-bigint` 0.5.5 (timing variability in constant-time operations)
-  # reaches the graph through ZF `frost-secp256k1` =3.0.0 (k256 0.13.4 -> elliptic-curve 0.13.8 -> crypto-bigint
-  # 0.5.5), feature `signers`; that is ZF's latest release. Every other k256 / p256 use of scaas-ua is on 0.14 (crypto-bigint 0.7, T3a).
-  # Remove this entry when ZF releases on k256 0.14.
+  # owner 2026-11-05 (ua-rs-sign T3c, option (a)) and 2026-11-28 (owner: yes, CLI-UAL-51's Change): `crypto-bigint` 0.5.5
+  # (timing variability in constant-time operations: subtraction, zero counting, division and Montgomery multiplication may
+  # branch on secrets depending on compiler and CPU) reaches the graph through ZF `frost-secp256k1` =3.0.0 (k256 0.13.4 ->
+  # elliptic-curve 0.13.8 -> crypto-bigint 0.5.5), feature `signers`; that is ZF's latest release (2026-04-23, still on
+  # k256 ^0.13; checked on crates.io 2026-11-28). Every other k256 / p256 use of scaas-ua is on 0.14 (crypto-bigint 0.7,
+  # T3a). The secrets on this path: the user's FROST key share and round-1 nonces (`Wallet::frost_session`,
+  # `FrostSession::sign`, clients/ua-rs/src/wallet/pairing.rs) run through the affected operations. Signing is local on the
+  # user's device, so an attacker needs precise per-signature timing of it; no crate outside ua-rs calls FROST yet. Dated
+  # accept: remove when ZF publishes a frost-secp256k1 release on k256 >= 0.14 and ua-rs moves to it (deps-weekly.yml
+  # reports a new release); review by 2027-02-28.
   # scaas-sdk T1: `pin-utils` 0.1.1 (unmaintained, archived 2026-10-01; no advisory against its code) reaches the graph only on
   # wasm32, through `wasmtimer` 0.4.3 of alloy 1.6 (scaas-rpc's `evm`). Remove when alloy's timer drops it.
   { id = "RUSTSEC-2026-0441", reason = "wasm32 only, via wasmtimer 0.4.3 of alloy 1.6 (scaas-rpc evm); unmaintained, no vulnerability" },
   # node-deps review 2026-11-28: crypto-bigint 0.5.5 also reaches the graph through alloy 1.6 (scaas-rpc's `evm`:
   # alloy-signer / alloy-primitives -> k256 0.13.4); every alloy release still requires k256 ^0.13
   # (checked on crates.io 2026-11-28: alloy 2.6.1 of 2026-11-16, alloy-primitives 1.7.3), so alloy 2 is no exit.
-  { id = "RUSTSEC-2026-0387", reason = "via ZF frost-secp256k1 =3.0.0 (feature signers, ZF's latest release; owner 2026-11-05) and alloy 1.6 (k256 0.13.4); remove when both are on k256 0.14; review by 2027-02-28" },
+  { id = "RUSTSEC-2026-0387", reason = "via ZF frost-secp256k1 =3.0.0 (feature signers: the FROST key share and nonces, signed locally; owner 2026-11-28) and alloy 1.6 (k256 0.13.4); exit a frost-secp256k1 release on k256 >= 0.14 and alloy on k256 >= 0.14; review by 2027-02-28" },
   # lru 0.16.4 (unsound: `LruCache::pop` may use freed memory when a key's Drop panics and the panic is caught) via
   # alloy-provider 1.6.3 (scaas-rpc's `evm`), whose caches key on u64 block numbers and B256 hashes: no key Drop can panic.
   # Fixed in lru 0.18.2, which alloy-provider requires from 2.4.0 (2026-08-12; 2.0-2.3 still take lru ^0.16; checked on
