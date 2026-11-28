@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# cargo-deny policy of scaas-pqz-verifier (owner 2026-11-28): scaas-node's (scaas-node/deny.toml, itself scaas-rpc's;
+# cargo-deny 0.20.2) with the verifier's own exceptions below, each naming its crate, path and reason. Gate: `cargo deny
+# --locked check -D index-failure` (CI job `scaas-pqz-verifier`, deps-weekly.yml). Changes move only with old -> new in the
+# commit; .cargo/audit.toml carries the same vulnerability exceptions for cargo audit.
+
+[graph]
+all-features = true
+
+[advisories]
+# Every advisory in the RustSec database fails the check, unmaintained and unsound included; an exception needs an
+# `ignore` entry with its reason. `unsound = "all"`: cargo-deny's default checks unsound advisories of direct dependencies
+# only (node-deps review A-1, 2026-11-28).
+version = 2
+yanked = "deny"
+unsound = "all"
+ignore = [
+  # crypto-bigint 0.5.5 (timing variability in constant-time operations: subtraction, zero counting, division and
+  # Montgomery multiplication may branch on secrets depending on compiler and CPU; fix only in 0.7.6+) reaches the graph
+  # through alloy 1.6 (alloy-signer / alloy-signer-local / alloy-primitives -> k256 0.13.4 -> elliptic-curve 0.13.8, the
+  # last 0.13); every alloy release still requires k256 ^0.13. The secret on this path is the verifier's key: the binary
+  # signs every PqzVerdict with alloy's PrivateKeySigner (k256 0.13.4: sbb / sub_mod / add_mod / neg_mod of crypto-bigint
+  # on the secret scalar and nonce). That key decides proof acceptance on every OFFCHAIN token that names this verifier (a
+  # false verdict can create value and drain the token's shielded pool), and signing is triggered remotely: anyone who
+  # can reach POST /v1/pqz-verdict with a proof that verifies gets one signature and can time it. Accepted until the exit: the
+  # affected branches depend on compiler and CPU and need a timing channel through the HTTP answer; the operator runs the
+  # verifier as its own trust role (README "A separate trust role") and may rate-limit it (`rate_per_minute`). Exit: alloy
+  # 2 on k256 0.14, or a verdict signing path that avoids crypto-bigint 0.5.5 (owner 2026-11-28, item (2), before the tag).
+  { id = "RUSTSEC-2026-0387", reason = "the verdict key signs through alloy 1.6's k256 0.13.4, remotely triggerable; exit alloy 2 / k256 0.14 or a verdict signer off crypto-bigint 0.5.5; review by 2026-12-31" },
+  # lru 0.16.4 (unsound: `LruCache::pop` may use freed memory when a key's Drop panics and the panic is caught) via
+  # alloy-provider 1.6.3, whose caches key on u64 block numbers and B256 hashes: no key Drop can panic. Fixed in lru
+  # 0.18.2, which needs alloy-provider >= 2.6 (alloy 2, its own round): remove with that move.
+  { id = "RUSTSEC-2026-0253", reason = "lru 0.16.4 via alloy-provider 1.6.3, u64 / B256 keys whose Drop cannot panic; fix needs alloy 2; review by 2027-02-28" },
+  # unmaintained, no vulnerability
+  { id = "RUSTSEC-2024-0436", reason = "paste: proc macro of alloy-primitives and ark-ff 0.5, build-time only, not in the runtime" },
+  { id = "RUSTSEC-2026-0441", reason = "pin-utils: wasm32 only (wasmtimer 0.4.3 of alloy 1.6), never built for the verifier; unmaintained, no vulnerability" },
+  { id = "RUSTSEC-2026-0165", reason = "pqcrypto-falcon: dev-dependency only (tests/anvil.rs, the holders' Falcon-512 signer)" },
+  { id = "RUSTSEC-2026-0163", reason = "pqcrypto-internals: through the dev-dependency pqcrypto-falcon only" },
+  { id = "RUSTSEC-2026-0162", reason = "pqcrypto-traits: dev-dependency only, with pqcrypto-falcon" },
+]
+
+[licenses]
+version = 2
+# Permissive licences only, compatible with LicenseRef-Vegan-Community-1.0 (scaas-rpc's list, its TLS licences included).
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "ISC",
+  "CDLA-Permissive-2.0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+confidence-threshold = 0.9
+
+[licenses.private]
+# In-repo crates (publish = false) carry the repository licence.
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+deny = [{ crate = "aes", deny-multiple-versions = true }, { crate = "curve25519-dalek", deny-multiple-versions = true }]
+# aes 0.8.4 is eth-keystore 0.5.0's (alloy's `signer-keystore`: the verifier key's encrypted JSON keystore, AES-128-CTR,
+# read once at start); pqzl is on aes 0.9. Remove when alloy's keystore moves to aes 0.9.
+skip = [
+  { crate = "aes@0.8.4", reason = "eth-keystore 0.5.0 of alloy signer-keystore (the verifier's keystore); pqzl is on aes 0.9" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

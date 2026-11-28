@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# cargo-audit of scaas-pqz-verifier (owner 2026-11-28): the vulnerabilities deny.toml ignores, with the same reasons.
+[advisories]
+ignore = [
+  # crypto-bigint 0.5.5: the verdict key signs through alloy 1.6's k256 0.13.4, remotely triggerable; exit alloy 2 /
+  # k256 0.14 or a verdict signer off crypto-bigint 0.5.5; review by 2026-12-31 (deny.toml)
+  "RUSTSEC-2026-0387",
+]

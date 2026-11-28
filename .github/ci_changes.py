@@ -59,6 +59,9 @@ JOBS = {
     "node": ["scaas-node/", "clients/ua-rs/", "clients/scaas-rpc/", "smartcontracts/"] + VENDOR + RT,
     # the network crate and the depth scan it takes from ua-rs (json)
     "scaas-rpc": ["clients/scaas-rpc/", "clients/ua-rs/"] + VENDOR + RT,
+    # the reference PQZ verifier (off-chain, its own binary): its crate, scaas-rpc, pqz-ffi / pqz-offchain and what they build
+    # (owner 2026-11-28: its dependency policy runs in CI)
+    "scaas-pqz-verifier": ["scaas-pqz-verifier/", "clients/scaas-rpc/"] + UARS,
     "docs": [""],
     "clientkeys": ["clients/clientkeys/", "smartcontracts/", "scaas-node/src/"] + VENDOR,
     # the directories the pqz job builds and tests (pqzl, ffi, stmt, pqzh/ligero, params, fuzz); pqz-core/nethermind/ (chain
@@ -167,7 +170,7 @@ JOBS = {
 # ci-full-<group>: the jobs a label or a manual run forces on; ci-full: every job.
 GROUPS = {
     "ci-full-contracts": [j for j in JOBS if j.startswith("contract-")],
-    "ci-full-node": ["node", "scaas-rpc"],
+    "ci-full-node": ["node", "scaas-rpc", "scaas-pqz-verifier"],
     "ci-full-clients": [
         "clientkeys",
         "zether-prover",
@@ -404,6 +407,7 @@ if __name__ == "__main__":
         "contract-near",
         "contract-cosmos",
         "node",
+        "scaas-pqz-verifier",
         "pqz",
         "zether-prover",
         "scaas-ct",
@@ -440,7 +444,13 @@ if __name__ == "__main__":
     assert needed(["clients/pqchat-transport/src/lib.rs"])["pqchat-core"]
     assert not needed(["clients/scaas-sdk/src/lib.rs"])["scaas-matrix"]
     # the network crate: its own job and the node's (the node builds it); ua-rs (its depth scan) runs it too
-    assert {j for j, r in needed(["clients/scaas-rpc/src/evm.rs"]).items() if r} >= {"scaas-rpc", "node"}
+    assert {j for j, r in needed(["clients/scaas-rpc/src/evm.rs"]).items() if r} >= {
+        "scaas-rpc",
+        "node",
+        "scaas-pqz-verifier",
+    }
+    assert needed(["pqz-core/ffi/offchain/src/lib.rs"])["scaas-pqz-verifier"]
+    assert {j for j, r in needed(["scaas-pqz-verifier/src/lib.rs"]).items() if r} == {"scaas-pqz-verifier", "docs"}
     assert needed(["clients/ua-rs/src/json.rs"])["scaas-rpc"] and not needed(["scaas-node/src/chain.rs"])["scaas-rpc"]
     # ua-rs-sign T18: every job over ua-rs reads the crates ua-rs builds; the bindings over libscaas_ua_c read ua-c and ua-rs
     over = ["ua-rs", "ua-c", "ua-cxx", "ua-qt", "ua-dart-frb", "ua-py", "ua-go", "ua-cs"]
