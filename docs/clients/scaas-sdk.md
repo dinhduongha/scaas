@@ -535,8 +535,10 @@ derived UA the operation names** (owner 2026-11-24; SPECIFIED).
 
 **QR payloads** (owner 2026-11-28; SPECIFIED, nothing built): the SDK depends on the format core of `scaas-qr` and offers its
 QR calls (`Qr::receive`, `Qr::pay_request`, `Qr::sign_pay_request`, `Qr::from_hand_off`, `Qr::assemble`, `Qr::review_info`, the
-review from an info part with its unverified rows marked); a scanned `signed-op` is imported by `Op::import_signed` unchanged, and
-the confirm is only ever on the assembled payload's review. Rules [CLI-QR-01](../decisions.md#CLI-QR-01) to
+review from an info part with its unverified rows marked; `Qr::readable_uri` and `Qr::eip681`, the two text exports); a scanned
+`signed-op` is imported by `Op::import_signed` with its checks as built, confidential operations included once the QR crate is
+built (owner 2026-11-28, the blob's JSON cap then 1 MiB, [CLI-QR-05](../decisions.md#CLI-QR-05)), and the confirm is only ever on
+the assembled payload's review. Rules [CLI-QR-01](../decisions.md#CLI-QR-01) to
 [CLI-QR-08](../decisions.md#CLI-QR-08); design in the [QR spec](../superpowers/specs/2026-11-28-qr-payloads.md).
 
 ## 8. Runtime, events, errors
