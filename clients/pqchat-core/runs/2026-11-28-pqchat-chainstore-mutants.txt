@@ -1,9 +1,12 @@
 # chainstore mutants (name | outcome | commit | test | first failure line)
-implemented() leaves chainstore out again | killed | c79feb691 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_written_and_read | panicked at tests/stores.rs:1074:14:
-the identity read asks another interface id (a wrong selector) | killed | c79feb691 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_written_and_read | panicked at tests/stores.rs:1076:5:
-the identity check skipped | killed | c79feb691 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_identity_checked | panicked at tests/stores.rs:1157:5:
-the chain id of the entry not compared | killed | c79feb691 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_names_its_chain_id | panicked at tests/stores.rs:1188:5:
-chainstore gas spent without the consent | killed | c79feb691 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_cost_unconfirmed | panicked at tests/stores.rs:1208:5:
-an unconfirmed store read | killed | c79feb691 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_unconfirmed_neither_read_nor_written | panicked at tests/stores.rs:1234:5:
-the store written at another address than its own | killed | c79feb691 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_written_and_read | panicked at tests/stores.rs:1078:5:
-7 mutants, 7 killed, 0 survived, 0 not loaded, 0 other failure
+the code hash check skipped | killed | 9c065d878 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_code_hash_pinned | panicked at tests/stores.rs:1281:5:
+a code hash other than the pin accepted | killed | 9c065d878 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_code_hash_pinned | panicked at tests/stores.rs:1281:5:
+a pin that is not the build's accepted (the release data's hash) | killed | 9c065d878 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test chain_chainstore -- --ignored --test-threads 1 chain_chainstore_over_matrix_and_pqchatstore | panicked at tests/chain_chainstore.rs:94:5:
+implemented() leaves chainstore out again | killed | 9c065d878 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_written_and_read | panicked at tests/stores.rs:1076:14:
+the identity read asks another interface id (a wrong selector) | killed | 9c065d878 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_written_and_read | panicked at tests/stores.rs:1078:5:
+the identity check skipped | killed | 9c065d878 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_identity_checked | panicked at tests/stores.rs:1159:5:
+the chain id of the entry not compared | killed | 9c065d878 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_names_its_chain_id | panicked at tests/stores.rs:1190:5:
+chainstore gas spent without the consent | killed | 9c065d878 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_cost_unconfirmed | panicked at tests/stores.rs:1210:5:
+an unconfirmed store read | killed | 9c065d878 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_unconfirmed_neither_read_nor_written | panicked at tests/stores.rs:1236:5:
+the store written at another address than its own | killed | 9c065d878 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --test stores chainstore_written_and_read | panicked at tests/stores.rs:1080:5:
+10 mutants, 10 killed, 0 survived, 0 not loaded, 0 other failure
