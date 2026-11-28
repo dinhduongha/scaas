@@ -17,7 +17,8 @@
 #   contract-sui:      test.sh sui (sui move test; sui CLI 1.81.0, testnet-v1.81.0)
 #   contract-cosmos:   test.sh cosmos (cargo test)
 #   contract-ton:      test.sh ton (npm ci; npm test = tact build + jest; Node 26.8.1)
-#   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
+#   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored;
+#                  cargo deny check and cargo audit (scaas-node/deny.toml, scaas-node/.cargo/audit.toml)
 #   clients/scaas-rpc: cargo test --locked --all-features; cargo clippy --locked --all-targets --all-features -- -D warnings;
 #                  cargo test --locked --features evm --test anvil -- --ignored (three anvils, foundry's);
 #                  cargo check --locked --target wasm32-unknown-unknown --no-default-features --features evm,node-client,arweave (compiles for
@@ -595,6 +596,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: scaas-node
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20.2,cargo-audit@0.22.2
+      - name: cargo deny and cargo audit
+        run: |
+          cargo deny check
+          cargo audit
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: v1.8.5 # the forge every local build, gas figure and KAT was made with (stable drifts; Amsterdam since F185)

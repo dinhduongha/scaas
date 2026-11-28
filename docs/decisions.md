@@ -824,6 +824,8 @@ Change (2026-11-06, group 3f, controller call C7 in the owner-approved spec `sup
 **Why.** One binary with roles by configuration means one release, one test matrix and one operations story.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2014; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2154.
 
+Change (controller 2026-11-28; owner: no, owner may override; status: BUILT on branch `node-deps-1128`): the binary's dependency tree has a gate, `cargo deny check` and `cargo audit` in CI job `node`, by `scaas-node/deny.toml` (scaas-rpc's policy) and `scaas-node/.cargo/audit.toml`. Fixed by lockfile updates (each release at least 14 days old): rustls-webpki 0.103.15 → 0.103.17 (RUSTSEC-2026-0382), webpki-roots 1.0.9 → 1.0.12 (RUSTSEC-2026-0381), tokio 1.53.1 → 1.53.3 (RUSTSEC-2026-0386), rustix 1.1.5 → 1.1.6 (RUSTSEC-2026-0486). Accepted, each with its reason and exit in those files: crypto-bigint 0.5.5 (RUSTSEC-2026-0387) through alloy 1.6's k256 0.13, which every alloy release still requires; libsqlite3-sys 0.30.1 (RUSTSEC-2026-0459), local only, until sqlx 0.9.1 (2026-11-18) is 14 days old on 2026-12-02; rsa 0.9.10 (RUSTSEC-2023-0071), in `Cargo.lock` only through sqlx's optional MySQL driver and never built, to be revisited before `store-mysql` is enabled; the unmaintained paste, pin-utils and the dev-only pqcrypto crates. Not flagged by the gate and left as they are: lru 0.16.4 (unsound `LruCache::pop`, fixed in 0.18.2, which needs alloy 2), the lock-only chrono and derivative.
+
 ### NODE-GEN-18 — scaas-node layout: module moves and job seam first
 - old: reorg:Q12 · status: current · owner: yes · date: 2026-10-07 · normative: node/README.md#NODE-GEN-18 · superseded-by: —
 

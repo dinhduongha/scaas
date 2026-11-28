@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# cargo-deny policy of scaas-node: scaas-rpc's (clients/scaas-rpc/deny.toml; cargo-deny 0.20.2) with the node's own
+# exceptions below, each naming its crate, path and reason. Gate: `cargo deny check` (CI job `node`). Changes move only with
+# old -> new in the commit; .cargo/audit.toml carries the same vulnerability exceptions for cargo audit.
+
+[graph]
+all-features = true
+
+[advisories]
+# Every advisory in the RustSec database fails the check, unmaintained and unsound included; an exception needs an
+# `ignore` entry with its reason.
+version = 2
+yanked = "deny"
+ignore = [
+  # crypto-bigint 0.5.5 (timing variability in constant-time operations; fix only in 0.7.6+) reaches the graph through
+  # alloy 1.6 (alloy-signer / alloy-primitives -> k256 0.13.4 -> elliptic-curve 0.13.8, the last 0.13). Every alloy release,
+  # 2.6.1 included, still requires k256 ^0.13, so no bump fixes it. The secret behind it is a lane key, which holds gas only
+  # (never a contract role, never subject funds). Remove when alloy moves to k256 0.14.
+  { id = "RUSTSEC-2026-0387", reason = "only via alloy 1.6 (k256 0.13.4 -> elliptic-curve 0.13.8); no alloy release on k256 0.14 yet; lane keys hold gas only" },
+  # sqlx 0.8.6 -> sqlx-sqlite 0.8.6 -> libsqlite3-sys 0.30.1 (bundled SQLite): stale page-cache bytes when a process opens a
+  # database together with a crafted `-wal` file of another page size. Local only: the node opens only the store URL its
+  # operator configures, a file the node writes in its own data directory; who can plant a pair there can already replace
+  # the store. The fix (libsqlite3-sys >= 0.39) needs sqlx 0.9.1 (2026-11-18; sqlx-sqlite 0.9.0 caps it below 0.38), under
+  # 14 days old today: move to it from 2026-12-02 and remove this entry.
+  { id = "RUSTSEC-2026-0459", reason = "local-only SQLite WAL page-size bug in the node's own store; fix needs sqlx 0.9.1, under 14 days old; remove from 2026-12-02" },
+  # unmaintained, no vulnerability
+  { id = "RUSTSEC-2024-0436", reason = "paste: proc macro of alloy-primitives, build-time only, not in the runtime" },
+  { id = "RUSTSEC-2026-0441", reason = "pin-utils: via wasmtimer 0.4.3 of alloy 1.6; unmaintained, no vulnerability" },
+  { id = "RUSTSEC-2026-0165", reason = "pqcrypto-falcon: dev-dependency only (a fresh fndsa512 signer in the soroban adapter tests)" },
+  { id = "RUSTSEC-2026-0163", reason = "pqcrypto-internals: through the dev-dependency pqcrypto-falcon only" },
+  { id = "RUSTSEC-2026-0162", reason = "pqcrypto-traits: dev-dependency only, with pqcrypto-falcon" },
+]
+
+[licenses]
+version = 2
+# Permissive licences only, compatible with LicenseRef-Vegan-Community-1.0 (scaas-rpc's list, its TLS licences included).
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "ISC",
+  "CDLA-Permissive-2.0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+confidence-threshold = 0.9
+
+[licenses.private]
+# In-repo crates (publish = false) carry the repository licence.
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+deny = [{ crate = "aes", deny-multiple-versions = true }, { crate = "curve25519-dalek", deny-multiple-versions = true }]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
