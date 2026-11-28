@@ -13487,7 +13487,7 @@ which always runs. (d) New dependencies pinned exactly at their newest release a
 
 **Rule.** The kinds are `receive` (a receiver's UA id or native address, chain uid, token, optional amount, `pay_no` and relayer;
 a payment from it is matched by `payNo` alone), `pay-request` (the payee's named fields of CTR-MTX-03 and CTR-MTX-26 with a
-required payer; the scanner computes `entryRef` with its family's own `metaPayId`; `PayMeta.schema` 0, 1 or 2 only; an optional
+optional payer (anyone may pay; whether a request is paid is the payee's reconciliation from the chain's events, owner 2026-11-28); the scanner computes `entryRef` with its family's own `metaPayId`; `PayMeta.schema` 0, 1 or 2 only; an optional
 payee signature under the off-chain purpose `scaas.ua.purpose.pay-request.v1` in a domain with no `verifyingContract`, by `to`
 only), `signed-op` (the hand-off object `SignedOpBlob` under the key `op`, both directions, each signature in its own slot with
 its own digest: `auth` and each signature of `extra`) and `link` (a `LinkSession`'s public offer, 1,601-byte `kemPk`, no chain

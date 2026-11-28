@@ -13,7 +13,7 @@ and sign-after-confirm rules ([CLI-SDK-35](../../decisions.md#CLI-SDK-35), [CLI-
 ([CLI-UAL-12](../../clients/ua-libraries.md#CLI-UAL-12)), the typed structs (`smartcontracts/vectors/typed/typed_ops.json`) and
 the PQZ and Zether sizes ([pq-zero-knowledge.md](../../contracts/pq-zero-knowledge.md), the Zether prover's vectors). No
 contract or contract byte format changes. Reviewed by Fable on 2026-11-28 (four areas: format, cross-layer clients, security, cryptography); every P1 and P2 is fixed
-in this revision or put to the owner (§12 Q2, Q7); P3s left open: the taxed-token request (§3.2), a component doc
+in this revision or put to the owner (§12 Q7); P3s left open: the taxed-token request (§3.2), a component doc
 `docs/clients/scaas-qr.md` when the crate is built, the fountain overhead simulation (§11). UNAUDITED.
 
 **Contents**
@@ -134,8 +134,7 @@ review before its own confirm. Every rule of §9 holds there except the SDK's re
 
 A payee's request, in the named fields of [CTR-MTX-03](../../contracts/metatx.md#CTR-MTX-03) and
 [CTR-MTX-26](../../contracts/metatx.md#CTR-MTX-26): `chain_uid`, `token`, `to` (the payee id), `amount`, `meta` (`salt`,
-`pay_no`, `save`, `schema`, `body`), `valid_until` (the request's `issued_valid_until`), `payer` (the payer the request is for:
-required, CTR-MTX-03's "locked at start"; a request without it is PLANNED, §12 Q2), and optionally `relayer` (the address the
+`pay_no`, `save`, `schema`, `body`), `valid_until` (the request's `issued_valid_until`), optionally `payer` (the payer the request is for; without it anyone may pay it, owner 2026-11-28), and optionally `relayer` (the address the
 payee asks the payment to be bound to when the payee self-relays it, so the payer hands the signed payment back, §8.6). The
 scanner computes `entryRef` itself with its chain's own `metaPayId` (metatx §6: v3 on the EVM; on a family still on the v1 form
 `pay_no` must be zero, `save` false and `body` within the family's cap, else `QrPayMetaRefused`); the request carries no
@@ -629,11 +628,7 @@ phones for each class and for signature parts above version 30, reported, not a 
 - **Q1. The class (b) bound.** Recommendation: k ≤ 72 (≈ 82 KB, about 15 to 20 s at 5 frames a second), so a PQZL transfer at
   `n2048-kmax1024` goes by animated QR, fixed after the simulation and measurement of §11; the alternative is k ≤ 24 (≈ 27 KB,
   about 5 to 6 s), Zether only, PQZ always by the bulk file.
-- **Q2. Payment requests without a payer** (a till anyone pays at). Locking the payer at the first settled payment would let
-  anyone who sees the till's QR pay one unit first and capture the request (CTR-MTX-03's review C5-10 case). Recommendation: a
-  till shows a fresh request per sale, and a payer-less request is settled by the first single payment of at least its
-  amount, whose payer is recorded then; a smaller payment is never counted and never locks it; the rule goes into metatx.md and
-  integration.md as one rule with C5-10 when built.
+- **Q2. Payment requests without a payer.** Ruled (owner 2026-11-28): a `pay-request` only carries what the payer needs to pay; `payer` is optional and anyone may pay it. Whether a request counts as paid (one or several payments by `entryRef`, partial payments, refunds, CTR-MTX-03 / CTR-MTX-31) is the payee's reconciliation from the chain's events, never the QR's or the payer's client's: the scanner pays and shows only its own history of payments to the same payee and `pay_no` as a Caution.
 - **Q3. The payee's signature on a payment request.** Recommendation: keep it optional, under its own off-chain purpose (§3.2);
   the review shows "signed by <UA>, a known contact" or "not a known contact", and an unsigned request carries a Caution that
   anyone can show it.
