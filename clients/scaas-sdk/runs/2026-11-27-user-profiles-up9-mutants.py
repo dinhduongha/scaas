@@ -43,8 +43,8 @@ MUTANTS = [
        "            e.filter(|e| e.state == State::Unprotected)\n")],
      T + "legacy_beside_profiles_reported"),
     ("delete without the name check",
-     [(L, "        confirm(&info.name, confirm_name)?;\n        let instance = open.release()",
-       "        let _ = confirm(&info.name, confirm_name);\n        let instance = open.release()")],
+     [(L, "        confirm(&info.name, confirm_name)?;\n        let keystore = open.core()",
+       "        let _ = confirm(&info.name, confirm_name);\n        let keystore = open.core()")],
      T + "delete_open_profile"),
 ]
 

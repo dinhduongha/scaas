@@ -4,6 +4,6 @@ a corrupt candidate ending the search | killed | f44ae1201 dirty | CARGO_INCREME
 candidates read from the index | killed | f44ae1201 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test hidden -- --exact g7_runs_counted | panicked at tests/hidden.rs:118:66:
 hide() without the duplicate check | killed | f44ae1201 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test hidden -- --exact g7_duplicates | panicked at tests/hidden.rs:232:5:
 last written on a hidden open | killed | f44ae1201 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test hidden -- --exact g7_runs_counted | panicked at tests/hidden.rs:150:5:
-name in the wraps' AD | killed | d5da2f025 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test hidden -- --exact name_hint | panicked at tests/hidden.rs:299:39:
+name in the wraps' AD | killed | d267f33e1 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test hidden -- --exact name_hint | panicked at tests/hidden.rs:299:39:
 the lock taken before the search reads | killed | f44ae1201 dirty | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features test-hooks --test hidden -- --exact search_locks_only_the_match | panicked at tests/hidden.rs:87:56:
 7 mutants, 7 killed, 0 survived, 0 not loaded, 0 other failure
