@@ -231,7 +231,7 @@ fn item_aad(r: &Value) -> Vec<u8> {
 fn items_keys_aad_ciphertexts() {
     let v = load("items.json");
     let items = v["items"].as_array().unwrap();
-    assert_eq!(items.len(), 19); // F9: + a tombstone per shared vault, the 4,096-B and 16,384-B buckets; + the item layer's 4 rows (CLI-PQV-16)
+    assert_eq!(items.len(), 20); // F9: + a tombstone per shared vault, the 4,096-B and 16,384-B buckets; + the item layer's 4 rows (CLI-PQV-16); + the Arweave file row (C14)
     for r in items {
         let (vid, eid, iid) = (
             unhex(&r["vaultId"]),
@@ -289,7 +289,9 @@ fn items_keys_aad_ciphertexts() {
             .unwrap();
             assert_eq!(k_file.to_vec(), unhex(&f["kFile"]));
             let kw = unhex(&r["content"]["keyWrap"]);
-            let aad = cat(&[KEYWRAP, &[2], &vid, &eid, &iid, &ver]);
+            // the key's usage byte: `File` (4) for an Arweave file (C14), else the earlier `Data` (2)
+            let usage = f.get("usage").and_then(|u| u.as_u64()).unwrap_or(2) as u8;
+            let aad = cat(&[KEYWRAP, &[usage], &vid, &eid, &iid, &ver]);
             let key =
                 aead_open(Alg::Aes256GcmSiv, &k_file, &b12(&kw[..12]), &aad, &kw[12..]).unwrap();
             assert_eq!(key.to_vec(), unhex(&f["key"]));

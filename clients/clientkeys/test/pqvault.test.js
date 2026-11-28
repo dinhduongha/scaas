@@ -483,7 +483,7 @@ test("items: r, okm, bk, n, aad, padded plaintext and ciphertext recomputed; eac
       const fk = pv.openKey(
         kFile,
         it.content.keyWrap,
-        pv.USAGE.Data,
+        it.file.usage ?? pv.USAGE.Data,
         pv.fileCtx(x.vaultId, x.epochId, x.itemId, x.version),
       );
       assert.equal(h(fk.key), it.file.key);

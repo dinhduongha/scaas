@@ -227,8 +227,9 @@ export const batchHeader = (b, itemIds, sh) =>
 
 // ------------------------------------------------------------------ key handles and usages (§6.10)
 
-/** `Derive` 1 (HKDF input only), `Data` 2 (`seal` / `open`), `KeyWrap` 3 (`sealKey` / `openKey`). */
-export const USAGE = Object.freeze({ Derive: 1, Data: 2, KeyWrap: 3 });
+/** `Derive` 1 (HKDF input only), `Data` 2 (`seal` / `open`), `KeyWrap` 3 (`sealKey` / `openKey`), `File` 4 (the generic file
+ *  seal's key, CLI-UAL-65: a `file` item's key since C14). */
+export const USAGE = Object.freeze({ Derive: 1, Data: 2, KeyWrap: 3, File: 4 });
 /** The SDK's key-wrap AAD prefix: what no `seal` call can produce. */
 export const KEYWRAP_LABEL = "scaas/ua/v1/keywrap";
 const KEYWRAP = utf8ToBytes(KEYWRAP_LABEL);
