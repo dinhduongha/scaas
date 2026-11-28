@@ -13518,6 +13518,8 @@ Change (owner 2026-11-28, owner: yes): the QR spec's open questions Q1, Q4, Q5, 
 
 Change (owner 2026-11-28, owner: yes): a `pay-request`'s `relayer` is a hint — the relayer the payee suggests (one it hired to pay the gas, or itself for a hand-back). By default the payer signs with `relayer` unbound; the review offers binding to the suggested relayer as the payer's option, naming it.
 
+Change (owner 2026-11-28, owner: yes): a readable URI form `scaas:<chain>/<token>/<kind>?<params>` for a `receive` and an unsigned `pay-request` only (chain key, not a bare chain id; named parameters in one fixed order; one canonical CBOR payload per text, re-encoding checked; never the `ethereum:` scheme; signatures never over URI text); the base64url `scaas:` form stays for every payload.
+
 ### CLI-QR-03 — Every QR decode is bounded by length and depth before it allocates, and refuses by name
 - old: — · status: current · owner: no · date: 2026-11-28 · normative: decisions.md#CLI-QR-03 · superseded-by: —
 

@@ -213,6 +213,23 @@ rebuild by `ua-rs` refuses any field the struct does not have, so a secret has n
   URI. It is the text form for a paste, a message, a file line and a link the platform opens. A URI is accepted only if
   encoding its decoded bytes gives back the same text: the scheme in lower case, no `//`, no padding, zero trailing bits, no
   `+` or `/`, no whitespace (`QrNotCanonical`).
+- **Readable URI form** (owner 2026-11-28; SPECIFIED, built with the crate). For a `receive` and an **unsigned** `pay-request`
+  only — no signature, no bulk, no `signed-op`, no `link`, no confidential token — a readable text form beside the base64url one:
+  `scaas:<chain>/<token>/<kind>?<params>`. `<chain>` is the chain key of the release's chain table (`scaas-testnet`,
+  `avalanche-mainnet`), never a bare EVM chain id, since the format serves every family; it maps to exactly one `chain_uid` by
+  that table, an unknown key refused (`ProfileMismatch`). `<token>` is the token id in the family's lower-case canonical text
+  (`0x` hex on EVM) or `native`. `<kind>` is `receive` or `pay`. `<params>` are the payload's named fields, each at most once,
+  in one fixed order per kind (`receive`: `to_ua` | `to`, `amount`, `pay_no`, `relayer`; `pay`: `to`, `amount`, `salt`,
+  `pay_no`, `save`, `schema`, `body`, `valid_until`, `payer`, `relayer`), only the fields present, amounts as digits in base
+  units, hex in lower case with `0x`, `save` as `0` / `1`, `body` base64url. Examples:
+  `scaas:avalanche-mainnet/native/receive?to=0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed` and
+  `scaas:scaas-testnet/0x00000000000000000000000000000000000000a1/pay?to=0x…&amount=1000000&salt=0x…&pay_no=0x…&save=0&schema=0&valid_until=1767225600`.
+  A readable URI decodes to exactly one canonical CBOR payload and is accepted only if re-encoding that payload gives back the
+  same text (an unknown, duplicated or out-of-order parameter, upper-case hex, a leading zero, a `+` or a percent-escape
+  where none is needed: `QrNotCanonical`). It never travels as the `ethereum:` scheme (another wallet would read it as
+  EIP-681 and build a call to a function that does not exist), and nothing is ever signed over URI text: a signature binds the
+  canonical bytes' digest. The readable form is for display, a paste and a link; a QR symbol still carries the canonical bytes.
+  Vectors carry both URI forms of the same payloads.
 - **In a QR symbol**: the canonical bytes as one byte-mode segment, with no ECI header. A QR scanned by a generic camera app
   shows nothing useful, on purpose: a SCaaS payload needs a SCaaS review. No symbol carries the URI form.
 
