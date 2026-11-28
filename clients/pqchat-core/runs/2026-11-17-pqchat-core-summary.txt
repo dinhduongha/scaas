@@ -167,3 +167,5 @@ chainstore | pqc-test | 5e268b138 | 0 | 156 passed, 0 failed, 9 ignored (24 bina
 chainstore | mutants-check | 605060077 | 0 | -
 chainstore | bind | 605060077 | 0 | -
 chainstore | pqc-chain | 605060077 | 0 | 9 passed, 0 failed, 0 ignored (24 binaries)
+chainstore-merge | pqc-test | c6bdf53c5 | 0 | 156 passed, 0 failed, 9 ignored (24 binaries)
+chainstore-merge | bind | c6bdf53c5 | 0 | -
