@@ -532,6 +532,11 @@ mod app {
 
     /// An SDK with one seed (tests/app_core.rs's local profile: no chain is read) and an app core with an `app_id`.
     async fn core() -> (Arc<AppCore>, KeyRef) {
+        core_labelled("scaas/arweave-test/v1/").await
+    }
+
+    /// An app core under its own label: two cores of one process never share one (`AppLabelRefused`).
+    async fn core_labelled(label: &str) -> (Arc<AppCore>, KeyRef) {
         let profile = ChainProfile {
             key: "local".into(),
             family: Family::Evm,
@@ -591,7 +596,7 @@ mod app {
                 app_id: Some(format!("0x{}", "ab".repeat(32))),
                 name: "arweave test".into(),
                 class: None,
-                labels: vec!["scaas/arweave-test/v1/".into()],
+                labels: vec![label.into()],
             },
         )
         .unwrap();
@@ -604,6 +609,27 @@ mod app {
                 index: 0,
             },
         )
+    }
+
+    /// pqvault-files review F-1: a file `open_file` could not hand back (above `SECRET_MAX`, 16 MiB) is refused, even under a
+    /// profile whose largest request would take it; one byte less is sealed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_file_above_what_open_file_returns_is_refused() {
+        let (app, account) = core_labelled("scaas/arweave-test-cap/v1/").await;
+        let max = scaas_ua::wallet::SECRET_MAX;
+        assert!(matches!(
+            app.seal_for_arweave(account.clone(), vec![7; max + 1], 2, (1 << 26) + 16),
+            Err(SdkError::FileTooLarge)
+        ));
+        let KeyRef::Ua { seed, .. } = &account else {
+            unreachable!()
+        };
+        assert!(matches!(
+            app.seal_file(seed, vec![7; max + 1]),
+            Err(SdkError::FileTooLarge)
+        ));
+        let a = app.seal_file(seed, vec![7; max]).unwrap();
+        assert_eq!(a.size, max as u64);
     }
 
     #[tokio::test(flavor = "multi_thread")]

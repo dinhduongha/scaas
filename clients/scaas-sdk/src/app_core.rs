@@ -134,6 +134,16 @@ pub struct AppArweaveFile {
     pub item: Vec<u8>,
 }
 
+/// A file to seal, in a wiped buffer, refused before any work when [`AppCore::open_file`] could not hand it back
+/// (`SecretBytes` holds at most `SECRET_MAX`, 16 MiB): `FileTooLarge` (pqvault-files review F-1, F-2).
+fn openable(file: Vec<u8>) -> Result<zeroize::Zeroizing<Vec<u8>>, SdkError> {
+    let file = zeroize::Zeroizing::new(file);
+    if file.len() > scaas_ua::wallet::SECRET_MAX {
+        return Err(SdkError::FileTooLarge);
+    }
+    Ok(file)
+}
+
 /// A key handle of one scope: no bytes, no `Clone` of its key; released by [`AppCore::destroy`], its drop, or the seed's lock.
 pub struct AppKey {
     core: u64,
@@ -1340,8 +1350,10 @@ impl AppCore {
     }
 
     /// The generic file seal (CLI-UAL-65, in every store): `file` framed to its power-of-two bucket and sealed under a fresh
-    /// file key (a `File` handle); the object is exactly bucket + 16 B. Above the platform's cap: `FileTooLarge`.
+    /// file key (a `File` handle); the object is exactly bucket + 16 B. Above the platform's cap, or above what
+    /// [`Self::open_file`] can hand back (`SecretBytes`, 16 MiB): `FileTooLarge`. The file is wiped when sealed.
     pub fn seal_file(&self, seed: &str, file: Vec<u8>) -> Result<AppSealedFile, SdkError> {
+        let file = openable(file)?;
         let s = self.scope(seed)?.seal_file(&file)?;
         Ok(AppSealedFile {
             ct_sha256: s.ct_sha256.to_vec(),
@@ -1375,7 +1387,8 @@ impl AppCore {
     /// `file` sealed for Arweave in one `scaas-ua` call (CLI-SDK-21): a fresh file key, the object, its `ctSha256`, the upload
     /// key from `account`'s app root key and the file key, the item of `signature_type` (2, 3 or 4) built, signed and verified;
     /// `url` = `ar://<id>` is known before any upload. `max_object`: the bundler profile's largest single request
-    /// (`FileTooLarge` above its bucket, or above the platform's cap).
+    /// (`FileTooLarge` above its bucket, or above the platform's cap, or above what [`Self::open_file`] can hand back:
+    /// `SecretBytes`, 16 MiB; pqvault-files review F-1). The file is wiped when sealed.
     #[cfg(feature = "arweave")]
     pub fn seal_for_arweave(
         &self,
@@ -1384,6 +1397,7 @@ impl AppCore {
         signature_type: u16,
         max_object: u64,
     ) -> Result<AppArweaveFile, SdkError> {
+        let file = openable(file)?;
         let t =
             scaas_ua::arweave::SigType::from_u16(signature_type).map_err(|_| SdkError::Argument)?;
         let cap = max_object.saturating_sub(scaas_ua::file::TAG);
