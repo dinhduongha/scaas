@@ -426,6 +426,11 @@ The states of a path-less epoch at an **anchored** device that followed the pare
 tree, **every** client's review of **any** path commit (an admin's refresh, a non-admin's refresh or key change, a Remove)
 lists them as "receives the new key; not confirmed", and the planner never builds the path form by itself (at the bound it
 stops and asks, §6.5). The honouring commit of an exit must go and is the one exception, with the same review line.
+A device that holds no chain for a path-less epoch (it did not follow the parent, or the compromise warning of §6.5
+dropped it) cannot judge that epoch's tag: the epoch is "parent not followed" for it, its Adds are not judged there, and
+its list is a subset of the anchored members' (a later wrong-tag record's leaves are under review at them, not at it).
+The review of its own path commit names only what it judged; listing the unjudged Adds there as "not judged" needs their
+records or a new replay field in every client, and is not built.
 
 ### 6.3 A joiner of a path-less epoch
 
@@ -441,8 +446,9 @@ author. Its states:
 - **at the join, tag fails:** "not followed" for that device (a denial of service on it, no disclosure); it keeps no key.
 - **at the join, tag good, `sealedInfo` fails:** "followed, info not taken" (F-8).
 - **at a later path-less epoch of the same run, tag fails: "not followed since its join; this device's Welcome may not match
-  the group"** (F-1), naming the join epoch and blaming no author; never C45. It keeps no key for it and holds its sends
-  (C35) until a path commit reaches its leaf.
+  the group"** (F-1), naming the join epoch and blaming no author; never C45. For a record of the device's own
+  `(ua, keyId)` the own-commit test of §6.5 runs first: the compromise warning (owner 2026-11-28). It keeps no key
+  for it and holds its sends (C35) until a path commit reaches its leaf.
 - **Remedies (F-4):** the joiner's **own path commit** (it needs no epoch secret: its commit secret is its seed's `ps[0]`)
   or **the next path commit by anyone**, whose target its leaf is. Mode 1 has no second Welcome for a live leaf (R14, R16:
   the same key is live, the same bytes cannot return).
@@ -492,13 +498,17 @@ session's details; the warning is the admins'.
   restored device too. **No `try` reproduces it: the compromise warning of R10** (someone holds the UA's signing key or
   obtained a signature; with the epoch state, a member insider), never "not followed" and never §6.2's state, naming the
   epoch and the leaves it added (they are under review, §6.2). Reproduced, the device holding the parent's `next`: a good
-  tag is followed as at any member; **a tag the device could not have written is the compromise warning too** (owner ruling
-  2026-11-28, F-1: the device builds its own records, so a reproduced nonce with another tag was signed by someone holding
-  its UA's key and the epoch state), as for its own path commit, never C45's "the author did not hold the epoch". After
-  the warning, a path-less one as a path one, **the device takes no key and drops the chain until the next path commit
-  reaches it** (owner ruling 2026-11-28, C-11 / G-4: fail closed, nothing read or sent under a key its forger chose); the
-  warning asks the admins to "add and refresh", which reaches it. The tag alone is not the test: anyone who held the parent
-  epoch computes it.
+  tag is followed as at any member (a twin with the nonce, the Adds and the tag copied reads so too, §10); **a tag the
+  device could not have written is the compromise warning too** (owner ruling 2026-11-28, F-1: the device builds its own
+  records, so a reproduced nonce with another tag was signed by someone holding its UA's signing key and a nonce of this
+  device, copied from one of its own records that has not landed (the same parent and Adds) or made from its seed; the
+  wrong tag shows the signer did not hold, or did not use, the epoch state), as for its own path commit, never C45's "the
+  author did not hold the epoch", anchored or not (§6.3). After the warning, a path-less one as a path one, **the device
+  takes no key and drops the chain until the next path commit reaches it** (owner ruling 2026-11-28, C-11 / G-4: fail
+  closed, nothing read or sent under a key its forger chose). A path commit restores it: its own (it needs no epoch
+  secret, §6.3's remedy), or an admin's after reviewing the leaves the record added (R10's remedies, §6.2's "remove" or
+  "keep and refresh"); a refresh over the tree as it is would key those leaves. The tag alone is not the test: anyone
+  who held the parent epoch computes it.
 - **A path commit under T1 (claude-21).** A member whose path ciphertext opened but whose derived tag does not match:
   **"not followed (tag)"**: the key it derived is not the author's; it takes none and follows at the next commit that
   reaches it. Tag good, `sealedInfo` fails: "followed, info not taken". For an own path commit the reproduce test is the
@@ -592,7 +602,8 @@ admin are known limits (§15.2), recorded, not fixed.
 |---|---|
 | A leak of `S_e` or `next_e` | every path-less epoch after `e` opens, up to the next path commit; bounded by `pathRefreshBound` leaves when N > 0, by the admins' warning when 0 (R18). `K_e` alone gives nothing later; old handles hold no `next` (§4.1, lifetime). A seed leak is as today (R4) |
 | A removed or leaving member derives the next epoch | it would, by `next`: so removals and exits keep a path (R19), a path-less commit is refused while anything is owed and while a head admin is `gone` (§5.1) |
-| A stolen non-admin UA signing key, **without** the epoch state, signs a path-less Add | it can add only keys of the victim's UA. The record is accepted; its maker cannot read the chain's epoch (no `next_e`); its tag fails at every member (C45, §6.2), the victim's device shows the compromise warning by the nonce (C47), and the added leaf is under review before any path commit gives it a key (§6.2). Weaker than today's stolen-key path commit (R10 as amended) |
+| A stolen non-admin UA signing key, **without** the epoch state, signs a path-less Add | it can add only keys of the victim's UA. The record is accepted; its maker cannot read the chain's epoch (no `next_e`); its tag fails at every member (C45, §6.2), the victim's device shows the compromise warning by the nonce (C47), or, when the nonce is copied from a record of the device's own that has not landed, by the tag (F-1, owner 2026-11-28), and the added leaf is under review before any path commit gives it a key (§6.2). Weaker than today's stolen-key path commit (R10 as amended). Cost of the F-1 case: one record, against the victim's device holding no key and no chain until the next path commit (the members keep the chain, C45), so that path commit comes before the bound (at least `m × 2.9 M` asked for `m` leaves owed, §6.4) |
+| The same key, a twin with the tag copied (the path-less review's F-1 residual; fable-E-1, fable-F-1) | a record of the device's own seen before it lands (withheld by a relayer, a public pending pool) is signed again with the same nonce, Adds and `confirmTag` (all public) and other `wrapHashes`, wraps or `sealedInfo`, and lands first. Neither the nonce nor the tag binds the wraps or `sealedInfo`, so the victim's device and every member read "followed" and no one is warned; the joiner reads "not followed (tag)" or "opening failed", and the info is "not taken" (F-10 a) unless the signer also holds the epoch state. The forger gains no key; a denial of service on the victim's joiner and an info wipe under the victim's name. The same class as an own path commit (its test reproduces node keys and tag, not ciphertexts, wraps or `sealedInfo`). Recorded, not closed |
 | A stolen non-admin UA signing key **with** the epoch state (a member insider) | the record, its tag and its Welcome are right, so members see nothing; **the victim's device shows the compromise warning** because no `try` of its seed reproduces the nonce (C47, F-2), naming the leaf, which is then under review (§6.2). Without C47 this would go unseen |
 | An author gives a joiner a wrong Welcome | the joiner's tag at the join fails if the tag is the chain's: "not followed", a denial of service on that joiner, no disclosure. A member that adds its own key forks only its own device. An author who also signs a tag matching its own Welcome forks the joiner (members see C45; the joiner sees "Welcome may not match" at the next honest path-less epoch, §6.3) and reads what the joiner sends until the next path commit reaching it: for an admin author a known limit (§15.2) |
 | An author signs a wrong tag on purpose | anchored members keep the chain's key and see "the author did not hold the epoch" (§6.2); a device that entered the run by a path-less Welcome (unanchored) is "not followed (welcome may not match)" from that epoch to the next path commit that reaches it (§6.3). So the record stops every unanchored joiner of the run until a path commit, at the cost of one record; the admins see the C45 state and its author, and the next path commit (forced at the bound, or "add and refresh") restores them (the path-less review's G-3, 2026-11-27). Accepted as built (owner ruling 2026-11-28): any member can stall the run's unanchored joiners this way, at the cost of one signed record whose C45 state names its author and the leaves it added |

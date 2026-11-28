@@ -2212,9 +2212,12 @@ pub enum State {
     Followed,
     /// with the reason: "opening failed", "list", "wrong target", "target not held", "node key mismatch", "welcome disagrees",
     /// "tag" (the derived confirmation is not the signed one: claude-21, F-7), "parent not followed", "welcome may not match"
-    /// (a path-less joiner in its first run, F-1); a commit without its author's right is a lying read (C25), never this
+    /// (a path-less joiner in its first run: the path-less spec review's F-1 of 2026-11-25); a commit without its author's
+    /// right is a lying read (C25), never this
     NotFollowed(&'static str),
-    /// its own `(ua, keyId)` committed what its seed does not reproduce (R10, fable-r2-1; a path-less record by its nonce, C47)
+    /// its own `(ua, keyId)` committed what its seed does not reproduce (R10, fable-r2-1): a path-less record by its nonce
+    /// (C47), or with a reproduced nonce and a tag this device could not have written (owner 2026-11-28, F-1); no key, and
+    /// no chain until a path commit
     Compromise,
     /// C45 (the path-less delta §6.2): a path-less epoch whose tag fails at a device anchored in its run; the device keeps the
     /// chain's key, takes no info, and the epoch's added leaves are under review
@@ -3012,7 +3015,8 @@ impl AppKeys {
             return Ok(taken(sc, a, &epoch_id, &sealed, sch, ch.anchored));
         }
         // F-1 (owner 2026-11-28): its own record, the nonce reproduced, a tag this device could not have written: someone
-        // holding its UA's key and the epoch signed it; the compromise warning, no key and no chain until a path commit
+        // holding its UA's signing key signed it, the nonce copied from an own record that has not landed (or made from the
+        // seed), without the epoch state; the compromise warning, anchored or not, no key and no chain until a path commit
         // (C-11 / G-4, fail closed)
         if p.own {
             return Ok(compromise());
