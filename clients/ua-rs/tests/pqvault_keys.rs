@@ -231,7 +231,7 @@ fn item_aad(r: &Value) -> Vec<u8> {
 fn items_keys_aad_ciphertexts() {
     let v = load("items.json");
     let items = v["items"].as_array().unwrap();
-    assert_eq!(items.len(), 19); // F9: + a tombstone per shared vault, the 4,096-B and 16,384-B buckets; + the item layer's 4 rows (CLI-PQV-16)
+    assert_eq!(items.len(), 20); // F9: + a tombstone per shared vault, the 4,096-B and 16,384-B buckets; + the item layer's 4 rows (CLI-PQV-16); + the Arweave file row (C14)
     for r in items {
         let (vid, eid, iid) = (
             unhex(&r["vaultId"]),
@@ -289,10 +289,21 @@ fn items_keys_aad_ciphertexts() {
             .unwrap();
             assert_eq!(k_file.to_vec(), unhex(&f["kFile"]));
             let kw = unhex(&r["content"]["keyWrap"]);
-            let aad = cat(&[KEYWRAP, &[2], &vid, &eid, &iid, &ver]);
+            // the key's usage byte: `File` (4) for an Arweave file (C14), else the earlier `Data` (2)
+            let usage = f.get("usage").and_then(|u| u.as_u64()).unwrap_or(2) as u8;
+            let aad = cat(&[KEYWRAP, &[usage], &vid, &eid, &iid, &ver]);
             let key =
                 aead_open(Alg::Aes256GcmSiv, &k_file, &b12(&kw[..12]), &aad, &kw[12..]).unwrap();
             assert_eq!(key.to_vec(), unhex(&f["key"]));
+            // an Arweave row's file, sealed under that key, is the object its `ctSha256` names (review F-7)
+            if let Some(file) = f.get("file") {
+                let k: [u8; 32] = key.to_vec().try_into().unwrap();
+                let c = &r["content"];
+                let ct: [u8; 32] = unhex(&c["ctSha256"]).try_into().unwrap();
+                let size = c["size"].as_u64().unwrap();
+                let obj = object_of(&k, &unhex(file));
+                scaas_ua::file::check_object(&obj, size, &ct, scaas_ua::file::CAP).unwrap();
+            }
         }
     }
     assert!(items.iter().any(|r| r.get("file").is_some()));
@@ -366,4 +377,14 @@ fn native_member_digests() {
         unhex(&n["mode1"]["digest"]),
         "control: purpose"
     );
+}
+
+/// The object of `file` under `key` (CLI-UAL-65): `size` (8 B, big-endian) ‖ file ‖ zeros to its bucket, AES-256-GCM, nonce 0.
+fn object_of(key: &[u8; 32], file: &[u8]) -> Vec<u8> {
+    let b = scaas_ua::file::bucket(file.len() as u64, scaas_ua::file::CAP).unwrap() as usize;
+    let mut frame = vec![0u8; b];
+    frame[..8].copy_from_slice(&(file.len() as u64).to_be_bytes());
+    frame[8..8 + file.len()].copy_from_slice(file);
+    scaas_ua::wallet::aead_seal(scaas_ua::wallet::Alg::Aes256Gcm, key, &[0; 12], &[], &frame)
+        .unwrap()
 }

@@ -431,7 +431,23 @@ async fn item_versions_and_refusals() {
             "{name}"
         );
         let item = Item::from_canonical(x["json"].as_str().unwrap().as_bytes()).unwrap();
-        assert_eq!(&item.plaintext().unwrap()[..], &ub(&x["pt"])[..], "{name}");
+        // a `file` row before C14 (an https url, a `Data` key) is read, never written by this client (its bounds: `Shape`)
+        let legacy_file = x["content"]["type"] == "file"
+            && !x["content"]["url"].as_str().unwrap().starts_with("ar://");
+        if legacy_file {
+            assert!(item.plaintext().is_err(), "{name}");
+            assert!(
+                pqvault_core::file::file_info(&item).is_none(),
+                "{name}: no fetch of an https url"
+            );
+            assert_eq!(
+                &content::pad(&item.canonical().unwrap()).unwrap()[..],
+                &ub(&x["pt"])[..],
+                "{name}"
+            );
+        } else {
+            assert_eq!(&item.plaintext().unwrap()[..], &ub(&x["pt"])[..], "{name}");
+        }
         assert_eq!(
             serde_json::from_slice::<Value>(&item.canonical().unwrap()).unwrap(),
             x["content"],
@@ -444,10 +460,33 @@ async fn item_versions_and_refusals() {
         assert_eq!(keys::decrypt_item(&a, &kv, &p, &ct).unwrap(), item);
         if let Some(f) = x.get("file").filter(|f| !f.is_null()) {
             let wire = ub(&x["content"]["keyWrap"]);
+            if legacy_file {
+                // the form before C14: its `Data` key does not open as a file key
+                assert!(matches!(
+                    keys::open_file_key(&a, &kv, &p, &wire),
+                    Err(Error::Unreadable)
+                ));
+                continue;
+            }
+            assert_eq!(f["usage"], 4, "{name}");
             let fk = keys::open_file_key(&a, &kv, &p, &wire).unwrap();
             assert!(a
-                .same_key(fk.clone(), imp(&a, &seed, &f["key"], AppKeyUsage::Data))
+                .same_key(fk.clone(), imp(&a, &seed, &f["key"], AppKeyUsage::File))
                 .unwrap());
+            // the row's file sealed under the row's key: the opened key opens that object (review F-7)
+            let k: [u8; 32] = ub(&f["key"]).try_into().unwrap();
+            let file = ub(&f["file"]);
+            let c = &x["content"];
+            let pt = a
+                .open_file(
+                    fk.clone(),
+                    object_of(&k, &file),
+                    c["size"].as_u64().unwrap(),
+                    ub(&c["sha256"]),
+                    ub(&c["ctSha256"]),
+                )
+                .unwrap();
+            assert_eq!(pt.with(|b| b.to_vec()), file, "{name}");
             let again = keys::seal_file_key(&a, &kv, &p, fk).unwrap();
             assert!(keys::open_file_key(&a, &kv, &p, &again).is_ok());
             // the file key does not open as a prev key wrap (another label), nor under another version's kFile
@@ -530,4 +569,56 @@ async fn passphrase_keys() {
         keys::pass_key(&a, &seed, 1, Some(&sec(b"a\x07b")), salt).await,
         Err(Error::PassphraseInvalid)
     ));
+}
+
+/// C14 (CLI-PQV-20 (2)): the Arweave `file` row's item is what a writer writes; one change each outside the writer's bounds
+/// is `Shape` (an https url, an `ar://` id of 42 characters, with a `+` or not canonical, a hash or a wrap of another
+/// length, a size 0).
+#[test]
+fn a_file_items_bounds() {
+    let it = doc("items");
+    let row = it["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["name"] == "personal1/ui-4")
+        .unwrap();
+    let base = row["content"].clone();
+    let item = |v: &Value| Item::from_canonical(&serde_json::to_vec(v).unwrap()).unwrap();
+    assert!(item(&base).plaintext().is_ok());
+    let id = base["url"].as_str().unwrap()[5..].to_string();
+    // `B` is not a canonical last character (a canonical id ends in one of `AEIMQUYcgkosw048`)
+    let last = "B";
+    let bad: [(&str, Value); 9] = [
+        ("url", Value::from(format!("ar://{}{last}", &id[..42]))),
+        ("url", Value::from(format!("https://arweave.net/{id}"))),
+        ("url", Value::from(format!("ar://{}", &id[1..]))),
+        ("url", Value::from(format!("ar://+{}", &id[1..]))),
+        ("sha256", Value::from("0x00")),
+        (
+            "ctSha256",
+            Value::from(format!("{}00", base["ctSha256"].as_str().unwrap())),
+        ),
+        (
+            "keyWrap",
+            Value::from(&base["keyWrap"].as_str().unwrap()[..120]),
+        ),
+        ("size", Value::from(0)),
+        ("mediaType", Value::from("")),
+    ];
+    for (k, v) in bad {
+        let mut c = base.clone();
+        c[k] = v.clone();
+        assert!(item(&c).plaintext().is_err(), "{k} = {v}");
+    }
+}
+
+/// The object of `file` under `key` (CLI-UAL-65): `size` (8 B, big-endian) ‖ file ‖ zeros to its bucket, AES-256-GCM, nonce 0.
+fn object_of(key: &[u8; 32], file: &[u8]) -> Vec<u8> {
+    let b = scaas_ua::file::bucket(file.len() as u64, scaas_ua::file::CAP).unwrap() as usize;
+    let mut frame = vec![0u8; b];
+    frame[..8].copy_from_slice(&(file.len() as u64).to_be_bytes());
+    frame[8..8 + file.len()].copy_from_slice(file);
+    scaas_ua::wallet::aead_seal(scaas_ua::wallet::Alg::Aes256Gcm, key, &[0; 12], &[], &frame)
+        .unwrap()
 }

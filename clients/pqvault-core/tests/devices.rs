@@ -25,6 +25,9 @@ use scaas_sdk::{Limits, RuntimeChoice, Sdk, SdkConfig, SdkError};
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 
+#[path = "../../scaas-sdk/tests/common/fake_http.rs"]
+mod fake_http;
+
 const REPO: &str = "bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author capable act festival slice deposit sauce coconut afford frown better";
 const UID: B32 = B32([1; 32]);
 
@@ -708,5 +711,204 @@ fn a_fresh_quote_within_the_review_needs_no_second_confirm() {
     assert!(
         !within(Some(("1e3", a)), Some(("100", a))),
         "a figure that does not parse"
+    );
+}
+
+/// The objects a fake gateway serves, `(id, bytes)`.
+type Served = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
+
+/// An Arweave gateway serving `objects` (`id` → bytes) on `/raw/<id>`, its `/info` naming the network; and the SDK's
+/// `ArweaveFiles` over it with no bundler and no payer (only the gateway read is used here).
+async fn gateway(objects: Served) -> scaas_sdk::arweave::ArweaveFiles {
+    let (url, _) = fake_http::serve(Arc::new(move |_: &str, p: &str, _: &[u8]| {
+        if p == "/info" {
+            return (
+                200,
+                json!({"network": "arweave.N.1", "height": 1})
+                    .to_string()
+                    .into_bytes(),
+            );
+        }
+        let o = objects.lock().unwrap();
+        match o.iter().find(|(id, _)| p == format!("/raw/{id}")) {
+            Some((_, b)) => (200, b.clone()),
+            None => (404, vec![]),
+        }
+    }))
+    .await;
+    let cfg: scaas_sdk::arweave::ArweaveConfig = serde_json::from_value(json!({
+        "gateways": {"rpc": [{"url": url, "class": "default"}]},
+        "operators": ["op0"],
+        "bundlers": {"rpc": [{"url": fake_http::DOWN, "class": "default"}]},
+        "max_object": (1u64 << 17) + 16,
+    }))
+    .unwrap();
+    scaas_sdk::arweave::ArweaveFiles::new(&cfg, |_| None).unwrap()
+}
+
+/// The object an upload's signed item carries (its last `bucket + 16` bytes) and its id.
+fn object_of(u: &pqvault_core::file::FileUpload) -> (String, Vec<u8>) {
+    let n = scaas_ua::file::object_len(u.size, scaas_ua::file::CAP).unwrap() as usize;
+    (
+        u.url.strip_prefix("ar://").unwrap().to_string(),
+        u.item[u.item.len() - n..].to_vec(),
+    )
+}
+
+/// C14 (owner 2026-11-28): a `file` item is prepared without a signature, confirmed only after one gateway read of its object
+/// passed the `ctSha256` check (`FileNotRead` before, nothing signed; a gateway serving other bytes: `FileHashMismatch`, still
+/// unread), and its file opens from the object under the version's `kFile`; an edit re-seals the key for the new version (the
+/// old version's context no longer opens the new wrap); a tampered object does not open.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_file_item_is_signed_only_after_its_object_was_read() {
+    let _one = ONE.lock().await;
+    let w = world().await;
+    let pay = || w.payer.clone();
+    let s =
+        w.pv.create_vault(
+            &w.me,
+            &info(),
+            &[key(w.a, 1)],
+            &at(),
+            Mode::Portable,
+            &Passphrase::Off,
+            pay(),
+        )
+        .await
+        .unwrap();
+    let st = w.pv.verify(state(&w, &s)).await.unwrap();
+    let u =
+        w.pv.unlock(&w.me, st.clone(), &Passphrase::Off)
+            .await
+            .unwrap();
+    let bytes: Vec<u8> = (0..1000u32).map(|i| (i % 251) as u8).collect();
+    let f = |title: &str| pqvault_core::file::FileToSave {
+        file: zeroize::Zeroizing::new(bytes.clone()),
+        title: title.into(),
+        media_type: "application/pdf".into(),
+        name: "passport.pdf".into(),
+        max_object: (1u64 << 17) + 16,
+    };
+    // the cheap refusals come before the seal (review E-5)
+    assert!(matches!(
+        w.pv.prepare_file(&u, f(""), pay()).await,
+        Err(Error::Shape)
+    ));
+    let n = signs(&w);
+    let unread =
+        w.pv.prepare_file(&u, f("Passport scan"), pay())
+            .await
+            .unwrap();
+    assert!(unread.upload().url.starts_with("ar://"));
+    assert!(matches!(
+        w.pv.confirm_file(&unread).await,
+        Err(Error::FileNotRead)
+    ));
+    assert_eq!(signs(&w), n, "nothing signed before the read");
+    let mut p =
+        w.pv.prepare_file(&u, f("Passport scan"), pay())
+            .await
+            .unwrap();
+    let (id, object) = object_of(p.upload());
+    let served = Arc::new(Mutex::new(vec![(id.clone(), vec![0u8; object.len()])]));
+    let files = gateway(served.clone()).await;
+    assert!(matches!(
+        w.pv.check_uploaded(&mut p, &files).await,
+        Err(Error::Sdk(SdkError::FileHashMismatch))
+    ));
+    assert!(!p.read_back(), "other bytes: still unread");
+    served.lock().unwrap()[0].1 = object.clone();
+    w.pv.check_uploaded(&mut p, &files).await.unwrap();
+    assert!(p.read_back());
+    let rec = p.prepared().record().clone();
+    let c = w.pv.confirm_file(&p).await.unwrap();
+    assert_eq!(signs(&w), n + 1, "signed once, after the read");
+    assert_eq!(c.signed.record, rec);
+    // the prepared file stays the caller's: a retry signs the same record, no second object (review E-4)
+    assert_eq!(w.pv.confirm_file(&p).await.unwrap().signed.record, rec);
+    // the stored version, opened as a reader opens it, and its file
+    let vid = st.vault_id;
+    let iid = item_id(vid, w.a, rec.nonce.0);
+    let version_at = |item: B32, epoch: B32, n: u32, ct: &[u8]| {
+        let x = pqvault_core::keys::ItemAt {
+            vault: vid,
+            epoch,
+            item,
+            version: n,
+            author: w.a,
+            home_chain: st.create.home_chain,
+            home: st.create.home_vault_contract,
+        };
+        ItemVersion {
+            item_id: item,
+            version: n,
+            version_count: n,
+            epoch_id: epoch,
+            author: w.a,
+            value: pqvault_core::keys::decrypt_item(&w.core, &u.epoch_key(epoch).unwrap(), &x, ct),
+        }
+    };
+    let v1 = version_at(iid, vid, 1, &rec.ciphertext.0);
+    let item = v1.value.as_ref().unwrap().clone();
+    let fi = pqvault_core::file::file_info(&item).unwrap();
+    assert_eq!(
+        (fi.size, fi.url.as_str()),
+        (1000, format!("ar://{id}").as_str())
+    );
+    let opened = w.pv.open_file(&u, &v1, object.clone()).unwrap();
+    assert_eq!(opened.with(|b| b.to_vec()), bytes);
+    // a `file` item is written by `prepare_file` only: not by create_item / create_items (review E-1)
+    assert!(matches!(
+        w.pv.create_item(&u, &item, pay()).await,
+        Err(Error::Shape)
+    ));
+    // an edit never names another object (review E-2)
+    for (k, val) in [
+        ("url", json!(format!("ar://{}", "B".repeat(43)))),
+        ("size", json!(999)),
+        ("sha256", json!(format!("0x{}", "00".repeat(32)))),
+        ("ctSha256", json!(format!("0x{}", "00".repeat(32)))),
+    ] {
+        let mut other = item.clone();
+        other.set(k, Field::Plain(val));
+        assert!(
+            matches!(
+                w.pv.edit_item(&u, &v1, &other, pay()).await,
+                Err(Error::Shape)
+            ),
+            "{k}"
+        );
+    }
+    // a note edited into a `file` item has no wrap to move
+    let mut note = Item::new("note");
+    note.set("title", Field::Plain(json!("n")));
+    let as_note = ItemVersion {
+        value: Ok(note),
+        ..version_at(iid, vid, 1, &rec.ciphertext.0)
+    };
+    assert!(matches!(
+        w.pv.edit_item(&u, &as_note, &item, pay()).await,
+        Err(Error::Shape)
+    ));
+    let mut bad = object.clone();
+    bad[20] ^= 1;
+    assert!(w.pv.open_file(&u, &v1, bad).is_err(), "a tampered object");
+    // an edit (the title) re-seals the file key for version 2
+    let mut renamed = item.clone();
+    renamed.set("title", Field::Plain(json!("Passport (2031)")));
+    let e = w.pv.edit_item(&u, &v1, &renamed, pay()).await.unwrap();
+    let v2 = version_at(iid, vid, 2, &e.record().ciphertext.0);
+    let item2 = v2.value.as_ref().unwrap();
+    assert_ne!(item2.plain("keyWrap"), item.plain("keyWrap"), "a new wrap");
+    let opened = w.pv.open_file(&u, &v2, object.clone()).unwrap();
+    assert_eq!(opened.with(|b| b.to_vec()), bytes);
+    let stale = ItemVersion {
+        version: 1,
+        version_count: 1,
+        ..version_at(iid, vid, 2, &e.record().ciphertext.0)
+    };
+    assert!(
+        matches!(w.pv.open_file(&u, &stale, object), Err(Error::Unreadable)),
+        "the old version's kFile does not open the new wrap"
     );
 }

@@ -18,7 +18,8 @@ default = []
 vectors = ["scaas-sdk/vectors"]
 
 [dependencies]
-scaas-sdk = { path = "../scaas-sdk", default-features = false, features = ["app-core", "mlock"] }
+# `arweave` (C14, owner 2026-11-28): `seal_for_arweave`, `open_file` and the gateway read of `file` items; no crate of its own
+scaas-sdk = { path = "../scaas-sdk", default-features = false, features = ["app-core", "mlock", "arweave"] }
 serde = { version = "1", features = ["derive"] }
 # `raw_value`: an item's fields read from the decrypted plaintext in place (CLI-PQV-16 H1; a feature, no crate added)
 serde_json = { version = "1", features = ["raw_value"] }

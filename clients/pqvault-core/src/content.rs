@@ -246,6 +246,21 @@ pub const TYPES: [&str; 9] = [
     "login", "note", "card", "identity", "sshKey", "totp", "file", "vaultRef", "deleted",
 ];
 
+/// `ar://` and an Arweave id in its canonical form: 43 base64url characters, the last one of `AEIMQUYcgkosw048` (the
+/// reader's `scaas_ua::file::ar_url`, which this crate may not name: its one dependency is the SDK; review F-6).
+pub(crate) fn ar_url_ok(u: &str) -> bool {
+    u.strip_prefix("ar://").is_some_and(|id| {
+        id.len() == 43
+            && id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            && id
+                .bytes()
+                .last()
+                .is_some_and(|b| b"AEIMQUYcgkosw048".contains(&b))
+    })
+}
+
 fn len_in(v: Option<&Value>, lo: usize, hi: usize) -> bool {
     v.and_then(Value::as_str)
         .is_some_and(|s| (lo..=hi).contains(&s.len()))
@@ -298,6 +313,28 @@ pub fn check_item(v: &Value) -> Result<(), Bad> {
                 o.get("mediaType").and_then(Value::as_str),
                 Some("text/plain" | "text/markdown")
             ) && o.get("hideBody").is_none_or(Value::is_boolean)
+        }
+        // C14: an Arweave object (`ar://` and 43 base64url characters), its hashes and its 60-B key wrap
+        "file" => {
+            let hex_of = |k: &str, n: usize| {
+                o.get(k).and_then(Value::as_str).is_some_and(|s| {
+                    s.len() == 2 + 2 * n
+                        && s.starts_with("0x")
+                        && s.bytes()
+                            .skip(2)
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
+            };
+            let url_ok = o.get("url").and_then(Value::as_str).is_some_and(ar_url_ok);
+            len_in(o.get("mediaType"), 1, 64)
+                && len_in(o.get("name"), 1, 255)
+                && o.get("size")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|n| (1..=SAFE).contains(&n))
+                && hex_of("sha256", 32)
+                && hex_of("ctSha256", 32)
+                && hex_of("keyWrap", 60)
+                && url_ok
         }
         "vaultRef" => {
             o.get("vaultId").and_then(Value::as_str).is_some()

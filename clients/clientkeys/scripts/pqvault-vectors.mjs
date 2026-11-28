@@ -14,10 +14,11 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { entropyToMnemonic, mnemonicToSeedSync } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import * as pv from "../src/pqvault.js";
+import { openFile, sealFile } from "../src/arweave.js";
 import * as ua from "../src/ua.js";
 import { kemKey } from "../src/pqchat.js";
 import { pqKeygen, pqSeed, signUA, verifyUA } from "../src/pq.js";
-import { hex, keccak_256, utf8ToBytes, concatBytes, fromHex } from "../src/bytes.js";
+import { b64url, hex, keccak_256, utf8ToBytes, concatBytes, fromHex } from "../src/bytes.js";
 
 const OUT = process.argv[2] ?? fileURLToPath(new URL("../../../smartcontracts/vectors/pqvault/", import.meta.url));
 mkdirSync(OUT, { recursive: true });
@@ -192,7 +193,10 @@ function epochKeys(name, { vid, eid, epoch, passKdf, passphrase, passSalt, info,
 function itemCt(name, x, content, { epochName, record, batchIndex, creator, mode }) {
   const Kv = Kvs[epochName];
   if (content.type === "file") {
-    const fk = pv.handle(pv.USAGE.Data, rnd(`file/${name}/key`));
+    // C14 (owner 2026-11-28): an Arweave file (`ar://`) carries the generic file seal's `File` key; the earlier rows'
+    // `Data` key is the form before it, which no client writes
+    const arweave = content.url.startsWith("ar://");
+    const fk = pv.handle(arweave ? pv.USAGE.File : pv.USAGE.Data, rnd(`file/${name}/key`));
     const kFile = pv.fileKey(Kv, x.vaultId, x.epochId, x.itemId, x.version);
     const kw = pv.sealKey(
       kFile,
@@ -200,8 +204,32 @@ function itemCt(name, x, content, { epochName, record, batchIndex, creator, mode
       fk,
       pv.fileCtx(x.vaultId, x.epochId, x.itemId, x.version),
     );
+    // an Arweave row names its file by `url: "ar://"`: the file, the object, its hashes and its id all from the row's name, the
+    // file kept in the row so each reader seals it under `file.key` and finds `ctSha256` (review F-7)
+    let file;
+    if (content.url === "ar://") {
+      file = rnd(`${name}/file`, content.size);
+      const s = sealFile(fk.key, file);
+      const back = openFile(fk.key, s.object, s.size, s.sha256, s.ctSha256);
+      if (hex(back) !== hex(file)) throw new Error(`${name}: the wrapped key does not open its object`);
+      content = {
+        ...content,
+        size: s.size,
+        sha256: hex(s.sha256),
+        ctSha256: hex(s.ctSha256),
+        url: `ar://${b64url(rnd(`${name}/id`))}`,
+      };
+    }
     content = { ...content, keyWrap: hex(kw) };
-    x = { ...x, file: { kFile: hex(kFile.key), key: hex(fk.key) } };
+    x = {
+      ...x,
+      file: {
+        kFile: hex(kFile.key),
+        key: hex(fk.key),
+        ...(arweave ? { usage: pv.USAGE.File } : {}),
+        ...(file ? { file: hex(file) } : {}),
+      },
+    };
   }
   const json = pv.canonicalJson(content);
   const pt = pv.padItem(utf8ToBytes(json));
@@ -557,6 +585,20 @@ const p1 = personalVault("personal1", personal, 1, { passKdf: 0, passphrase: "",
         { name: "branch", secret: false, value: "Main" },
       ],
       history: [{ field: "password", value: "p1" }],
+    },
+  ],
+
+  // C14 (owner 2026-11-28): a file on Arweave: the object sealed under a `File` key (clientkeys' arweave.js, as the SDK's
+  // `seal_for_arweave`), the item naming it by `ar://<id>`, its key sealed under `kFile` with usage `File`
+  [
+    6,
+    {
+      type: "file",
+      title: "Passport scan",
+      mediaType: "application/pdf",
+      name: "passport.pdf",
+      size: 1000,
+      url: "ar://",
     },
   ],
 ].forEach(([n, content], i) => {

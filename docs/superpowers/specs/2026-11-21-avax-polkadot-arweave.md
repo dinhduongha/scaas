@@ -603,6 +603,10 @@ with PqVault's app root key. The vault item that names the object is written on 
 has passed the `ctSha256` check, so a vault never names an object nobody can read. Files go off chain, fetched only on the user's
 action (CLI-PQV-05). Small attachments still live inline in the 16 KiB item bucket.
 
+Status: **BUILT**, UNAUDITED (owner 2026-11-28, before the pre-freeze tag; branch `pqvault-files`): `pqvault-core` `src/file.rs`,
+rule [CLI-PQV-19](../../clients/pqvault-core.md#CLI-PQV-19), controller calls [CLI-PQV-20](../../decisions.md#CLI-PQV-20) (the
+file key's usage is `File`, the SDK's). O4 stays: no Arweave message store kind.
+
 ### 7.11 Settlement and re-posting (C11, C16, C20)
 
 A Turbo receipt is acceptance, not retrieval. The app core keeps the signed item until `settled` (§7.7) is true. While it is not:

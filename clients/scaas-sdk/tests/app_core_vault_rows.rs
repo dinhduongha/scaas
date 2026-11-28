@@ -575,7 +575,8 @@ async fn item_versions() {
     let it = doc("items");
     let items = it["items"].as_array().unwrap();
     // 15 + the item layer's 4 rows (CLI-PQV-16 H1-H3: card, identity, a hidden note, custom fields with history)
-    assert_eq!(items.len(), 19);
+    // + the Arweave `file` row (C14, owner 2026-11-28)
+    assert_eq!(items.len(), 20);
     let ids = |x: &Value| {
         [
             unhex(&x["vaultId"]),
@@ -649,8 +650,14 @@ async fn item_versions() {
             unhex(&x["file"]["kFile"])
         );
         let wire = unhex(&x["content"]["keyWrap"]);
+        // the key's usage: `File` (4) for an Arweave file (C14), else the earlier `Data` (2)
+        let usage = if x["file"]["usage"] == 4 {
+            AppKeyUsage::File
+        } else {
+            AppKeyUsage::Data
+        };
         let fk = a
-            .vectors_import(&seed, a32(&x["file"]["key"]), AppKeyUsage::Data)
+            .vectors_import(&seed, a32(&x["file"]["key"]), usage)
             .unwrap();
         let again = a
             .vectors_seal_key(
@@ -661,10 +668,25 @@ async fn item_versions() {
             )
             .unwrap();
         assert_eq!(again, wire, "{}", x["name"]);
-        let back = a.open_key(kfile, wire, AppKeyUsage::Data, ids(x)).unwrap();
-        assert!(a.same_key(back, fk).unwrap());
+        let back = a.open_key(kfile, wire, usage, ids(x)).unwrap();
+        assert!(a.same_key(back, fk.clone()).unwrap());
+        // an Arweave row's file: the wrapped key opens the object its `ctSha256` names (review F-7)
+        if let Some(file) = x["file"].get("file") {
+            let c = &x["content"];
+            let obj = object_of(&a32(&x["file"]["key"]), &unhex(file));
+            let pt = a
+                .open_file(
+                    fk,
+                    obj,
+                    c["size"].as_u64().unwrap(),
+                    unhex(&c["sha256"]),
+                    unhex(&c["ctSha256"]),
+                )
+                .unwrap();
+            assert_eq!(pt.with(|b| b.to_vec()), unhex(file), "{}", x["name"]);
+        }
     }
-    assert_eq!(files, 2);
+    assert_eq!(files, 3);
     // refusals against the base item, one change each: a length outside 32..=16,416 B never reaches the SDK
     // (pqvault-core's CiphertextLength); a non-zero padding byte opens (pqvault-core's unpad refuses it); an AAD word
     // changed, or the key of another epoch, fails the tag; the base itself opens
@@ -738,4 +760,14 @@ fn sdk_code(e: &str) -> &str {
         "AeadOpen" => "Aead",
         x => x,
     }
+}
+
+/// The object of `file` under `key` (CLI-UAL-65): `size` (8 B, big-endian) ‖ file ‖ zeros to its bucket, AES-256-GCM, nonce 0.
+fn object_of(key: &[u8; 32], file: &[u8]) -> Vec<u8> {
+    let b = scaas_ua::file::bucket(file.len() as u64, scaas_ua::file::CAP).unwrap() as usize;
+    let mut frame = vec![0u8; b];
+    frame[..8].copy_from_slice(&(file.len() as u64).to_be_bytes());
+    frame[8..8 + file.len()].copy_from_slice(file);
+    scaas_ua::wallet::aead_seal(scaas_ua::wallet::Alg::Aes256Gcm, key, &[0; 12], &[], &frame)
+        .unwrap()
 }

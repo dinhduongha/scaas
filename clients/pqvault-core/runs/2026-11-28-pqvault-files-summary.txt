@@ -1,0 +1,19 @@
+# PqVault file items on Arweave (CLI-PQV-19, C14), branch pqvault-files; tree of 6106a3106. step | commit | rc | counts
+pqvault-core cargo test --features vectors (lib, core, devices, exits, vectors) | 6106a3106 | 0 | 24 + 8 + 6 + 3 + 5 passed, e2e 6 ignored
+pqvault-core clippy --all-targets --features vectors -D warnings | 6106a3106 | 0 | -
+pqvault-core e2e on anvil (runs/2026-11-22-pqvault-e2e.sh, six tests incl. file_item_on_arweave) | 6106a3106 | 0 | 6/6 ok
+scaas-sdk --features app-core,arweave,vectors --test app_core --test app_core_vault_rows --test arweave | 6106a3106 | 0 | 15 + 5 + 12 passed
+ua-rs --features vectors --test pqvault_keys | 6106a3106 | 0 | 5 passed
+clientkeys node --test test/*.test.js | 6106a3106 | 0 | 700 passed, 0 failed (705 tests)
+mutants runs/2026-11-28-pqvault-files-mutants.py | 6106a3106 | 0 | 10/10 killed
+scripts/format.sh --check rust js py sh toml | 6106a3106 | 0 | -
+docs_check check, paths; test_docs_check | docs commit | 0 | 0 errors, 0 machine paths
+# after the Fable review fixes (areas E, F); tree of ffa72ae8a
+pqvault-core cargo test --features vectors (lib, core, devices, exits, vectors) | ffa72ae8a | 0 | 24 + 8 + 6 + 3 + 5 passed
+pqvault-core clippy --all-targets --features vectors -D warnings | ffa72ae8a | 0 | -
+pqvault-core e2e on anvil, six tests (file_item_on_arweave now with a rekey + edit, a delete + resolve) | ffa72ae8a | 0 | 6/6 ok
+scaas-sdk --features app-core,arweave,vectors --test app_core --test app_core_vault_rows --test arweave; clippy | ffa72ae8a | 0 | 15 + 5 + 13 passed
+ua-rs --features vectors --test pqvault_keys | ffa72ae8a | 0 | 5 passed
+clientkeys node --test test/*.test.js | ffa72ae8a | 0 | 700 passed, 0 failed
+mutants runs/2026-11-28-pqvault-files-mutants.py (round files-r2) | ffa72ae8a | 0 | 17/17 killed
+scripts/format.sh --check rust js py | ffa72ae8a | 0 | -

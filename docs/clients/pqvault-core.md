@@ -104,6 +104,33 @@ figure that does not parse) asks the second. Tests `tests/devices.rs`
 `a_fresh_quote_within_the_review_needs_no_second_confirm`. The rule is [CLI-SDK-36](../decisions.md#CLI-SDK-36); the SDK's side is
 [scaas-sdk.md](scaas-sdk.md) ("Sign after confirm").
 
+<a id="CLI-PQV-19"></a>**CLI-PQV-19** — **A `file` item's file lives on Arweave; the item naming it is signed only after one
+gateway read of the object passed the `ctSha256` check** (owner 2026-11-28, spec 2026-11-21-avax-polkadot-arweave §7.10, C14;
+BUILT, UNAUDITED; `src/file.rs`). `prepare_file(v, FileToSave, payer)` (the file, 1 B to 16 MiB, moved in a wiped buffer)
+first refuses what is cheap (not a member of the newest epoch, the item's bounds), then seals the file through the SDK's
+`seal_for_arweave` under the vault account's PqVault app root key (signature type 2, ed25519; above what `open_file` can hand
+back, 16 MiB: `FileTooLarge`), seals the returned `File` key handle under the item's `kFile` into `keyWrap` (the handle wiped
+after), builds the item (`title`, `mediaType`, `name`, `size`, `sha256`, `ctSha256`, `url = ar://<id>`, `keyWrap`; every
+field plain, `keyWrap` a wrap and never a key) and prepares its record: nothing signed, nothing posted. The app posts
+`PreparedFile::upload().item` with `ArweaveFiles::upload_file` (a profile whose `max_object` is the one given in
+`FileToSave`) and keeps it with `keep_up` until settled (CLI-SDK-21); `check_uploaded(&mut p, &files)` reads the object back
+once (`fetch_file`: the exact length, its SHA-256 the item's `ctSha256`); `confirm_file(&p)` signs only after that read
+passed, else `FileNotRead` and no signature; `p` stays the caller's, so a failed signing call is retried on the same upload.
+`prepare_file` is the one writer of a new `file` item: `create_item` / `create_items` refuse one (`Shape`). A reader fetches
+on its user's action only ([CLI-PQV-05](#CLI-PQV-05)), with `file_info(item)`'s `url`, `size` and `ctSha256` (`None` for a
+url that is not `ar://`; `name` and `mediaType` another member's display text), and `open_file(v, version, object)` opens
+the key under that version's `kFile` and the file through the SDK's `open_file` (the length and `ctSha256` checked before
+any decryption); a failure stays on the device (ARCH-POS-13). An edit of a `file` item re-seals the file key under the new
+version's `kFile` (after a rekey, the new epoch's; in `resolve`, from the version whose wrap the merge kept) and may not
+change `url`, `size`, `sha256` or `ctSha256` (`Shape`); the object stays. A member removed at a rekey keeps every file key
+they could open: the edit re-seals the same key, the object is permanent, and a file is shut to them only by a new upload
+under a new key (inside the accepted permanence of an Arweave object). Small attachments still live inline in the 16 KiB
+item. Tests `tests/devices.rs` `a_file_item_is_signed_only_after_its_object_was_read` (offline, an in-process
+gateway), `tests/e2e.rs` `file_item_on_arweave` (anvil, an in-process bundler and gateway: the SDK's Arweave test path,
+`scaas-sdk/tests/common/fake_http.rs`; then a rekey and an edit, a delete and a rename kept by `resolve`), `tests/vectors.rs`
+(row `personal1/ui-4`, its file opened under its key by every reader; `a_file_items_bounds`). The calls the code made are
+[CLI-PQV-20](../decisions.md#CLI-PQV-20).
+
 ## 5. Stores
 
 Status: the crate holds **no store** (BUILT): a vault's state is read whole from the contract's views each time
@@ -117,7 +144,7 @@ search index in memory or the device's encrypted store, dropped at the lock (spe
 Status: **BUILT** locally, UNAUDITED. `tests/vectors.rs` (feature `vectors`) reproduces `smartcontracts/vectors/pqvault/`
 (`records.json`, `keys.json`, `items.json`, `pass.json`) through the SDK's vectors build; `tests/core.rs`, `tests/devices.rs`,
 `tests/exits.rs` and the unit tests run offline on seams; `tests/e2e.rs` runs the real client on a local `anvil`
-(`runs/2026-11-22-pqvault-e2e.sh`, capped, foreground). Mutants: `runs/*-mutants.py` through `scripts/mutant_guard.py`, their
+(`runs/2026-11-22-pqvault-e2e.sh`, capped, foreground; `file_item_on_arweave` with in-process Arweave fakes). Mutants: `runs/*-mutants.py` through `scripts/mutant_guard.py`, their
 records beside them.
 
 ## 7. The client rules
@@ -202,7 +229,7 @@ HKDF(K_e ‖ P_k)` with the vault, epoch and parameter id in its info; per versi
 and nonce, AES-256-GCM-SIV over the padded canonical JSON with the AAD (vault, epoch, item, version, author, home);
 `sealedInfo` under `K_v` with an optional `prev = {epochId, keyWrap}`, the earlier key sealed under a `KeyWrap` key derived
 from `K_v` with the key-wrap constant and its usage in the AAD, and a `file` item's key sealed under a derived `kFile`, never
-under `K_v`; every key handle has one usage, `Derive`, `Data` or `KeyWrap`; a personal vault held by `ua_secret(seed, FN-DSA-512 by
+under `K_v`; every key handle has one usage, `Derive`, `Data`, `KeyWrap` or `File` (a file item's key, [CLI-PQV-19](#CLI-PQV-19)); a personal vault held by `ua_secret(seed, FN-DSA-512 by
 default, PQV_ACCOUNT, i)`, index 0 the index vault listing the user's vaults** (controller call, owner may override).
 SPECIFIED. Exact bytes: [spec §6](../superpowers/specs/2026-11-17-pqvault.md#6-cryptography); every client reproduces
 `smartcontracts/vectors/pqvault/`. **`sealedInfo`'s padding** (owner 2026-11-21, the Fable
@@ -221,7 +248,7 @@ call, owner may override). SPECIFIED. The generated passphrase is 6 BIP-39 Engli
 
 <a id="CLI-PQV-12"></a>**CLI-PQV-12** — **`pqvault-core` holds key handles only and signs only under PqVault's app purpose:
 the KEM-unwrapped epoch key, the passphrase output, the effective key and every key derived from them stay in `ua-rs`
-behind handles of one usage each (`Derive`, `Data`, `KeyWrap`), and wrap, unwrap, HKDF, Argon2id, AEAD and key sealing
+behind handles of one usage each (`Derive`, `Data`, `KeyWrap`, `File`), and wrap, unwrap, HKDF, Argon2id, AEAD and key sealing
 run there on those handles; the only bytes that come out are plaintexts it asks to decrypt for the user, which hold no
 key (earlier and file keys are sealed); it signs its records only through the SDK's PqVault signing call
 (`sign_pqvault_record`, over `ua-rs`'s dedicated path `wallet::pqvault`, which accepts the domain "SCaaS PqVault" and
