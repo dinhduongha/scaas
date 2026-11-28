@@ -13,7 +13,7 @@ and sign-after-confirm rules ([CLI-SDK-35](../../decisions.md#CLI-SDK-35), [CLI-
 ([CLI-UAL-12](../../clients/ua-libraries.md#CLI-UAL-12)), the typed structs (`smartcontracts/vectors/typed/typed_ops.json`) and
 the PQZ and Zether sizes ([pq-zero-knowledge.md](../../contracts/pq-zero-knowledge.md), the Zether prover's vectors). No
 contract or contract byte format changes. Reviewed by Fable on 2026-11-28 (four areas: format, cross-layer clients, security, cryptography); every P1 and P2 is fixed
-in this revision or put to the owner (§12 Q7); P3s left open: the taxed-token request (§3.2), a component doc
+in this revision or put to the owner (§12; Q2 and Q7 ruled 2026-11-28); P3s left open: the taxed-token request (§3.2), a component doc
 `docs/clients/scaas-qr.md` when the crate is built, the fountain overhead simulation (§11). UNAUDITED.
 
 **Contents**
@@ -53,8 +53,8 @@ Changes to earlier frames, by the owner's ruling of 2026-11-28:
   [integration.md](../../integration.md)) is this spec, not EIP-681.
 - The SDK spec's registration blob "passed out of band (a QR code, a message)" (§7) has no QR form (§3.5).
 
-Not changed, and waiting on the owner (§12 Q7): the SDK refuses to import a confidential operation (SDK spec §27.5 (g) 9,
-CLI-SDK-33 (49) (c), `ImportKindRefused`), so §6's confidential payloads are PLANNED until that ruling.
+Changed by the owner's ruling on §12 Q7 (2026-11-28): the SDK's refusal to import a confidential operation (SDK spec §27.5 (g) 9,
+CLI-SDK-33 (49) (c), `ImportKindRefused`) is lifted for scan and submit only, when built (§6).
 
 ## 2. The crate `scaas-qr`
 
@@ -369,7 +369,7 @@ The LT code's own patents were filed in 1998 to 2002; no live claim is known to 
 
 ## 6. Proofs and ciphertexts
 
-**PLANNED**, waiting on the owner's ruling on confidential imports (§12 Q7); the rule below is the frame
+**SPECIFIED** (owner ruling 2026-11-28, §12 Q7), built with the crate; the rule below
 ([CLI-QR-05](../../decisions.md#CLI-QR-05)). A `signed-op` whose operation carries a zero-knowledge proof or ciphertexts (a PQZ
 or a Zether operation) is the funds' owner's: **the owner's client makes the proof and signs**, holding the keys; the partner
 who scans it only relays and pays the gas. The partner computes nothing secret, holds no key of the owner's and decrypts
@@ -638,13 +638,14 @@ phones for each class and for signature parts above version 30, reported, not a 
   would show neither UA ids nor the SCaaS review.
 - **Q6. The default error correction level.** Recommendation: L by default (screens and files, fewer parts: the `mldsa65`
   vector is 2 signature parts), M as an export option for print.
-- **Q7. Confidential imports.** The SDK refuses to import a PQZ or Zether operation today (SDK spec §27.5 (g) 9, CLI-SDK-33 (49)
-  (c)), and its JSON cap (256 KiB, kept by the owner in Q-R3) is below a PQZH transfer's blob (about 530 KB as hex). A partner
-  cannot tell, without decrypting, whether it receives anything from a confidential transfer it relays. Recommendation: make
-  confidential operations importable for scan and submit only with `relayer` bound to the scanner, with no payee check (the
-  scanner sponsors the gas knowingly), a fixed review line "amount hidden: you pay <quote>, and this client cannot tell whether
-  you receive anything", under `Limits::max_native_cost`; raise the JSON cap to 1 MiB, the figure recorded against the largest
-  PQZH transfer of the vectors, when this is built. Until ruled, §6 stays PLANNED.
+- **Q7. Confidential imports.** Ruled (owner 2026-11-28): a confidential operation (PQZ or Zether, kept apart) is importable
+  for scan and submit only, with `relayer` bound to the scanner, under `Limits::max_native_cost`; the review shows a fixed line
+  "amount hidden: you pay <quote>, and this client cannot tell whether you receive anything". **No amount travels in the QR for
+  a confidential transfer** — no claimed, declared or signed amount field in the info QR or anywhere else in the payload: a
+  number shown beside a hidden amount invites fraud (the amount paid on chain differs from the one in the QR), and a scanner
+  never decrypts the payload's ciphertexts to find it (ARCH-POS-13). A recipient learns what it received only from its own
+  balance in chain state after the operation lands. The SDK's JSON cap rises to 1 MiB, the figure recorded against the largest
+  PQZH transfer of the vectors, when this is built.
 
 ## 13. Appendix: refusals
 

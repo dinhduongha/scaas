@@ -13594,6 +13594,8 @@ a relayer asked to hold or open what is the owner's.
 sizes from pq-zero-knowledge.md and the Zether prover's vectors.
 
 <a id="CLI-QR-06"></a>
+Change (owner 2026-11-28, owner: yes; status: SPECIFIED): confidential operations are importable for scan and submit only (`relayer` bound to the scanner, `Limits::max_native_cost`, the fixed review line "amount hidden: you pay <quote>, and this client cannot tell whether you receive anything"); no amount of a confidential transfer travels in any QR payload (a claimed amount invites fraud: the amount paid on chain can differ), and nothing in a payload is decrypted (ARCH-POS-13); the SDK's JSON cap rises to 1 MiB when built.
+
 ### CLI-QR-06 — Export as PNG or SVG for one QR, as a numbered PNG set or an animated APNG for several, as a text file; import from text, image files and the camera
 - old: — · status: current · owner: yes · date: 2026-11-28 · normative: decisions.md#CLI-QR-06 · superseded-by: —
 
