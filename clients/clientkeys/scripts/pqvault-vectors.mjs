@@ -14,7 +14,7 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { entropyToMnemonic, mnemonicToSeedSync } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import * as pv from "../src/pqvault.js";
-import { sealFile } from "../src/arweave.js";
+import { openFile, sealFile } from "../src/arweave.js";
 import * as ua from "../src/ua.js";
 import { kemKey } from "../src/pqchat.js";
 import { pqKeygen, pqSeed, signUA, verifyUA } from "../src/pq.js";
@@ -204,8 +204,32 @@ function itemCt(name, x, content, { epochName, record, batchIndex, creator, mode
       fk,
       pv.fileCtx(x.vaultId, x.epochId, x.itemId, x.version),
     );
+    // an Arweave row names its file by `url: "ar://"`: the file, the object, its hashes and its id all from the row's name, the
+    // file kept in the row so each reader seals it under `file.key` and finds `ctSha256` (review F-7)
+    let file;
+    if (content.url === "ar://") {
+      file = rnd(`${name}/file`, content.size);
+      const s = sealFile(fk.key, file);
+      const back = openFile(fk.key, s.object, s.size, s.sha256, s.ctSha256);
+      if (hex(back) !== hex(file)) throw new Error(`${name}: the wrapped key does not open its object`);
+      content = {
+        ...content,
+        size: s.size,
+        sha256: hex(s.sha256),
+        ctSha256: hex(s.ctSha256),
+        url: `ar://${b64url(rnd(`${name}/id`))}`,
+      };
+    }
     content = { ...content, keyWrap: hex(kw) };
-    x = { ...x, file: { kFile: hex(kFile.key), key: hex(fk.key), ...(arweave ? { usage: pv.USAGE.File } : {}) } };
+    x = {
+      ...x,
+      file: {
+        kFile: hex(kFile.key),
+        key: hex(fk.key),
+        ...(arweave ? { usage: pv.USAGE.File } : {}),
+        ...(file ? { file: hex(file) } : {}),
+      },
+    };
   }
   const json = pv.canonicalJson(content);
   const pt = pv.padItem(utf8ToBytes(json));
@@ -568,19 +592,14 @@ const p1 = personalVault("personal1", personal, 1, { passKdf: 0, passphrase: "",
   // `seal_for_arweave`), the item naming it by `ar://<id>`, its key sealed under `kFile` with usage `File`
   [
     6,
-    (() => {
-      const s = sealFile(rnd("file/personal1/ui-4/key"), rnd("personal1/ui-4/file", 1000));
-      return {
-        type: "file",
-        title: "Passport scan",
-        mediaType: "application/pdf",
-        name: "passport.pdf",
-        size: s.size,
-        sha256: hex(s.sha256),
-        ctSha256: hex(s.ctSha256),
-        url: `ar://${b64url(rnd("personal1/ui-4/id"))}`,
-      };
-    })(),
+    {
+      type: "file",
+      title: "Passport scan",
+      mediaType: "application/pdf",
+      name: "passport.pdf",
+      size: 1000,
+      url: "ar://",
+    },
   ],
 ].forEach(([n, content], i) => {
   const x = {

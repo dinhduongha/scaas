@@ -669,7 +669,22 @@ async fn item_versions() {
             .unwrap();
         assert_eq!(again, wire, "{}", x["name"]);
         let back = a.open_key(kfile, wire, usage, ids(x)).unwrap();
-        assert!(a.same_key(back, fk).unwrap());
+        assert!(a.same_key(back, fk.clone()).unwrap());
+        // an Arweave row's file: the wrapped key opens the object its `ctSha256` names (review F-7)
+        if let Some(file) = x["file"].get("file") {
+            let c = &x["content"];
+            let obj = object_of(&a32(&x["file"]["key"]), &unhex(file));
+            let pt = a
+                .open_file(
+                    fk,
+                    obj,
+                    c["size"].as_u64().unwrap(),
+                    unhex(&c["sha256"]),
+                    unhex(&c["ctSha256"]),
+                )
+                .unwrap();
+            assert_eq!(pt.with(|b| b.to_vec()), unhex(file), "{}", x["name"]);
+        }
     }
     assert_eq!(files, 3);
     // refusals against the base item, one change each: a length outside 32..=16,416 B never reaches the SDK
@@ -745,4 +760,14 @@ fn sdk_code(e: &str) -> &str {
         "AeadOpen" => "Aead",
         x => x,
     }
+}
+
+/// The object of `file` under `key` (CLI-UAL-65): `size` (8 B, big-endian) ‖ file ‖ zeros to its bucket, AES-256-GCM, nonce 0.
+fn object_of(key: &[u8; 32], file: &[u8]) -> Vec<u8> {
+    let b = scaas_ua::file::bucket(file.len() as u64, scaas_ua::file::CAP).unwrap() as usize;
+    let mut frame = vec![0u8; b];
+    frame[..8].copy_from_slice(&(file.len() as u64).to_be_bytes());
+    frame[8..8 + file.len()].copy_from_slice(file);
+    scaas_ua::wallet::aead_seal(scaas_ua::wallet::Alg::Aes256Gcm, key, &[0; 12], &[], &frame)
+        .unwrap()
 }

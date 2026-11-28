@@ -13,6 +13,7 @@ import { argon2id } from "@noble/hashes/argon2.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { mnemonicToSeedSync } from "@scure/bip39";
 import * as pv from "../src/pqvault.js";
+import { openFile, sealFile } from "../src/arweave.js";
 import * as ua from "../src/ua.js";
 import { pqKeygen, pqSeed, verifyUA } from "../src/pq.js";
 import { kemKey } from "../src/pqchat.js";
@@ -487,6 +488,15 @@ test("items: r, okm, bk, n, aad, padded plaintext and ciphertext recomputed; eac
         pv.fileCtx(x.vaultId, x.epochId, x.itemId, x.version),
       );
       assert.equal(h(fk.key), it.file.key);
+      // an Arweave row's file: sealed under the opened key it is the object `ctSha256` names, and opens (review F-7)
+      if (it.file.file) {
+        const file = fromHex(it.file.file);
+        const s = sealFile(fk.key, file);
+        assert.equal(h(s.ctSha256), it.content.ctSha256, it.name);
+        assert.equal(h(s.sha256), it.content.sha256, it.name);
+        const back = openFile(fk.key, s.object, it.content.size, s.sha256, s.ctSha256);
+        assert.equal(h(back), it.file.file, it.name);
+      }
     }
   }
   const types = new Set(I.items.map((i) => i.content.type));
