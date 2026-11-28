@@ -146,6 +146,33 @@ fn bip32_secp256k1(seed: &[u8], path: &str) -> [u8; 32] {
     xprv.private_key().to_bytes().into()
 }
 
+/// The HD derivation's bytes across a `bip32` move (0.5 on k256 0.13 -> 0.6 on k256 0.14, RUSTSEC-2026-0387): fixed
+/// paths of the ABANDON_ART seed, hardened and non-hardened last steps, each value from tools/bip32_ref.py.
+#[test]
+fn bip32_paths_are_known_answers() {
+    let s = seed();
+    for (path, want) in [
+        (
+            "m/44'/60'/0'/0/0",
+            "1053fae1b3ac64f178bcc21026fd06a3f4544ec2f35338b001f02d1d8efa3d5f",
+        ),
+        (
+            "m/44'/60'/0'/0/1",
+            "0855b75d03a8830e390b5483d81694c9c7121d971e092145cf8b9c6fa3a5b373",
+        ),
+        (
+            "m/44'/118'/0'/0/0",
+            "8088c2ed2149c34f6d6533b774da4e1692eb5cb426fdbaef6898eeda489630b7",
+        ),
+        (
+            "m/44'/3030'/0'/0/0",
+            "d37dada604bfd83887353cf803857c75925fb7a4362a91ab89e018dfb3597ce0",
+        ),
+    ] {
+        assert_eq!(hex::encode(bip32_secp256k1(&s, path)), want, "{path}");
+    }
+}
+
 /// SLIP-10 ed25519 (hardened only).
 fn slip10_ed25519(seed: &[u8], path: &[u32]) -> [u8; 32] {
     let mut mac = Hmac::<Sha512>::new_from_slice(b"ed25519 seed").unwrap();

@@ -20,14 +20,16 @@ ignore = [
   # wasm32, through `wasmtimer` 0.4.3 of alloy 1.6 (scaas-rpc's `evm`). Remove when alloy's timer drops it.
   { id = "RUSTSEC-2026-0441", reason = "wasm32 only, via wasmtimer 0.4.3 of alloy 1.6 (scaas-rpc evm); unmaintained, no vulnerability" },
   # crypto-bigint 0.5.5 reaches scaas-rpc's graph only through alloy 1.6 (`evm`: alloy-signer / alloy-primitives -> k256
-  # 0.13.4 -> elliptic-curve 0.13.8); every alloy release still requires k256 ^0.13. The crate signs nothing (only
+  # 0.13.4 -> elliptic-curve 0.13.8); every alloy release still requires k256 ^0.13 (checked on crates.io 2026-11-28:
+  # alloy 2.6.1 of 2026-11-16, alloy-primitives 1.7.3), so alloy 2 is no exit. The crate signs nothing (only
   # tests/anvil.rs signs, with anvil's public dev key), so no secret is on this path here; its users' own keys are theirs to
   # judge (scaas-sdk's and the node's entries). Remove when alloy moves to k256 0.14 (node-deps review B-3, 2026-11-28).
   { id = "RUSTSEC-2026-0387", reason = "only via alloy 1.6 (k256 0.13.4); scaas-rpc signs nothing; remove when alloy moves to k256 0.14; review by 2027-02-28" },
   # lru 0.16.4 (unsound: `LruCache::pop` may use freed memory when a key's Drop panics and the panic is caught) via
   # alloy-provider 1.6.3 (scaas-rpc's `evm`), whose caches key on u64 block numbers and B256 hashes: no key Drop can panic.
-  # Fixed in lru 0.18.2, which needs alloy-provider >= 2.6 (alloy 2, its own round): remove with that move.
-  { id = "RUSTSEC-2026-0253", reason = "lru 0.16.4 via alloy-provider 1.6.3, u64 / B256 keys whose Drop cannot panic; fix needs alloy 2; review by 2027-02-28" },
+  # Fixed in lru 0.18.2, which alloy-provider requires from 2.4.0 (2026-08-12; 2.0-2.3 still take lru ^0.16; checked on
+  # crates.io 2026-11-28, latest 2.6.1): remove with the move to alloy-provider >= 2.4 (alloy 2, its own round).
+  { id = "RUSTSEC-2026-0253", reason = "lru 0.16.4 via alloy-provider 1.6.3, u64 / B256 keys whose Drop cannot panic; fix needs alloy-provider >= 2.4 (alloy 2); review by 2027-02-28" },
 ]
 
 [licenses]
