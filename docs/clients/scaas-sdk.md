@@ -634,9 +634,10 @@ call per command.
 Status: **BUILT** in part, wave 1 ([plan](../superpowers/plans/2026-11-27-user-profiles.md) UP1 to UP11, KH; branch
 `user-profiles` at `f9a599996`): the byte formats and their vectors, `ua-rs`'s `ProfileKeys` and `ExportKey` (feature
 `key-handles`), the key-lock label in `ua-rs` and clientkeys, the crate `scaas-profile` and the SDK's `user_profile` (`UserProfiles`,
-`UserProfile`, `Sdk::close`); each rule below names what of it is built. **SPECIFIED** (wave 2): platform unlock, the CLI, TUI and
+`UserProfile`, `Sdk::close`); Fable's code review of wave 1 at `74d7eab01` and its fix round (2026-11-28, the plan's
+"Code review 2026-11-28", with the owner's rulings of that day); each rule below names what of it is built. **SPECIFIED** (wave 2): platform unlock, the CLI, TUI and
 app surfaces, the pqchat-core and pqvault-core store adapters, the SDK's key-lock calls, the browser store, the bindings of the
-surface, the chain-profile rename, the Matrix client closed at lock. The design is the [user-profiles spec](../superpowers/specs/2026-11-27-user-profiles.md)
+surface, the chain-profile rename, the settings' chain-profile meaning, the Matrix client closed at lock. The design is the [user-profiles spec](../superpowers/specs/2026-11-27-user-profiles.md)
 (a frame; the owner's rulings on its open points, 2026-11-27, in its §16; Fable's review of the same day applied, its §19). A **user profile** ("Profile" on screen, `UserProfile` / `user_profile` in code) is one local
 identity with its own keystore, app-core state and settings; a **chain profile** (`ChainProfile`, §10) is a chain's pinned data.
 UNAUDITED.
@@ -656,8 +657,9 @@ BUILT, `74b860488` and plan UP6 to UP10):** the store lives in `scaas-profile`, 
 only (the profile root, the index, the envelope, the instance lock, the sealed store with its journal, generations, manifests and
 anchor, hidden profiles, delete, migration, export and import, the storage of settings), with its own error codes named as the
 SDK's. The SDK depends on it and adds what needs the SDK: an `Sdk` opened on a profile, `Sdk::close()` at lock and switch, the
-chain-profile meaning of the settings, the store keys handed to app cores, and the `SecureStore` face with the mapping of the
-store's codes to `StoreError` and `SdkError`.
+chain-profile meaning of the settings (SPECIFIED, wave 2: the SDK re-exports the crate's `ProfileSettings` and wraps `settings` /
+`set_settings`; nothing applies them to the chain profiles yet, review E-7), the store keys handed to app cores, and the
+`SecureStore` face with the mapping of the store's codes to `StoreError` and `SdkError`.
 
 <a id="CLI-UPR-03"></a>**CLI-UPR-03** — **A machine holds many profiles, each its own data directory** (owner 2026-11-27;
 BUILT: one directory `p/<id>/` per profile with its keystore, `sdk.state`, settings and the parts `pqchat` and `pqvault`,
@@ -776,8 +778,9 @@ reported) and at open (`ProfileRollback`), never listed, searched or opened, its
 `purge_tombstones` with its confirm.
 
 <a id="CLI-UPR-16"></a>**CLI-UPR-16** — **Clients open a profile by name, a hidden one only through a prompt; the CLI never follows
-the last profile an app opened** (controller call; SPECIFIED, nothing built: the CLI's flags and commands, the apps' pickers,
-wave 2). `--profile <name>` or `--profile-name-fd` (else "default"; an unknown
+the last profile an app opened** (controller call; BUILT: `ProfilesConfig.write_last` in `scaas-profile` and the SDK, an open that never writes `last` (the CLI's
+setting), `scaas-profile` `e5_cli_never_writes_last`, the SDK's `e5_write_last_through_sdk`; SPECIFIED: the CLI's flags and
+commands, the apps' pickers, wave 2). `--profile <name>` or `--profile-name-fd` (else "default"; an unknown
 name `ProfileUnknown`) and `--profile-hidden`, the hidden name and every passphrase from the terminal without echo or one file
 descriptor per secret, never the command line or the environment; commands that need no profile open none; the CLI names the profile
 on stderr (a line that lands in CI logs, stated); `scaas profile settings` replaces `--overlay`; the apps' pickers always offer
@@ -810,8 +813,11 @@ associated data, HMAC file names, one manifest per part with tombstones, and an 
 the spec leaves open as the plan's "Pinned formats"). Associated data: domain, profile-format version, store part, item name, rev; file names HMAC-SHA-256 of
 part and name under a key derived from `DEK_p`, no part name handed to another store; each part's manifest a sealed item of the
 reserved part `profile`, holding every item's rev and a tombstone per deleted item (a re-created item continuing above it; tombstones
-dropped at a re-seal), at most 65,536 entries (`ProfilePartFull`), written under the store write lock with `put_if`; an item below its manifest or at its tombstone is `ProfileRollback`, a listed item
-missing `ProfileDamaged`; the anchor compared as the keystore's ([CLI-UPR-28](#CLI-UPR-28)); the anchor a file every client
+dropped at a re-seal), at most 65,536 entries (`ProfilePartFull`), written under the store write lock with `put_if`; an item below its manifest or at its tombstone is `ProfileRollback`
+(an event; the item stays readable, its writes refused until `accept_rollback(part, name)`; BUILT, `scaas-profile`
+`c3_item_rollback_readable_until_accepted`, the SDK's `c3_accept_rollback_through_sdk`), a listed item
+missing `ProfileDamaged` (an event, `c3_listed_item_missing_damaged`); the label's associated data binds the envelope's revision
+([CLI-UPR-12](#CLI-UPR-12)); the anchor compared as the keystore's ([CLI-UPR-28](#CLI-UPR-28)); the anchor a file every client
 writes, and also a keychain item where there is one; a covered set put back together with the file is not seen (stated); every derived key separated by its own HKDF label, distinct from PqVault's; every
 key and plaintext buffer zeroized at the end of its call; `DEK_p` in a new profile arena of `ua-rs`.
 
@@ -856,7 +862,9 @@ platform or biometric unlock.
 <a id="CLI-UPR-24"></a>**CLI-UPR-24** — **The key lock: an imported key under its own passphrase, opened only by typing it, untouched
 by every seed-wide operation; what a platform unlock leaves readable is stated** (controller call; BUILT in `ua-rs` and clientkeys: the label, the `prf`
 refusal, the loops' skips, the backup and link left out, `ua-rs` `tests/wallet_vault.rs` `key_lock_*`,
-`keystore_json_key_lock_rows`, clientkeys `test/vault.test.js`, `test/keystore.test.js`; BUILT in the SDK (controller call
+`keystore_json_key_lock_rows`, clientkeys `test/vault.test.js`, `test/keystore.test.js`; a key-locked import's plain
+`native-import:` vault refused at every open path and the mark kept against an older manifest, `ua-rs`
+`key_lock_refuses_the_old_plain_vault`, `key_lock_mark_kept_against_an_older_manifest` (review B-1, B-4); BUILT in the SDK (controller call
 2026-11-28): the seed-wide loops of `vault/unlock.rs` and `vault/prf.rs` (the unlock, the passphrase re-wrap, the PRF enable and
 disable) skip it, `key_locked_vault_skipped_by_seed_wide_loops`; SPECIFIED: the SDK's calls (`import_key`'s key passphrase,
 `unlock_key`, `lock_key`, `lock_key_separately`, `KeyLocked`), wave 2). `import_key` takes an
@@ -884,7 +892,9 @@ turned off, a lowered cap raised or removed, per chain profile and global.
 
 <a id="CLI-UPR-27"></a>**CLI-UPR-27** — **An import is two calls: a preview of everything in the file, then the import of the user's
 choices** (controller call; BUILT: `scaas-profile` `preview_then_import`, `import_temporary_directory`, the SDK's
-`g9_export_import_through_sdk`; `ImportChoices` also carries the new profile's KDF parameters). `import_preview(source, export_passphrase)` verifies and opens the whole file, keeps the decrypted
+`g9_export_import_through_sdk`; `ImportChoices` also carries the new profile's KDF parameters; the preview refuses an item without
+a JSON `rev` and reads `sdk.state` with the SDK's operation-state parser, `a17_item_without_rev_refused_at_the_preview`,
+`c5_preview_reads_state_with_the_sdk_parser`). `import_preview(source, export_passphrase)` verifies and opens the whole file, keeps the decrypted
 payload in memory (at most 64 MiB; nothing plain on disk) and returns the name, the hidden flag, the counts and every setting with an item
 id, kept ones included, each string through the name helper; `import(review, choices, profile_passphrase, name)` writes the new
 profile into a temporary directory under its own lock, sealed under its key from the first byte, and commits it under the root lock

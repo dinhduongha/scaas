@@ -2,9 +2,12 @@
 
 **Status:** wave 1 BUILT on branch `user-profiles` at `f9a599996` ([plan](../plans/2026-11-27-user-profiles.md) UP1 to UP11
 and KH; UNAUDITED): the byte formats and their vectors, `ua-rs`'s `ProfileKeys` and `ExportKey` (feature `key-handles`), the
-key-lock label in `ua-rs` and clientkeys, the crate `scaas-profile` and the SDK's `user_profile`. The rest SPECIFIED (wave 2):
+key-lock label in `ua-rs` and clientkeys, the crate `scaas-profile` and the SDK's `user_profile`; Fable's code review of wave 1 at
+`74d7eab01` and its fix round R1 to R6 (2026-11-28; the owner's rulings of that day in §1 O16 to O23; the plan's "Code review
+2026-11-28"). The rest SPECIFIED (wave 2):
 platform unlock, the CLI, TUI and app surfaces, the pqchat-core and pqvault-core adapters, the SDK's key-lock calls, the browser
-store, the bindings of the surface, the chain-profile rename, the Matrix client closed at lock; each rule's status in
+store, the bindings of the surface, the chain-profile rename, the settings' chain-profile meaning, the Matrix client closed at
+lock; each rule's status in
 [clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12. A **frame**: the owner's rulings of 2026-11-27 (§1, §16) are fixed; the means are controller
 calls (`owner: no`). Fable reviewed the frame twice on 2026-11-27: at `06d9843d5` (three areas, all "approve with fixes") and again
 at `fa51e8275` (round 2: no P1, every round-1 finding fixed or partly fixed, new findings from the fixes), then a third time at
@@ -723,8 +726,11 @@ the settings bytes the user kept; `ImportChoices { confirm, kdf }` (the confirme
 no environment); `ProfileUnlock` has `Passphrase` only; `ProfileKeychain` is synchronous as sketched (decisions CLI-UPR-22's
 Change); `pqchat_store`, platform unlock and the `Vault` key-lock calls are wave 2. Added by the owner's rulings of
 2026-11-28 (§1 O16 to O23): `set_passphrase(…, migrated: Option<ConfirmMigratedSeeds>)` and `migrated_seeds()` (O18),
-`UserProfiles::purge_tombstones(ConfirmPurgeTombstones)` (O17), `UserProfiles::hidden_matches` and `open_hidden_match` (O20). The
-built API:
+`UserProfiles::purge_tombstones(ConfirmPurgeTombstones)` (O17), `UserProfiles::hidden_matches` and `open_hidden_match` (O20). Added
+by the review's fix round (2026-11-28): `UserProfile::accept_rollback(part, name)` (§7.2), `ProfilesConfig.write_last` (an open
+that never writes `last`, the CLI's setting), `UserProfileInfo`'s hidden flag, `Sdk::close()` returning the abandoned hidden
+operations, the crate's `delete` taking `Option<ConfirmDeleteUnbacked>`. Not built: the settings' chain-profile meaning (the SDK
+re-exports and wraps the crate's `ProfileSettings`; applying them to the chain profiles is wave 2). The built API:
 `clients/scaas-sdk/src/user_profile/mod.rs` and `clients/scaas-profile/src/lib.rs`.
 
 New codes (CLI-SDK-13's naming): `ProfileInUse`, `ProfileOpen`, `ProfileUnknown` (a `--profile` name or id with no visible

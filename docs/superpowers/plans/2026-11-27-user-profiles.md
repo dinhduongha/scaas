@@ -4,7 +4,8 @@
 > superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Status (2026-11-28):** wave 1 DONE (UP0 to UP12 and KH, branch `user-profiles`; closing gates green at `f9a599996`, UP11;
-every task's mutants killed, 61/61 across 11 runners); wave 2 PLANNED. Spec:
+every task's mutants killed, 61/61 across 11 runners); Fable's code review of wave 1 at `74d7eab01` and its fix round R1 to R6
+DONE (2026-11-28, "Code review 2026-11-28" below); wave 2 PLANNED. Spec:
 [`2026-11-27-user-profiles.md`](../specs/2026-11-27-user-profiles.md) (SPECIFIED, a frame; Fable reviewed it in three rounds, every
 finding applied, spec §19). Rules: [clients/scaas-sdk.md](../../clients/scaas-sdk.md) §12, CLI-UPR-01 to CLI-UPR-32, recorded in
 [decisions.md](../../decisions.md) §41. Owner rulings O1 to O15 and Q-UP1 to Q-UP11 (spec §1, §16) are fixed and not reopened here.
@@ -24,8 +25,8 @@ relies on), worktree `.claude/worktrees/user-profiles`. Commits local, staged by
 SDK, for the UUIDv7 and `name_key` rows) read; `ua-rs` holds the profile arena and every KDF, AEAD and MAC of the spec; the crate
 `scaas-profile` builds the profile root, the index cache, the instance lock, the sealed store with its manifests, tombstones and
 anchor, the re-seal, hidden profiles, delete, migration, export and import and the storage of settings; the SDK module
-`user_profile` (feature `user-profile`) builds the `SecureStore` face, the code mapping, `UserProfile::sdk`, `Sdk::close()` and the
-settings' chain-profile meaning; each under its §17 tests with a positive control and a named mutant.
+`user_profile` (feature `user-profile`) builds the `SecureStore` face, the code mapping, `UserProfile::sdk` and `Sdk::close()` (the
+settings' chain-profile meaning was a wave-1 goal and is not built: SPECIFIED, wave 2, review E-7); each under its §17 tests with a positive control and a named mutant.
 
 **Wave 2** (after the path-less TreeKEM and TUI branches land on `dev`): the chain-profile rename (spec §15), the CLI's
 `--profile` and `scaas profile …` commands, the pqchat-core and pqvault-core store adapters (the synchronous `PqChatStore` face
@@ -38,16 +39,10 @@ Also in wave 2 (controller call 2026-11-27): the bindings get `UserProfile::lock
 front-end can lock a profile without a Rust host; if that needs `Sdk::close` bound, it leaves `tests/binding.rs`'s explicit Rust-only
 list (where UP6b registered it) at that time.
 
-**Open points for wave 2** (owner questions from wave 1; each recorded where its rule is):
-- Migration's step (3): `set_passphrase`'s commit clears `migration`, not the end of the move (UP9; decisions CLI-UPR-11's Change,
-  pending owner confirmation).
-- Two instances creating hidden profiles of one (name, passphrase) at once can both pass the duplicate search: no lock is held
-  across a KDF (UP8; decisions CLI-UPR-13's Change).
-- `ProfileBusy` and `ProfilePartFull` reach the `SecureStore` face as `StoreError::Unavailable` (`VaultIo` above it); named
-  `StoreError` codes would change CLI-UPR-22 and the bindings (UP5; decisions CLI-UPR-22's Change).
-- A call to follow an imported operation on the user's word: an import marks them `imported`, and `Op::resend` takes only signed
-  or sent operations (UP10; decisions CLI-UPR-18's Change).
-- The profile root's ownership is checked by its mode only (group or other bits refused or tightened), not by its owner (UP6).
+**Open points of wave 1, settled 2026-11-28** (owner rulings, "Code review 2026-11-28" below): migration's step (3) at
+`set_passphrase`'s commit (confirmed, O22); concurrent hidden twins (accepted, listed at open, O20); `ProfileBusy` and
+`ProfilePartFull` as `StoreError` codes (built, O21); the root's owner against the process's uid (built, O23). The one left, a
+call to follow an imported operation, is in the wave-2 list there.
 
 ## Global constraints (read before every task)
 
@@ -92,7 +87,7 @@ Abbreviations: `W` = the worktree root; `cap` = `"$W/scripts/capped"`; `C` = `--
 | `ua-clippy` | `cd clients/ua-rs && $cap cargo clippy C --all-targets -- -D warnings && $cap cargo clippy C --all-targets --features user-profile,test-hooks,vectors -- -D warnings` |
 | `ua-vault` | `cd clients/ua-rs && $cap cargo test C --test wallet_vault --test wallet_custody --test retained_key --test wallet_import_ua` |
 | `prof` | `cd clients/scaas-profile && $cap cargo test C && $cap cargo test C --features test-hooks && $cap cargo clippy C --all-targets -- -D warnings && $cap cargo clippy C --all-targets --features test-hooks -- -D warnings` |
-| `kh-nm` | `python3 clients/ua-rs/runs/2026-11-27-key-handles-nm.py` (CLI-UPR-32: no signing symbol in the `user-profile` rlib, the `wallet` build's as control; `scaas-profile`'s graph) |
+| `kh-nm` | `python3 clients/ua-rs/runs/2026-11-27-key-handles-nm.py` (CLI-UPR-32: the `user-profile` rlib defines no `scaas_ua::wallet::` symbol outside an allow-list of its modules (`aead`, `appkey`, `profile`, `store`, `Error`) and no signing symbol, the `wallet` build failing both as control; `scaas-profile`'s graph; `--offline` only without env `CI`; review B-2, B-5) |
 | `sdk-up` | `cd clients/scaas-sdk && $cap cargo test C UPF --test user_profile && $cap cargo test C UPF --lib user_profile` |
 | `sdk-reg` | `cd clients/scaas-sdk && $cap cargo test C --test vault --test keystore_vectors && $cap cargo test C --lib vault` |
 | `sdk-clippy` | `cd clients/scaas-sdk && $cap cargo clippy C --all-targets UPF -- -D warnings && $cap cargo clippy C --all-targets -- -D warnings` |
@@ -463,8 +458,9 @@ profiles reported (`Event::ProfileDamaged`), never migrated.
 **Done:** `f17fb2947`, mutants `d2606a1ff` (6/6).
 
 **Files:** `clients/scaas-profile/src/{settings.rs,export.rs}` (the `settings` item's storage, export, `import_preview`, `import`),
-`clients/scaas-profile/tests/`; the SDK's `src/user_profile/settings.rs` (`ProfileSettings` per chain-profile key, the §7.7 rule)
-and `tests/user_profile.rs`.
+`clients/scaas-profile/tests/`; the SDK's `src/user_profile/mod.rs` (the crate's `ProfileSettings` re-exported, `settings` /
+`set_settings` wrapped; there is no SDK `settings.rs`) and `tests/user_profile.rs`. The settings' chain-profile meaning (applying
+them to the chain profiles an `Sdk` opens with) is not built: SPECIFIED, wave 2 (review E-7).
 
 `ProfileSettings` (per chain-profile key: named endpoints with `first` marks, the RPC policy, lowered caps; the default chain
 profile; the idle lock; the clipboard opt-in; credential references): the item `settings` of part `sdk`. `set_settings(s,
@@ -503,3 +499,75 @@ its first byte under its `build.lock`, committed under the root lock by one rena
 - [x] `docs/clients/scaas-sdk.md` §12: a status line per rule built in wave 1 (BUILT where code and tests exist, with the test
       names; SPECIFIED where wave 2 remains); `docs/decisions.md` §41's entries' statuses; the spec's status line (wave 1 built at
       `<commit>`, UNAUDITED); `smartcontracts/vectors/README.md` row for `profile/`. `docs` gate. Commit `user-profiles UP12: docs`.
+
+## Code review 2026-11-28
+
+**Review.** Fable reviewed wave 1 at `74d7eab01` (the branch after its merge of `dev` `f9560b7ed`) in seven areas: A
+`scaas-profile`'s store and lifecycle, B `ua-rs`'s profile primitives, the key lock and the no-signing build, C the SDK seam, D
+clientkeys and the vectors, E conformance with the spec and the rules, F cryptography, G adversarial. Each area: approve with
+fixes; no P0, one P1 (G-1), no decryption-oracle path. The controller's verdict per finding, its fix commit, red line and mutant
+are in the review's status table (main checkout `scratchpad/`, not committed); every fix commit's body carries its finding ids.
+
+**Fix tasks** (branch `user-profiles`, each with its own suites at the default set and its mutants):
+
+| Task | Area | Commits | Findings |
+|---|---|---|---|
+| R1 | `scaas-profile` | `6482a9457` (start and journal), `12649d692` (the hidden flag from the label), `48ed0c00e` + `be9ffe1fb` (bounds), `e0143f037` (success after the commit rename), `a2b3cb242` (item rollback readable, `accept_rollback`, the index reconciled), `08f4511f0` (delete confirm, `write_last`, `Zeroizing`, `mlock`, the root's owner), `049e85573` (rustfmt), `687d936c5` (mutants 44/44) | G-1, A-1 = G-8, A-2, A-3, A-5, A-6, A-7, A-9, A-11 = F-3, A-12, A-16 = G-12, A-17 (at import), G-2, A-8, G-4 = A-10, G-6, A-4 = G-7, G-9, G-10, G-11, E-4 = A-14, E-3 and C-3 (the crate's part), E-5 (the crate's part), B-3 = F-4, F-1, F-5, Q5 |
+| R2 | `ua-rs` | `4137d4589` (key-locked import refuses its plain vault at every open path; the mark kept against an older manifest), `297b8182d` (nm allow-list, `--offline` only without `CI`), `b1b4f8408` (`random_bytes` in `Zeroizing`), `0100966f4` (tests), `7bf024af2` (mutants r2 13/13) | B-1, B-4, B-2, B-5, B-6, B-7 |
+| R3 | SDK and CI | `bdc8dd8a7` (close, the profile held by its `Sdk`, the preview's `sdk.state` parse, `part_store`, `write_last`, re-exports), `5f7a833c1` (CI: the SDK's profile step, the `ua-rs` profile cell, `cargo audit` for `scaas-profile`), `85b0f852e` (mutants r3 13/13) | C-1, C-2 = E-2, C-4, C-5 = E-10, C-6, C-7, C-8, E-3 and C-3 (the SDK's part), E-5 (the SDK's part), E-6, E-12 (audit) |
+| R4 | clientkeys and vectors | `630867f6f` (reference strictness, export rows, A-17 at the preview), `86d7de151` (rows, readers, `\u` escapes), `0a2a9f86e` (key-locked manifest rows, `decodeBackup`), `1b313c7f4` (the SDK's row reader), `66807352b` (mutants r4 10/10) | D-1, D-2, D-4, D-5, D-6 = E-11, D-7, D-8, D-9, D-10, D-11, A-17 |
+| R5 | docs | this commit | E-7, the recorded items below, the rules' texts and statuses |
+| R6 | the owner's rulings | `d5525d363`, `f19d1a958`, `0181e009a`, `6c9daa7a2`, `6f603fbbb`, `b98790206`, `f733d8cbf`, `bdbc06bff`, `6491f5f0c`, `425c0bc13`, `f44ae1201`, `7bb86f433` (mutants r6 28/28; 96 stale rows of earlier runners re-run, killed) | F-2, G-1 (two-step), G-3, G-5 = A-15, the hidden twins, the store codes, spec §12's step order, the `/proc/self` shortcut; and two controller calls (`sdk.state`'s key order at the preview; the SDK's seed-wide loops skip a key-locked vault, R4's finding) |
+
+**Owner rulings 2026-11-28** (owner: yes; spec §1 O16 to O23; decisions §41):
+- `migration: pending` is cleared at `set_passphrase`'s commit; spec §12's step order says so (O22; built `db2c124cd`, docs
+  `bdbc06bff`).
+- Two instances' concurrent `create_hidden` of one (name, passphrase) may both pass the duplicate check: accepted. A hidden open
+  with two or more matches is `ProfileHiddenAmbiguous`, never a silent pick; `hidden_matches` lists them as opaque choices and
+  `open_hidden_match` opens the chosen one (O20; `b98790206`).
+- `ProfileBusy` and `ProfilePartFull` are `StoreError` codes an SDK caller sees by name (O21; `f733d8cbf`).
+- A call to follow an operation an import marked `imported`, on the user's word: wave 2 (below).
+- The root's owner is compared with the process's uid without `unsafe`: `/proc/self`'s owner on Linux, else a probe file's;
+  tested with injected uids and a mutant (O23; `08f4511f0`, `6491f5f0c`).
+- The label's associated data binds the envelope's revision, `lp("scaas.profile.label") ‖ be16(1) ‖ lp(id) ‖ be64(rev)`, vectors
+  regenerated everywhere; an older envelope written back with a raised revision is `ProfileRollback` (O16; `d5525d363`).
+- A deleted id keeps a permanent marker `p/.tombstones/<id>` until the user purges it (`purge_tombstones`); start and open refuse
+  any directory under a marked id (O17; `f19d1a958`).
+- `set_passphrase` on a migrated "default" holding a keystore shows the seeds moved (`migrated_seeds()`) and needs the user's
+  confirm of their count (O18; `0181e009a`).
+- The reverse of a strengthening is a weakening: `strict_majority` turned off, a lowered cap raised or removed, per chain profile
+  and global; spec §7.7's list fixed (O19; `6c9daa7a2`).
+- An explicit-revision `put_if` for the store adapters: wave 2 (below).
+
+**Wave-2 list gains** (beside the list at the top):
+- (4) A call that follows an operation marked `imported`, on the user's word (`Op::resend` takes signed or sent operations only;
+  CLI-UPR-18).
+- (e) E-1: the store core's `put_if` with an explicit revision, so pqchat-core's values (which carry no `rev`) need no wrapping,
+  built with the pqchat-core and pqvault-core adapters, and a concurrent-writer test: two writers of one item, one refused, no
+  chain key reused (CLI-UPR-22, CLI-UPR-25).
+- E-9: `keystore.head` as a keychain item where the app has a keychain (spec §5's table); today it is always a file and the
+  keychain name is only deleted. The app's, with platform unlock.
+- E-12: compile cells for `scaas-profile` on the mobile targets (Android, iOS) beside `ua-rs-targets`' `user-profile` build.
+- B-1's reverse order: a plain `native-import:` vault opened before any manifest marks it installs the key; a later manifest
+  marking that import `key_locked` is accepted and the key stays held for the rest of that session (the next open refuses the
+  plain vault, R2). Wave 2, with the SDK's key-lock calls: `lock_key_separately` is the one call that marks a held import, and it
+  must drop the held key at the mark, under its own test.
+- E-7: the settings' chain-profile meaning (applying a profile's `ProfileSettings` to the chain profiles its `Sdk` opens with,
+  CLI-UPR-02's Change, CLI-UPR-03); wave 1 stores, filters and checks them only.
+
+**Recorded, not changed** (P3):
+- A-13: the manifest is read and opened per call (twice per `put_if`) and the anchor re-hashes the manifest files per write:
+  correctness first; measured before any cache (the hidden search's runs before the store write lock since R1, F-5).
+- B-8: one `Mutex` per profile's `ProfileKeys` serialises every seal and open (a 16 MiB item blocks the profile's other reads for
+  its length): correct, only serial; revisit on a measured need.
+- C-8: built in R3, nothing left: `close` waits for its aborted tasks (a read guard per task); that wait has no mutant (the window
+  of a task polled at the abort cannot be driven).
+- D-3: a header wrong in two ways gives a different local reason in clientkeys and `scaas-profile`; both refuse with
+  `ProfileImportOpen`, the reason is a local log line, unpinned, and every `export.json` row breaks one thing.
+- E-8: profile events reach a client only through `UserProfiles::events()`; the `Sdk`'s event stream does not carry them (an
+  `Sdk` belongs to one profile, the events to the root). The bindings' surface (wave 2) decides whether to forward them.
+- B-2: `--offline` dropped under `CI`; a cold cache is confirmed only by the cell's first CI run.
+
+**Left for the round's end:** the full matrix on the final tree; stale mutant rows on files R6 did not touch (up5 8, up6 2, up7 1,
+up8 1, up9 1) and five rows that no longer load since R1 (up6 2, up9 1, up10 2), each re-run or its text updated; at the next
+merge of `dev`, the new `UserProfiles` / `UserProfile` calls in `scaas-cli`'s `EXCLUDED` (`one_command_per_sdk_call_both_ways`).
