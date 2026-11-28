@@ -3,7 +3,7 @@
 **Status:** SPECIFIED or PLANNED per section; nothing built. A frame written now, built after the pre-freeze tag and before
 the freeze (owner 2026-11-28). Its rules are [CLI-QR-01](../../decisions.md#CLI-QR-01) to
 [CLI-QR-08](../../decisions.md#CLI-QR-08) in decisions.md; this spec carries the design, the figures, the reasons and the
-owner's questions (§12). Sources: the payment references and PayMeta ([metatx §6](../../contracts/metatx.md#CTR-MTX-03),
+owner's questions and rulings (§12). Sources: the payment references and PayMeta ([metatx §6](../../contracts/metatx.md#CTR-MTX-03),
 [CTR-MTX-26](../../contracts/metatx.md#CTR-MTX-26)), the payee self-relay row ([metatx §12](../../contracts/metatx.md#payers)),
 the hand-off object ([SDK spec §27.5](2026-11-17-scaas-sdk.md), [CLI-SDK-09](../../clients/scaas-sdk.md#CLI-SDK-09), as built in
 `clients/scaas-sdk/src/wallet/handoff.rs`), the CLI's hand-off blob ([scaas-cli.md §2](../../clients/scaas-cli.md)), the review
@@ -13,8 +13,10 @@ and sign-after-confirm rules ([CLI-SDK-35](../../decisions.md#CLI-SDK-35), [CLI-
 ([CLI-UAL-12](../../clients/ua-libraries.md#CLI-UAL-12)), the typed structs (`smartcontracts/vectors/typed/typed_ops.json`) and
 the PQZ and Zether sizes ([pq-zero-knowledge.md](../../contracts/pq-zero-knowledge.md), the Zether prover's vectors). No
 contract or contract byte format changes. Reviewed by Fable on 2026-11-28 (four areas: format, cross-layer clients, security, cryptography); every P1 and P2 is fixed
-in this revision or put to the owner (§12; Q2 and Q7 ruled 2026-11-28); P3s left open: the taxed-token request (§3.2), a component doc
-`docs/clients/scaas-qr.md` when the crate is built, the fountain overhead simulation (§11). UNAUDITED.
+in this revision or put to the owner (§12; Q1 to Q7 ruled 2026-11-28); P3s left open: the taxed-token request (§3.2), a component doc
+`docs/clients/scaas-qr.md` when the crate is built, the fountain overhead simulation (§11). Post-review by Fable the same day (four
+areas: spec, cross-layer, adversarial, cryptography) after the owner's rulings: every finding fixed in this revision but one, put
+to the owner (§12 Q8). UNAUDITED.
 
 **Contents**
 
@@ -29,7 +31,7 @@ in this revision or put to the owner (§12; Q2 and Q7 ruled 2026-11-28); P3s lef
 9. [Safety on scan](#9-safety-on-scan)
 10. [Vectors](#10-vectors)
 11. [Tests and gates](#11-tests-and-gates)
-12. [Open questions for the owner](#12-open-questions-for-the-owner)
+12. [Owner questions](#12-owner-questions)
 13. [Appendix: refusals](#13-appendix-refusals)
 
 ## 1. Scope and place
@@ -40,8 +42,8 @@ format, in one crate, is shared by scaas-app, `scaas-tui` and the CLI ([CLI-QR-0
 no new authority: whatever a scanned payload asks for is reviewed, quoted and confirmed exactly as the same operation typed by
 hand, and a signed operation in a QR is judged by the hand-off import's checks.
 
-Out of scope: a QR that a contract or the node reads (none does), wallet-connect style sessions, and EIP-681 or other wallets'
-URI schemes (§12 Q5).
+Out of scope: a QR that a contract or the node reads (none does), wallet-connect style sessions, and importing EIP-681 or other
+wallets' URI schemes (the one EIP-681 export for a `receive` aside, §8.1, §12 Q5).
 
 Changes to earlier frames, by the owner's ruling of 2026-11-28:
 
@@ -54,7 +56,8 @@ Changes to earlier frames, by the owner's ruling of 2026-11-28:
 - The SDK spec's registration blob "passed out of band (a QR code, a message)" (§7) has no QR form (§3.5).
 
 Changed by the owner's ruling on §12 Q7 (2026-11-28): the SDK's refusal to import a confidential operation (SDK spec §27.5 (g) 9,
-CLI-SDK-33 (49) (c), `ImportKindRefused`) is lifted for scan and submit only, when built (§6).
+CLI-SDK-33 (49) (c), `ImportKindRefused`) is lifted for scan and submit only, and the hand-off blob's JSON cap rises from
+256 KiB to 1 MiB, when built (§6; recorded under CLI-SDK-32 as a pointer).
 
 ## 2. The crate `scaas-qr`
 
@@ -63,7 +66,7 @@ layers:
 
 | Layer | Holds | Depends on | Built for |
 |---|---|---|---|
-| Format core (default features) | the payload types (§3); the canonical bytes and the `scaas:` URI (§4); the split into info, signature and bulk parts and their assembly (§5, §6); the fountain coder (§5.4); the part binding and bulk pin checks; every bounded decode (§7) | no image library, no `scaas-sdk`, no `ua-rs` | every target, `wasm32-unknown-unknown` included |
+| Format core (default features) | the payload types (§3); the canonical bytes and both `scaas:` URI forms (§4; the readable one over the caller's chain-key table); the split into info, signature and bulk parts and their assembly (§5, §6); the fountain coder (§5.4); the part binding and bulk pin checks; every bounded decode (§7) | no image library, no `scaas-sdk`, no `ua-rs` | every target, `wasm32-unknown-unknown` included |
 | Image layer (feature `image`) | QR symbol encoding (one explicit byte-mode segment); PNG, SVG and APNG writing; PNG, JPEG and APNG frame decoding; the terminal renderer (§8.5) | the format core and the image crates below, all pure Rust | native targets and `wasm32` |
 
 The dependency points one way, as `scaas-profile`'s does: `scaas-sdk` depends on the format core, never the reverse, and takes
@@ -102,56 +105,93 @@ their manifests declare them, checked again by `cargo deny` against the SDK's al
 
 ## 3. Payload kinds
 
-**SPECIFIED** ([CLI-QR-02](../../decisions.md#CLI-QR-02)) for `receive`, `pay-request` with a named payer, `signed-op` of a
-non-confidential operation and `link`; the rest PLANNED where marked. A payload is one **info part**, followed by the
+**SPECIFIED** ([CLI-QR-02](../../decisions.md#CLI-QR-02)) for `receive`, `pay-request` (its payer optional), `signed-op`
+(confidential operations included, §6) and `link`; PLANNED only where marked. A payload is one **info part**, followed by the
 **signature parts** and **bulk parts** the info part declares (§5, §6):
 
 | Kind | Who shows it | Who scans it | Signature parts | Bulk parts |
 |---|---|---|---|---|
 | `receive` | a receiver | a payer | none | none |
 | `pay-request` | a payee (its client or ERP) | a payer | the payee's signature, optional | none |
-| `signed-op` | a signer | the party that submits it and pays the gas | the entry's signature, and each further signature the entry takes | for an operation with a proof or ciphertexts (§6, PLANNED) |
+| `signed-op` | a signer | the party that submits it and pays the gas | the entry's signature, and each further signature the entry takes | for an operation with a proof or ciphertexts (§6) |
 | `link` | a new device | the user's existing device, in its "link a new device" flow | none | none |
 
 ### 3.1 `receive`
 
-A receiver's address for one chain: `chain_uid`, exactly one of `to_ua` (a UA id) and `to_address` (the family's native
-address), `token` (absent = the chain's native coin), and optionally `amount` (base units), `pay_no` (as `PayMeta.payNo`) and
-`relayer` (the receiver's payer address, for a hand-off bound to it, SDK spec §27.5 (b)). A single QR of 120 to 230 bytes
+A receiver's address for one chain: the chain pair (§4.3), exactly one of `to_ua` (a UA id) and `to_address` (the family's
+native address), `token` (absent = the chain's native coin), and optionally `amount` (base units), `pay_no` (as `PayMeta.payNo`)
+and `relayer`, a hint read as a `pay-request`'s is (§3.2: the receiver's payer address when it wants the signed payment handed
+back; the payer signs unbound by default and binds to it only by its own choice). A `receive` on a confidential token (PQZ,
+Zether) carries no `amount`: with one it is `QrConfidentialAmount`, at export and at import, judged by the SDK from the token's
+kind in the profile (the format core knows no token); a token the profile does not list keeps its Caution (§9), which says the
+client could not tell the token's kind. A single QR of 120 to 230 bytes
 (version 6 to 9 at level L). The payer's client builds its own operation from it: a transfer; with `pay_no`, a payment whose
 `PayMeta` the payer's client makes (a fresh `salt`, the scanned `pay_no`, `save` false, schema 0). Such a payment's `entryRef`
 is the payer's, so the receiver matches it by `payNo` alone, through the `PaymentMeta(payId, payNo, …)` event and the
 `UAPaymentSettled` of the same `payId` (a path [integration.md](../../integration.md) gains when built), never by the
-`(token, payer, payee, entryRef)` key of a payment request. The receive QR stays hidden for an account without a backup while
-the backup switch is on ([CLI-SGN-14](../../clients/signers-clientkeys.md#CLI-SGN-14)).
+`(token, payer, payee, entryRef)` key of a payment request. The receive payload stays hidden in every form (the symbol, both URI
+forms of §4.1, the EIP-681 export of §8.1) for an account without a backup while the backup switch is on
+([CLI-SGN-14](../../clients/signers-clientkeys.md#CLI-SGN-14)).
 
 **scaas-app's default build** (no SDK, no SCaaS signing) shows a `receive` with `to_address` for a native account it holds,
-and scans only such a `receive`: it maps `chain_uid` to a chain by the chain table of its release data, refuses an unknown
-`chain_uid` (`ProfileMismatch`), a `to_ua`, a `pay_no` and every other kind (`QrNeedsScaas`), and shows its own native wallet's
+and scans only such a `receive`, in the symbol or either URI form: it maps the chain pair to a chain by the chain-key table of its
+release data (§4.1), refuses an unknown pair (`ProfileMismatch`), a `to_ua`, a `pay_no` and every other kind (`QrNeedsScaas`), and shows its own native wallet's
 review before its own confirm. Every rule of §9 holds there except the SDK's review and quote, which its native wallet replaces.
 
 ### 3.2 `pay-request`
 
 A payee's request, in the named fields of [CTR-MTX-03](../../contracts/metatx.md#CTR-MTX-03) and
-[CTR-MTX-26](../../contracts/metatx.md#CTR-MTX-26): `chain_uid`, `token`, `to` (the payee id), `amount`, `meta` (`salt`,
-`pay_no`, `save`, `schema`, `body`), `valid_until` (the request's `issued_valid_until`), optionally `payer` (the payer the request is for; without it anyone may pay it, owner 2026-11-28), and optionally `relayer`, a **hint** (owner 2026-11-28): the relayer the payee suggests, e.g. one it hired to pay the gas, or
+[CTR-MTX-26](../../contracts/metatx.md#CTR-MTX-26): the chain pair (§4.3), `token`, `to` (the payee id, `bytes32`), `amount`,
+`meta` (`salt`, `pay_no`, `save`, `schema`, `body`), `valid_until` (the request's `issued_valid_until`), optionally `payer` (the
+payer's subject id, `bytes32`, the payer the request is for; without it anyone may pay it, owner 2026-11-28), and optionally
+`relayer`, a **hint** (owner 2026-11-28): the relayer the payee suggests, e.g. one it hired to pay the gas, or
 itself when it self-relays and wants the signed payment handed back (§8.6). The payer's review offers it as an option: by
 default the payment is signed with `relayer` unbound (any relayer may submit it); the payer may choose to bind it to the
-suggested relayer, and the review then names that relayer. The hint never binds anything by itself. The
+suggested relayer, and the review then names that relayer. The hint never binds anything by itself.
+
+**What unbound and bound mean in the signed struct** ([`MetaTxLib.canon`](../../contracts/metatx.md#digest), AGENTS.md). Unbound (the
+default): the payer's `UAMetaTransfer` has `MODE_RESTRICT_RELAYER` and `MODE_RESTRICT_FEE_RECIPIENT` clear, and `relayer` and
+`feeRecipient` are zero in the message and in the digest; the hint is never copied into the struct. Bound: `MODE_RESTRICT_RELAYER`
+set and `relayer` the hint. The review's relayer row is derived from the mode bits, never from the field: it says who may submit
+(unbound: anyone; bound: that relayer only) and, where the payment carries a fee, who takes it (unbound: whoever submits it).
+The path follows: unbound, the payer's own submit path (`SubmitPath::Auto`: its gateway, or its own self-relay) or a hand-off any
+relayer may land; bound, a hand-off for that relayer (§8.6). A bound relayer that stays silent: the payer's fallback re-signs the
+same `PayMeta` on the same lane and nonce, unbound, so at most one of the two lands; never a new payment (another lane or `salt`)
+before the first one's `validUntil` has passed. A hint read from an unsigned request or a readable text is the text's, not
+necessarily the payee's: bound to a relayer a man in the middle chose, a payment can be delayed until its `validUntil`, never
+redirected, since every other field is signed.
+
+**Without `payer`** the request is the payee's to reconcile (owner 2026-11-28, Q2): it is matched on `(token, payee, entryRef)`
+over every payer ([CTR-MTX-03](../../contracts/metatx.md#CTR-MTX-03)'s payer-less case), and a stranger's payment then counts.
+A `pay-request` on a confidential token is `QrConfidentialAmount` (its `amount` is required), as §3.1 judges it. The
 scanner computes `entryRef` itself with its chain's own `metaPayId` (metatx §6: v3 on the EVM; on a family still on the v1 form
 `pay_no` must be zero, `save` false and `body` within the family's cap, else `QrPayMetaRefused`); the request carries no
 `entryRef` field. `schema` is 0, 1 (note) or 2 (structured reference); a bound call (3) or an encrypted body (4) is
 `QrSchemaRefused`, because the payer must read what it signs. A request on a token whose pay entry is the taxed one is
 PLANNED with the regulated kinds' client support.
 
-**The payee's signature** (optional; §12 Q3). A typed record `PaymentRequest` with every named field above and `chain_uid`,
-signed by the payee's UA through `ua-rs` under a new off-chain purpose `scaas.ua.purpose.pay-request.v1` (outside every
-contract's purpose list, as the seal purpose is, [CLI-SGN-44](../../clients/signers-clientkeys.md)), in a fixed domain (name
-`SCaaS payment request`, version `1`, the chain id, no `verifyingContract`), so no contract computes this digest under any
-purpose it accepts. The signer must be `to`; a signature by another id is `QrSignatureInvalid`. It is verified as §5.2 (3)
+**The payee's signature** (optional; §12 Q3). A typed record `PaymentRequest` with every named field above, under one type
+string:
+
+```text
+PaymentRequest(bytes32 chainUid,string token,bytes32 to,uint256 amount,bytes32 salt,bytes32 payNo,bool save,uint16 schema,bytes body,uint256 validUntil,bytes32 payer,string relayer)
+```
+
+`token` and `relayer` are the envelope's `address` text as it is (§4.3); `body` is empty for schema 0. An absent optional field
+is hashed as the zero value of its type (`payer` as 32 zero bytes, `relayer` as the empty string): one type string, and a
+request with and without `payer` gives two digests. A present `payer` or `relayer` that is itself zero (32 zero bytes, the
+family's zero address) is `QrNotCanonical`, so absent and zero stay one to one. The signature covers the relayer hint: a hint
+swapped on a signed request fails the signature. It is signed by the payee's UA through `ua-rs` under a new off-chain purpose
+`scaas.ua.purpose.pay-request.v1` (outside every contract's purpose list, as the seal purpose is,
+[CLI-SGN-44](../../clients/signers-clientkeys.md)), in a fixed domain (name `SCaaS payment request`, version `1`, `chainId` the
+pair's chain id, 0 on a family whose profile has none, where the struct's `chainUid` names the chain alone; no
+`verifyingContract`), so no contract computes this digest under any purpose it accepts. The signer must be `to`; a signature by another id is `QrSignatureInvalid`. It is verified as §5.2 (3)
 states for every signer class; a payee whose signature cannot be checked here (a contract account, a key only the registry
 holds when no registry read is possible) is shown as unsigned with the Caution. A signature proves who issued the request, not
-that it is the scanner's order (the review says so).
+that it is the scanner's order (the review says so). "A known contact" is a match of the exact id, under the active chain pair,
+against the scanner's own contacts, never of a shown prefix or suffix, and the review shows the full id; "payee is a contact"
+(from `to`) and "signed by <id>" (from the checked signature) are separate rows, so an unsigned request to a contact says that
+the payee is known and that the request is not authenticated.
 
 ### 3.3 `signed-op`
 
@@ -165,11 +205,18 @@ Each slot carries its own `digest`: the typed digest (EIP-712 on the EVM) of its
 
 Both directions of the hand-off use it:
 
-- **Scan and submit** ("pay the partner's gas from a scanned QR"). For a kind with a payee (a transfer, a payment) the scanner
-  is the payee (`ImportNotPayee` otherwise). The signer signed with fee 0 and `relayer` unbound or bound to the scanner's payer
-  address; the scanner's SDK runs `Op::import_signed` on the assembled blob with every check of §27.5 (c) (`ProfileMismatch`,
-  `ImportKindRefused`, `ImportNotPayee`, `ImportRelayerBound`, `ImportFeeRefused`, `ImportExpired`, `ImportConsumed`), quotes it,
-  shows the review and, on the user's confirm, submits it as a self-relay paid by the scanner's native key.
+- **Scan and submit** ("pay the partner's gas from a scanned QR"). The scanner's SDK runs `Op::import_signed` on the assembled
+  blob with every check of §27.5 (c), as built (`clients/scaas-sdk/src/op/handoff.rs`), quotes it, shows the review and, on the
+  user's confirm, submits it as a self-relay paid by the scanner's native key. The checks, in their order: the chain
+  (`ProfileMismatch`; the info part's chain pair besides, §4.3); a listed token of the profile (`ProfileMismatch`); the kind
+  (`ImportKindRefused`; a confidential kind is refused until §6's import is built); the payee: where the struct has `to` or
+  `payment.to`, it is one of the scanner's ids (`ImportNotPayee`); the relayer: `MODE_RESTRICT_RELAYER` clear (unbound, `relayer`
+  and `feeRecipient` zero by `canon`), or set with `relayer` the scanner's payer address, else `ImportRelayerBound` (an operation
+  bound to another relayer is that relayer's to import); the fee: the envelope's `fee` and the struct's relay amount both 0
+  (`ImportFeeRefused`); time left (`ImportExpired`); the lane nonce unspent (`ImportConsumed`); then the rebuild, the signer's
+  kind (`ImportKindRefused`, `KindDisabled`) and the simulation from the payer (`ImportedOpRefused`). The quote is capped by the
+  profile's self-relay cap: on the EVM `Limits::max_cost` with `max_gas` and `max_fee_per_gas`; on another family
+  `Limits::max_native_cost`, where a chain without its row spends nothing (`FeeAboveCap`, fail closed).
 - **Show for a partner.** `Op::hand_off` signs the user's own operation after its review and confirm; the front-end shows or
   exports the blob in the forms of §8 and keeps it (public data) until a chain fact ends the row (`Landed`, `Consumed`,
   `Expired`, or the user's cancel), since `Op::hand_off` returns it once.
@@ -213,25 +260,70 @@ rebuild by `ua-rs` refuses any field the struct does not have, so a secret has n
   URI. It is the text form for a paste, a message, a file line and a link the platform opens. A URI is accepted only if
   encoding its decoded bytes gives back the same text: the scheme in lower case, no `//`, no padding, zero trailing bits, no
   `+` or `/`, no whitespace (`QrNotCanonical`).
-- **Readable URI form** (owner 2026-11-28; SPECIFIED, built with the crate). For a `receive` and an **unsigned** `pay-request`
-  only — no signature, no bulk, no `signed-op`, no `link`, no confidential token — a readable text form beside the base64url one:
-  `scaas:<chain>/<token>/<kind>?<params>`. `<chain>` is the chain key of the release's chain table (`scaas-testnet`,
-  `avalanche-mainnet`), never a bare EVM chain id, since the format serves every family; it maps to exactly one `chain_uid` by
-  that table, an unknown key refused (`ProfileMismatch`). `<token>` is the token id in the family's lower-case canonical text
-  (`0x` hex on EVM) or `native`. `<kind>` is `receive` or `pay`. `<params>` are the payload's named fields, each at most once,
-  in one fixed order per kind (`receive`: `to_ua` | `to`, `amount`, `pay_no`, `relayer`; `pay`: `to`, `amount`, `salt`,
-  `pay_no`, `save`, `schema`, `body`, `valid_until`, `payer`, `relayer`), only the fields present, amounts as digits in base
-  units, hex in lower case with `0x`, `save` as `0` / `1`, `body` base64url. Examples:
-  `scaas:avalanche-mainnet/native/receive?to=0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed` and
-  `scaas:scaas-testnet/0x00000000000000000000000000000000000000a1/pay?to=0x…&amount=1000000&salt=0x…&pay_no=0x…&save=0&schema=0&valid_until=1767225600`.
-  A readable URI decodes to exactly one canonical CBOR payload and is accepted only if re-encoding that payload gives back the
-  same text (an unknown, duplicated or out-of-order parameter, upper-case hex, a leading zero, a `+` or a percent-escape
-  where none is needed: `QrNotCanonical`). It never travels as the `ethereum:` scheme (another wallet would read it as
-  EIP-681 and build a call to a function that does not exist), and nothing is ever signed over URI text: a signature binds the
-  canonical bytes' digest. The readable form is for display, a paste and a link; a QR symbol still carries the canonical bytes.
-  Vectors carry both URI forms of the same payloads.
+- **Readable URI form** (owner 2026-11-28; SPECIFIED, built with the crate): `scaas:<chain>/<token>/<kind>?<params>`, for a
+  `receive` and an **unsigned** `pay-request` only, beside the base64url form; its rules follow this list.
 - **In a QR symbol**: the canonical bytes as one byte-mode segment, with no ECI header. A QR scanned by a generic camera app
-  shows nothing useful, on purpose: a SCaaS payload needs a SCaaS review. No symbol carries the URI form.
+  shows nothing useful, on purpose: a SCaaS payload needs a SCaaS review. No symbol carries either URI form (the EIP-681 export
+  of §8.1 is the one symbol that is not canonical bytes).
+
+**The readable URI form.** A payload has a readable text only when it is a `receive` or an unsigned `pay-request` (no signature
+slot, no bulk; never a `signed-op` or a `link`), its token is not confidential (the SDK's judgement, §3.1), and every text it would hold (the token, each
+value) consists of URI unreserved characters only, `A–Z a–z 0–9 - . _ ~`, and is not the word `native`. Otherwise it has no
+readable form: an export asking for one is `QrNoReadableForm`, never a stripped or an escaped text (a signed request; a Cosmos
+`ibc/…` denom, a Move type `0x2::sui::SUI`, a Stellar `CODE:ISSUER`, a TON address in its user-friendly form with `/` or `+`).
+A text keeps the family's canonical form as it is ([NET-ALL-16](../../networks/README.md#NET-ALL-16): base58, strkeys and bech32
+are never case-folded; EVM hex is lower case as §4.3 states). The form has no percent-escape: a `%`, a `+` or any other byte
+outside the set is `QrNotCanonical`.
+
+- **Grammar.** After `scaas:`, a text holding a `/` is the readable form, any other the base64url form (whose alphabet has no
+  `/`). `<chain>` is a chain key, `[a-z0-9-]+`; `<token>` the token's canonical text, or `native` for the chain's native coin
+  (`token` absent); `<kind>` `receive`, or `pay` for the kind `pay-request`; then `?` and the parameters as `name=value` joined by
+  `&`, each at most once, in the order of the table below, only those present; an empty value (`body=`) never appears.
+- **Chain keys.** The format core's readable calls take the chain-key table as an input, `ChainKeys { version, rows }`, each row
+  `(key, family, chain_id, chain_uid)`, `chain_id` absent on a family whose profile has none (§4.3). The SDK passes its
+  release's table, built from its pinned chain profiles ([CLI-SDK-15](../../clients/scaas-sdk.md#CLI-SDK-15); on the EVM the
+  rows equal `key`, `chainId` and `chainUid` of `smartcontracts/evm/chain-uids.json`); the vectors pin one version (§10) and the
+  JS reference reads the same file. In one version a key names exactly one pair and a pair exactly one key (a table with a
+  duplicate either way is refused when loaded), so decoding maps `<chain>` to the pair and re-encoding maps the pair back to the
+  same key: C-Chain and Fuji are two keys and two pairs, never one. A key is never reused for another chain; a release whose
+  table moves a key's pair (a reset of a chain SCaaS runs) is a new version, and a readable text made before it then names the
+  new pair (a residual, §11). An unknown key is `ProfileMismatch`, its message saying "unknown chain key" (perhaps a newer
+  release's), apart from "another chain".
+- **Canonical.** A readable text decodes to exactly one canonical CBOR payload and is accepted only if re-encoding that payload
+  under the same table gives back the same text (an unknown, duplicated or out-of-order parameter, upper-case hex, a leading
+  zero, an empty value: `QrNotCanonical`). Its length is the URI line bound of §7, checked before parsing; it has at most 10
+  parameters, and each value is bounded by its field's bound before it is decoded. The parser is the crate's own, over the raw
+  text: no URL library decodes it first.
+- **Never `ethereum:`, never signed.** It never travels as the `ethereum:` scheme (another wallet would read it as EIP-681 and
+  build a call to a function that does not exist), and nothing is ever signed over URI text: a signature binds the canonical
+  bytes' digest. A readable import has no signature slot, so its review always carries the unsigned Caution. The readable form
+  is for display, a paste and a link; a QR symbol carries the canonical bytes. Vectors carry both URI forms of the same
+  payloads.
+
+The parameters, one table per kind; presence is the same in the CBOR payload and in the text:
+
+| Kind | Parameter, in order | CBOR field | Type in the text | Presence |
+|---|---|---|---|---|
+| both | `<chain>` (path) | `chain_id`, `chain_uid` | a chain key of the table | always |
+| both | `<token>` (path) | `token` | `address` text, or `native` | `native` = absent; a `pay-request` always has one (`…/native/pay` is `QrMalformed`) |
+| `receive` | `to_ua` | `to_ua` | `bytes32`: `0x` and 64 lowercase hex | exactly one of `to_ua`, `to_address` |
+| `receive` | `to_address` | `to_address` | `address` text | |
+| `receive` | `amount` | `amount` | `u256`: decimal digits | optional; never on a confidential token |
+| `receive` | `pay_no` | `pay_no` | `bytes32` | optional |
+| `receive` | `relayer` | `relayer` | `address` text | optional (a hint, §3.1) |
+| `pay` | `to` | `to` | `bytes32` | always |
+| `pay` | `amount` | `amount` | `u256` | always |
+| `pay` | `salt` | `meta.salt` | `bytes32` | always |
+| `pay` | `pay_no` | `meta.pay_no` | `bytes32` | always (zero: none) |
+| `pay` | `save` | `meta.save` | `0` or `1` | always |
+| `pay` | `schema` | `meta.schema` | decimal digits: 0, 1 or 2 | always |
+| `pay` | `body` | `meta.body` | strict base64url (no padding, zero trailing bits) | present iff `schema` is not 0 |
+| `pay` | `valid_until` | `valid_until` | decimal digits | always |
+| `pay` | `payer` | `payer` | `bytes32` | optional, never zero (§3.2) |
+| `pay` | `relayer` | `relayer` | `address` text | optional (a hint), never zero (§3.2) |
+
+Examples: `scaas:avalanche-mainnet/native/receive?to_address=0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed` and
+`scaas:scaas-testnet/0x00000000000000000000000000000000000000a1/pay?to=0x…&amount=1000000&salt=0x…&pay_no=0x…&save=0&schema=0&valid_until=1767225600`.
 
 **Why CBOR rather than the SDK's JSON.** The hand-off blob's JSON carries crypto objects as `0x` hex, twice their size. In a QR
 that difference is the frame count: an ML-DSA-65 signature with its key data (5,261 bytes) is two QR parts as CBOR byte
@@ -256,14 +348,19 @@ and pinned by the vectors (§10), with these types:
 |---|---|---|
 | `bytes32` | byte string of 32 | ids, `chain_uid`, `salt`, `pay_no`, digests, hashes |
 | `bytes` | byte string | exactly one crypto object (a signature, a key, a proof, a ciphertext) or one opaque value (`PayMeta.body`, at most 1,024 bytes); never several fields packed |
-| `uint` | unsigned integer | at most 2^64 − 1 (`valid_until`, `schema`, frame numbers); the JS reference decodes it as a BigInt |
+| `uint` | unsigned integer | at most 2^64 − 1 (`chain_id`, `valid_until`, `schema`, frame numbers); the JS reference decodes it as a BigInt |
 | `u256` | text of decimal digits | amounts, no sign, no leading zero, at most 2^256 − 1 |
 | `address` | text | the family's canonical address form, printable ASCII, at most 128 bytes (EVM: `0x` and 40 lowercase hex digits; Aptos and Sui: `0x` and 64) |
 | `text` | text string | short names (`kind`, `slot`, a pin path); at most 64 bytes |
 | `bool` | `true` / `false` | `save` |
 
-Every info part carries `kind` and, except `link`, `chain_uid`; a payload is bound to one chain, and a payload whose `chain_uid`
-is not the active chain profile's is refused (`ProfileMismatch`, §9).
+Every info part carries `kind` and, except `link`, the **chain pair** of [NET-ALL-25](../../networks/README.md#NET-ALL-25):
+`chain_uid` (`bytes32`) and `chain_id` (`uint`), the latter present exactly when the family's chain profile names a chain id
+(`ChainProfile.chain_id`: the EVM, Hedera) and absent elsewhere, where `chain_uid` is the chain's whole identity. A payload is
+bound to one chain: a pair that is not the active profile's (either half differing, `chain_id` missing where the profile has one
+or present where it has none) is `ProfileMismatch` (§9). Avalanche C-Chain and Fuji, Ethereum and ETC share a `chain_uid` and
+differ in `chain_id`, so a request made on one is refused on the other in every form. A `signed-op`'s `op` keeps the blob's own
+`chain_uid`, as built; its info part carries the pair beside it, and the two `chain_uid`s must be equal (`ProfileMismatch`).
 
 **`op`** (a `signed-op`'s info part) is the hand-off blob, its names byte for byte (camelCase inside `message` and `extra`, as
 built), without the signatures that go to slots (§3.3), mapped from its JSON by shape with one closed rule: a JSON string that
@@ -307,7 +404,7 @@ level L and a bulk frame (version 25, level L, 1,273 bytes) up to 1,140.
 When a payload does not fit one QR, it is split by meaning first, never cut blindly:
 
 1. **The info part is complete and reviewable on its own, and declares the rest.** It holds every named field of the intent:
-   the chain uid, the contract, the entry, the operation's fields, `valid_until`, the relayer and payer bindings, each slot's
+   the chain pair (§4.3), the contract, the entry, the operation's fields, `valid_until`, the relayer and payer bindings, each slot's
    digest, and for an operation with a proof or ciphertexts their pins (§6). It declares its signature slots with their part
    counts (`sigs`, zero slots for an unsigned payload) and its bulk (`bulk`: length and k). The SDK's `Qr::review_info` gives
    the full `SignReview` from the info part before any other part arrives, its signer and payee rows marked "not verified yet"
@@ -394,6 +491,33 @@ or a Zether operation) is the funds' owner's: **the owner's client makes the pro
 who scans it only relays and pays the gas. The partner computes nothing secret, holds no key of the owner's and decrypts
 nothing (§9).
 
+**The confidential import** (owner Q7; PQZ and Zether apart, each by its own structs). Importable for scan and submit only, by
+`Op::import_signed` with the checks of §3.3 as built, which for a confidential kind read:
+
+- **Relayer:** the signer's choice, unbound by default (`MODE_RESTRICT_RELAYER` clear) or bound; the scanner submits an unbound
+  operation or one bound to its own payer address; one bound to another relayer (a named gateway) is `ImportRelayerBound` at the
+  scanner and is that relayer's to import.
+- **Fee:** 0 only (`ImportFeeRefused`); a fee-bearing relay has no QR form (§3.3).
+- **Payee:** the check reads `to` or `payment.to`, and no confidential struct has either (they name `args.toUA`, `yTo`,
+  `recipient`), so no payee check runs: the scanner sponsors the gas of an operation whose recipient it does not check, which
+  the fixed review line says (§9).
+- **Cost:** under the profile's self-relay cap (§3.3: `Limits::max_cost` with `max_gas` on the EVM, `Limits::max_native_cost`
+  on another family, no row: `FeeAboveCap`). This is the cap the ruling names.
+- **Front-running:** an unbound operation may be landed first by anyone who holds it, the partner included; the scanner's relay
+  then reverts at the nonce and costs it the gas of a failed transaction of that size (a residual, §11). The review of an unbound
+  confidential import says "not bound to you: another party may submit it first, and your gas for the failed transaction is then
+  lost"; a scanner that wants none asks the signer to bind the operation to its payer address, or declines an unbound one.
+- **Bounds:** the SDK's JSON cap for a hand-off blob rises from 256 KiB to 1 MiB when this is built (the largest PQZH transfer of
+  the vectors, as hex in JSON, fits it).
+
+**No hidden amount in a payload** (owner Q7). No field states, claims or declares the hidden amount of a confidential operation:
+the envelope has no amount field for a confidential `signed-op` (an added one is `QrFieldUnknown`), a `receive` on a
+confidential token carries no `amount` and a `pay-request` on one is refused (`QrConfidentialAmount`, §3.1, §3.2). The public
+fields a signed confidential struct carries itself stay as signed, since the digest is rebuilt from them, and are shown as that
+operation's public fields, never as the hidden amount: an unshield's `amount` and `recipient` (and an unwrap's `amount` and
+`minOut`), `shieldIn`, `decoyFee`, `fee`, `beneficiaryUA`. The review's fixed line (§9) says which of them the operation
+carries.
+
 ### 6.1 Pins in the info part
 
 The large `bytes` fields of the signed struct stay out of the info part, which carries for each its path (text, e.g. `proof`,
@@ -420,18 +544,18 @@ lose ciphertext: the contract keeps every ciphertext in state as before; this tr
 The bulk object is cut into fragments of at most 1,140 bytes (§5.1). Frame counts are for the bulk alone; the info and
 signature parts come first.
 
-| Class | Bulk | Form | Proposed bound |
+| Class | Bulk | Form | Bound |
 |---|---|---|---|
 | (a) | none | info part and signature parts (§5) | — |
-| (b) | `len` ≤ 82,080 B (k ≤ 72) | animated: frames 1 to k systematic, then repair frames; a PNG set holds the k systematic frames | §12 Q1 |
+| (b) | `len` ≤ 82,080 B (k ≤ 72) | animated: frames 1 to k systematic, then repair frames; a PNG set holds the k systematic frames | k ≤ 72 (owner, §12 Q1) |
 | (c) | above (b), or by choice | the info part pins the bulk; the bulk travels by another channel (§6.4) | the import's bound (§7) |
 
 ### 6.3 Zether and PQZ, apart
 
 Estimates, not measurements, at 5 frames a second: with every frame read, k frames suffice. With frames missed, the 1/i degree
 distribution resolves the last missing fragments slowly, so a second loop of systematic frames often finishes first; the
-figures below assume about 1.3 · k frames shown and stay estimates until the simulation and the scan measurement of §11
-(before Q1 is ruled).
+figures below assume about 1.3 · k frames shown and stay estimates until the simulation and the scan measurement of §11, which
+run before the build fixes the timing (Q1 ruled the bound, k ≤ 72).
 
 **Zether** (classical, BLS12-381; sizes from `clients/zether-prover/vectors/`). The signed struct's points are small and stay in
 the info part (`ZetherSingle` 880 B, `ZetherMulti` with decoys 2,233 B); the proof is the bulk.
@@ -455,7 +579,8 @@ PQZL transfer is about 77 KB of calldata, nearly all of it proof and ciphertexts
 | PQZH transfer | about 264 KB | about 232 | — | about 60 s | (c) |
 | multi-leg PQZ transfer | at least 16,640 B of calldata more per leg | grows | — | — | (c) |
 
-The class follows the measured size of the operation at hand, not its name: one rule on every chain and every set.
+A transfer whose blob with its bulk exceeds the import's JSON cap (§6, §7) has no import at all: the import refuses it by its
+bound, whatever channel carried the bulk. The class follows the measured size of the operation at hand, not its name: one rule on every chain and every set.
 
 ### 6.4 Above the bound: the bulk by another channel
 
@@ -466,8 +591,9 @@ info part while its bulk is missing. The Arweave store is PLANNED as a channel: 
 checked by the pins in the SDK (today's calls seal an app core's file and check SHA-256, [CLI-SDK-21](../../clients/scaas-sdk.md)),
 the operator payer for objects above 64 KiB, and a fetch only on the user's action, bounded by the pinned lengths while it
 streams; until then the info part names no locator, never an `http` URL. A bulk put on a public store is public before the
-operation lands, and with an unbound relayer the info part plus that bulk lets anyone land it: class (c) defaults to a
-relayer bound to the partner. A node endpoint serving bulk by hash is not part of this frame (§12 Q4). No channel ever carries a
+operation lands, and with an unbound relayer the info part plus that bulk lets anyone land it. The relayer stays the signer's
+choice, unbound by default (owner Q7): the review of an unbound class (c) operation says so and offers the binding to the
+partner's payer address. A node endpoint serving bulk by hash is not part of this frame (§12 Q4). No channel ever carries a
 secret, because no payload holds one (§3.5).
 
 ## 7. Decode bounds
@@ -478,11 +604,11 @@ and every refusal is named (§13):
 | Input | Bound |
 |---|---|
 | One part's canonical bytes | 2,953 B (one QR at version 40, level L) |
-| One URI line | 3,944 characters (`scaas:` and the base64url of 2,953 B) |
+| One URI line, either form | 3,944 characters (`scaas:` and the base64url of 2,953 B), checked before parsing; a readable text at most 10 parameters, each value within its field's bound before it is decoded |
 | CBOR nesting | depth 9 (the hand-off blob's 8, under the envelope); at most 64 entries a map, 256 elements an array |
 | Strings | `text` 64 B, `address` 128 B, `PayMeta.body` 1,024 B, `u256` at most 2^256 − 1 |
 | Signature parts | at most 16 a slot, 32 in all |
-| Bulk | `len` ≤ 82,080 B and k ≤ 72 in QR form, checked on the first frame; a `.scaasbulk` file at most what the hand-off import takes with its blob (§12 Q7: 256 KiB of JSON today) |
+| Bulk | `len` ≤ 82,080 B and k ≤ 72 in QR form, checked on the first frame; a `.scaasbulk` file at most 512 KiB (its bytes as hex in the blob's JSON fill the 1 MiB cap of §6), and the assembled blob within the hand-off import's JSON cap (1 MiB once §6 is built; 256 KiB until then), whichever refuses first |
 | Fountain frames held | at most 2 · k + 16 per payload; frame numbers below 2^32 |
 | Parts held | one payload at a time; a foreign part is dropped, not queued |
 | `.scaasqr` file | 512 KiB, at most 128 lines; one trailing CR a line is ignored, empty lines skipped, a byte-order mark refused |
@@ -503,14 +629,18 @@ blob's JSON, which keeps its own bounds. The format core has one fuzz target ove
 | PNG, SVG | one QR (an info part alone) | the symbol, dark modules on a light background in every theme, a quiet zone of 4 modules; PNG at 8 px a module by default |
 | Numbered PNG set | several parts | one PNG per part, named `<stem>-00-info.png`, `<stem>-<slot>-01-of-02.png`, `<stem>-bulk-001-of-068.png` (the k systematic bulk frames only) |
 | Animated APNG | several parts | the frame order and timing below |
-| `.scaasqr` text | any that fits the QR bounds | UTF-8, one URI per line (§4.1): the info part first, then each slot's parts, then the k systematic bulk parts |
+| `.scaasqr` text | any that fits the QR bounds | UTF-8, one base64url `scaas:` URI per line (§4.1; never a readable line): the info part first, then each slot's parts, then the k systematic bulk parts |
 | `.scaasbulk` | class (c) bulk | the bulk object's canonical bytes |
+| Readable URI | a payload with a readable form (§4.1), else `QrNoReadableForm` | text only: one line, to stdout or `<stem>-uri.txt` |
+| EIP-681 URI | a `receive` the export below takes, else `QrEip681Refused` | the `ethereum:` text, to stdout or `<stem>-eip681.txt`, and one symbol `<stem>-eip681.png` / `.svg` holding that text |
 
 Options: level L (default) or M, the largest part (the default fits one QR; a smaller one, down to 1,140 bytes, cuts a
 signature into more, smaller symbols within the caps of §5.2 (4)), the module size, the frame rate (2 to 10 frames a second).
 GIF is not offered: APNG is lossless, and a viewer that cannot animate it shows its first frame, which is the info part and
 complete for review. Exported files are created readable by their owner only; the export of a `signed-op` says "whoever holds
-this can submit it until <time>", and of a confidential token's amount that the amount is visible to anyone who sees the QR.
+this can submit it until <time>". Both URI forms and the EIP-681 text are public clear text once shared (chat history, link
+previews, the platform's deep-link log, shell history; the base64url form only takes a decode): the export says so when
+`pay_no`, `payer` or `body` is present, and the CLI writes a text form only to `--out` or to stdout on the user's flag.
 
 **APNG frame order and timing** (owner 2026-11-28): frame 1 is the info part, shown 1,000 ms; then each slot's parts in order;
 then, for class (b), the bulk frames 1 to k and ⌈k/2⌉ repair frames from k + 1; a frame above version 30 is shown 500 ms and
@@ -519,17 +649,32 @@ live display (scaas-app, the TUI) keeps the order and timing, but its repair fra
 loop, so each loop brings new ones.
 
 **EIP-681 export (owner 2026-11-28; SPECIFIED, built with the crate).** For a `receive` only, to an EVM `to_address` (never a
-`to_ua`, never a `pay_no`), in the native coin or a standard ERC-20, the user may also export an EIP-681 URI for other wallets:
-`ethereum:<to_address>@<chainId>?value=<amount>` for the native coin, `ethereum:<token>@<chainId>/transfer?address=<to_address>&uint256=<amount>`
-for an ERC-20, the amount in the smallest unit as digits only. It is labelled on screen and in the file name as "for other
-wallets: no UA, no payment reference, the payee reconciles it itself". A payload carrying a UA, a `pay_no`, a confidential token
-or a token whose transfer is not the plain ERC-20 `transfer` is refused for this export (`QrEip681Refused`). Import reads
-`scaas:` only; an EIP-681 URI scanned by a SCaaS client is shown as such and refused (`QrNotScaas`), never mapped.
+`to_ua`, never a `pay_no`, never a `relayer`), whose chain pair is the active profile's, in the native coin or a token the
+profile lists with the kind plain ERC-20 (the profile's token kind decides; a token it does not list, and every other kind, a
+taxed, regulated, hybrid or confidential one among them, is refused), the user may also export an EIP-681 URI for other wallets:
+
+- native coin: `ethereum:<to_address>@<chainId>?value=<amount>`, or `ethereum:<to_address>@<chainId>` without an `amount`;
+- plain ERC-20: `ethereum:<token>@<chainId>/transfer?address=<to_address>&uint256=<amount>`; without an `amount` it is refused;
+- `<chainId>` is the pair's `chain_id` in decimal, `<amount>` the smallest unit as digits only, every address in its EIP-55
+  checksum case (the canonical payload keeps lower case, §4.3).
+
+It is labelled on screen, in the file name and in the image's caption where the export has one as "for other wallets: no UA,
+no payment reference, the payee reconciles it itself; only on <chain name> (chain id <n>): a wallet that ignores the chain id
+may pay on another chain". Any other payload is refused for this export (`QrEip681Refused`). Its symbol holds the `ethereum:`
+text as one byte-mode segment of ASCII, the one symbol that does not carry canonical bytes (§4.1); a SCaaS scanner that reads it
+refuses it as any foreign text.
+
+**Foreign text on import.** Import reads `scaas:` only. A text with any other URI scheme, an EIP-681 URI included, is
+`QrNotScaas`, never mapped; any other content without the `SQ` magic is `QrMalformed`. A refused foreign text is shown inert
+(never a link, never opened), escaped under the front-end's outside-text rule and cut to 128 characters.
 
 ### 8.2 Import sources
 
 From a `.scaasqr` file or pasted lines (in any order); from one or more image files (PNG, JPEG, the frames of an APNG, a
-numbered set); from a camera (scaas-app, live frames); from a `scaas:` URI the platform opens. Each import records its source,
+numbered set); from a camera (scaas-app, live frames); from a `scaas:` URI the platform opens. A readable URI (§4.1) is taken
+by paste (the TUI's and the CLI's `-` included) and from a link the platform opens, never as a `.scaasqr` line (there it is
+`QrMalformed`); scaas-app's
+default build reads a native-address `receive` in it too. Each import records its source,
 set by the front-end's flow; the source matters only for `link` (§3.4). An import ends in a review (§9), never in a signature.
 
 ### 8.3 Files
@@ -568,12 +713,13 @@ a file states:
 | `scaas qr pay-request` | `Qr::pay_request` | writes an unsigned `pay-request` payload from named flags | none |
 | `scaas qr sign-request` | `Qr::sign_pay_request` | shows the request's review, then signs it as the payee | `sign` |
 | `scaas qr hand-off` | `Qr::from_hand_off` | wraps a blob from `op hand-off` into a `signed-op` payload | none |
-| `scaas qr export` | the image layer | writes a payload `--format png`, `svg`, `apng`, `png-set` or `text`, `--out <path>` | none |
+| `scaas qr export` | the image layer; `Qr::readable_uri`, `Qr::eip681` | writes a payload `--format png`, `svg`, `apng`, `png-set`, `text` (`.scaasqr`), `uri` (the readable form, §4.1) or `eip681` (§8.1), `--out <path>`; a payload without the form asked is refused by name (`QrNoReadableForm`, `QrEip681Refused`) | none |
 | `scaas qr show` | the image layer | draws a payload in the terminal (the TUI's renderer; `--ascii`, `--frame <n>`) | none |
 | `scaas qr import` | `Qr::assemble`, `Qr::review_info` | reads `.scaasqr` files, images or `-` (and `--bulk <file>`), assembles and checks, prints the review, writes the object: the blob JSON for `op import-signed`, or the request's named fields for the payment command, which keep their own confirm | none |
 
-A `pay-request` that names a `relayer` is paid by a hand-off (`op hand-off`, class `sign`) given back to the payee, not by a
-submit. Every scanned text in the CLI's output is escaped as the CLI escapes outside text. `link` has no CLI import.
+A `pay-request`'s (or a `receive`'s) `relayer` is a hint (§3.2): unbound, the default, the payment goes by the payer's own
+submit path or as a hand-off any relayer may land; only when the payer chose in the review to bind it to the hint is it a
+hand-off (`op hand-off`, class `sign`) given to that relayer, the payee when it self-relays. Every scanned text in the CLI's output is escaped as the CLI escapes outside text. `link` has no CLI import.
 
 ## 9. Safety on scan
 
@@ -589,9 +735,9 @@ submit. Every scanned text in the CLI's output is escaped as the CLI escapes out
   signature (the payer's `UAMetaTransfer`, the scanner's native transaction for a self-relay) is made only on the user's
   confirm of the assembled payload's review ([CLI-SDK-36](../../decisions.md#CLI-SDK-36)), and a fresh quote above the reviewed
   one asks again ([CLI-PQV-18](../../clients/pqvault-core.md#CLI-PQV-18)).
-- **Mismatches.** A `chain_uid` that is not the active profile's: refused (`ProfileMismatch`). A `signed-op` contract that is not
+- **Mismatches.** A chain pair that is not the active profile's (§4.3): refused (`ProfileMismatch`). A `signed-op` contract that is not
   a listed token of the profile: refused (the import's `ProfileMismatch`). A `receive` or `pay-request` token that is not
-  listed: a Caution with the address, and the user decides. A `pay-request` whose `payer` is not the scanning account:
+  listed: a Caution with the address, and the user decides. A `pay-request` that names a `payer` other than the scanning account:
   `QrPayerMismatch` (the payee's reconciliation would not count the payment, [CTR-MTX-03](../../contracts/metatx.md#CTR-MTX-03)).
 - **Expiry.** `valid_until` shown; a `pay-request` less than 120 s ahead of now is `QrExpired`, a `signed-op` the import's
   `ImportExpired`. The payer's own signature lives no longer than its client allows: its `validUntil` is the smaller of the
@@ -601,16 +747,22 @@ submit. Every scanned text in the CLI's output is escaped as the CLI escapes out
 - **Replay.** The contracts' rules hold: a signature runs at most once (its lane nonce), and a scanned `signed-op` already
   consumed is `ImportConsumed`. A `pay-request` is paid on `payLane(entryRef)` at nonce 0 by default
   ([CTR-MTX-10](../../contracts/metatx.md#CTR-MTX-10)): for the same payer account, the same `PayMeta` and a family that keeps
-  its lane state, a second scan finds the lane spent (or the first payment still pending) and the review says so; a request
+  its lane state, a second scan finds the lane spent (or the first payment still pending) and the review says "you paid this
+  request on <date>" (or "pending"); paying again is offered only under a Caution, at the lane's next nonce, and the review never
+  calls the request itself paid, which is the payee's to decide (Q2); a request
   re-shown with another `salt`, or a `receive` with `pay_no`, is a new payment, and the client's own history of a payment to
   the same payee with the same `pay_no` raises a Caution. A `receive` carries no signature and replays nothing.
 - **No decryption oracle** ([ARCH-POS-13](../../decisions.md#ARCH-POS-13)). Nothing in a scanned payload, or in a bulk its
   pins admitted, is ever decrypted, trial-decrypted or opened by the scanner: not a PQZ or Zether ciphertext, not a sealed
-  opening, not an encrypted `PayMeta` body (which a QR cannot carry, §3.2). The review of a confidential operation says
-  "amount hidden" and shows only public fields; a recipient learns what it received from its own balance in contract state, by
-  its ordinary wallet path, never from the QR's bytes.
-- **Confidential payloads.** A `receive` for a PQZ or Zether token carries the recipient's UA only: its encryption key is read
-  from the chain's registry or the token, never from a QR. A QR never carries an opening, a blinding, a secret key, a seed or
+  opening, not an encrypted `PayMeta` body (which a QR cannot carry, §3.2). The review of a confidential operation shows the
+  fixed line "amount hidden: you pay <quote>, and this client cannot tell whether you receive anything" (owner Q7), followed by
+  the names of the public fields the signed struct carries, each shown as a signed row (§6: an unshield's `amount` and
+  `recipient`, `shieldIn`, `decoyFee`, `fee`), and for an unbound operation the front-running line of §6; it shows nothing else
+  of the hidden amount. A recipient learns what it received from its own balance in contract state, by its ordinary wallet
+  path, never from the QR's bytes.
+- **Confidential payloads.** A `receive` for a PQZ or Zether token carries the recipient's UA and no `amount`, and a `pay-request`
+  on one is refused (`QrConfidentialAmount`, §3.1, §3.2): its encryption key is read from the chain's registry or the token,
+  never from a QR. A QR never carries an opening, a blinding, a secret key, a seed or
   the sender randomness (§3.5).
 - **Outside text.** Every text of a scanned payload is printable ASCII (§4.2) and is drawn under the front-end's outside-text
   rule (the TUI's CLI-TUI-05, the CLI's escaping).
@@ -627,13 +779,15 @@ one thing.
 
 | File | Rows |
 |---|---|
-| `receive.json` | a UA id and a native address (EVM and Sui); with and without `amount`, `pay_no`, `token`, `relayer`: canonical hex and URI |
-| `pay_request.json` | unsigned and payee-signed; `entryRef` equal to the metatx vectors' `metaPayId` for the same `PayMeta`; one row on a v1 family |
-| `signed_op.json` | a secp256k1 transfer (info + 1 signature part); **an `mldsa65` derived-UA payment: info part + 2 signature parts**; an `slhdsa128s` op (3 parts); the `mldsa65` payment at a 1,140-byte maximum (5 parts); a byte string with a digit run and Shift-JIS-shaped pairs; each assembled from every order of its parts |
+| `chain_keys.json` | the chain-key table version the vectors use (§4.1), its EVM rows equal to `chain-uids.json`'s; the readers load it, never their own table |
+| `receive.json` | a UA id and a native address (EVM, Sui, and Solana with its base58 case kept); with and without `amount`, `pay_no`, `token`, `relayer`: canonical hex, the base64url URI and the readable URI of each (a row with no readable form says so); the same `receive` on `avalanche-mainnet` and `avalanche-testnet`: two byte forms, two texts |
+| `pay_request.json` | unsigned and payee-signed, each with and without `payer` and with and without a `relayer` hint: the `PaymentRequest` digest of each (one type string, absent fields hashed as zero); `entryRef` equal to the metatx vectors' `metaPayId` for the same `PayMeta`; the payer's `UAMetaTransfer` digest for a request with a non-zero hint, unbound (both mode bits clear, built once with the hint copied into a message `relayer` and once with zero: one digest, equal to the digest of a request without a hint) and bound (`MODE_RESTRICT_RELAYER`, `relayer` = the hint: another digest); the readable URI of every unsigned row; one row on a v1 family |
+| `eip681.json` | native with and without `amount`, a plain ERC-20 with `amount`, each as exact text in EIP-55 case and as the symbol's bytes |
+| `signed_op.json` | a secp256k1 transfer (info + 1 signature part); **an `mldsa65` derived-UA payment: info part + 2 signature parts**; an `slhdsa128s` op (3 parts); the `mldsa65` payment at a 1,140-byte maximum (5 parts); a byte string with a digit run and Shift-JIS-shaped pairs; each assembled from every order of its parts; a confidential transfer unbound and one bound to the scanner, and an unshield, each with its review rows (the fixed line, the public signed fields, the front-running line when unbound) |
 | `bulk.json` | a Zether single transfer (k = 6, systematic and the first repair frames); a PQZL transfer at `n2048-kmax1024` (k ≈ 68) with repair frames and a decode from a mixed subset; a class (c) row (pins only, the bulk file beside it); a digest rebuilt from pins for `UAPqzTransfer` (`bytes[]`, `bytes` in a struct array) equal to the full struct's digest in `typed_ops.json` |
 | `link.json` | one `LinkSession` offer |
 | `fountain.json` | the UR fountain algorithm's published reference cases; k = 72 with frame numbers near 2^32 |
-| `negative.json` | one row per refusal of §13 that bytes can show: each refused major type (negative integer, float, tag, `null`, indefinite length, a non-text key, non-ASCII text, trailing bytes), unsorted keys, a non-shortest integer, a duplicate key, an unknown field, a missing field, a wrong type, `u256` with a leading zero or above 2^256 − 1, an uppercase EVM address, depth 10, a map of 65, an array of 257, a text of 65 B, prefix `0x02` and wrong magic, an unknown kind, the URI forms (padding, non-zero trailing bits, `+` or `/`, upper-case scheme, 3,945 characters), an oversized part, an info part above one QR, a foreign part, a second info part, a conflicting part, a count mismatch, a frame number out of range, an incomplete set, 17 parts in a slot, k = 73, a digest mismatch, a flipped signature byte with the digest equal, a signature valid for the bare digest but not for the UA message, a key that does not derive `signer`, a payee signature by another id than `to`, a pin at a path that may not be pinned, a bulk pin mismatch, a missing bulk field, a schema 3 body, a v1-family `pay_no`, an expired request, a stale link offer, another chain, a `pay-request` for another payer, a `link` from text |
+| `negative.json` | one row per refusal of §13 that bytes can show: each refused major type (negative integer, float, tag, `null`, indefinite length, a non-text key, non-ASCII text, trailing bytes), unsorted keys, a non-shortest integer, a duplicate key, an unknown field, a missing field, a wrong type, `u256` with a leading zero or above 2^256 − 1, an uppercase EVM address, depth 10, a map of 65, an array of 257, a text of 65 B, prefix `0x02` and wrong magic, an unknown kind, the URI forms (padding, non-zero trailing bits, `+` or `/`, upper-case scheme, 3,945 characters), an oversized part, an info part above one QR, a foreign part, a second info part, a conflicting part, a count mismatch, a frame number out of range, an incomplete set, 17 parts in a slot, k = 73, a digest mismatch, a flipped signature byte with the digest equal, a signature valid for the bare digest but not for the UA message, a key that does not derive `signer`, a payee signature by another id than `to`, a payee signature over the request with its relayer hint swapped, an explicit zero `payer` and an explicit zero `relayer`, a pin at a path that may not be pinned, a bulk pin mismatch, a missing bulk field, a schema 3 body, a v1-family `pay_no`, an expired request, a stale link offer, another chain, the Fuji `receive` under the C-Chain profile and the reverse (in both URI forms and as bytes), `chain_id` missing on an EVM payload, a `pay-request` for another payer, a `link` from text; the readable form: an unknown, duplicated and out-of-order parameter, upper-case hex, a leading zero in `amount` and `valid_until`, `+`, a `%` escape, an empty value, padding in `body`, both `to_ua` and `to_address`, `save=2`, an unknown `<kind>`, an unknown chain key, `…/native/pay`, upper-case scheme, a readable line in a `.scaasqr` file; `QrNoReadableForm` for a signed request, a `signed-op`, a `link`, a confidential token and a token text outside the set; `QrEip681Refused` for a `to_ua`, a `pay_no`, a `relayer`, a confidential token, an unlisted token, a listed token of another kind, an ERC-20 without `amount`, a non-EVM chain and a pair that is not the active profile's; `QrNotScaas` for an `ethereum:` text and a foreign text longer than 128 characters (shown cut); `QrConfidentialAmount` for a confidential `receive` with `amount` and a confidential `pay-request`; a confidential `signed-op` whose envelope adds an `amount` field (`QrFieldUnknown`) |
 
 ## 11. Tests and gates
 
@@ -645,12 +799,26 @@ assembles to the same payload; `cargo build --target wasm32-unknown-unknown` of 
 and the binary vectors through the chosen decoder, with one byte-mode segment required; a test that `sign_typed` refuses the
 by-hash builder input; a test that importing a confidential `signed-op` addressed to the importer makes no call to a
 decapsulation, PQZ or Zether decryption handle (a counting spy, with the ordinary balance read as its positive control); the
-TUI's snapshot of a drawn QR at a size that holds it; a CLI end-to-end on a local chain: `op hand-off` → `qr hand-off` →
-`qr export --format png-set` → `qr import` → `op import-signed` → submit, for a secp256k1 and an `mldsa65` signer. Before §12 Q1
-is ruled: a simulation of the coder at k = 6, 11, 68 and 72 with 10 % and 20 % frame loss, and a measured scan time on two
-phones for each class and for signature parts above version 30, reported, not a gate.
+TUI's snapshot of a drawn QR at a size that holds it; the review rows the rulings added, each against its exact text: the
+confidential fixed line with its public-field names, the relayer row in both states derived from the mode bits (and not from the
+field), the unsigned Caution of every readable import, "payee is a contact" apart from "signed by"; a CLI end-to-end on a local chain: `op hand-off` → `qr hand-off` →
+`qr export --format png-set` → `qr import` → `op import-signed` → submit, for a secp256k1 and an `mldsa65` signer. Before the
+build fixes the timing (Q1 ruled the bound): a simulation of the coder at k = 6, 11, 68 and 72 with 10 % and 20 % frame loss, and
+a measured scan time on two phones for each class and for signature parts above version 30, reported, not a gate. Before the
+EIP-681 export ships: two common wallets read each of its forms (native, ERC-20, with and without `amount`, on a chain they do
+not know), reported, not a gate.
 
-## 12. Open questions for the owner
+**Residuals** (stated, not fixed by this frame):
+
+| Residual | Cost | Who avoids it |
+|---|---|---|
+| An unbound confidential `signed-op` landed first by the partner or anyone holding it (§6) | the scanner's relay reverts at the nonce: the gas of a failed transaction of that size (a PQZL transfer about 77 KB of calldata, PQZH about 264 KB), under its cap each time | the scanner, by asking the signer to bind the operation to its payer address, or by declining an unbound one |
+| The same race with a `pqzVerdict` of the racer's choice (it is outside every signature, §3.3) | UNSURE: a revert with nothing consumed costs as the row above; settled by the PQZ entry's verdict branch when the import is built | as above |
+| A readable text made before a release moved its chain key's pair (§4.1) | the text names the chain after the move; its base64url twin is refused | the chain's operator, by a new key for a new chain (NET-ALL-25) |
+
+## 12. Owner questions
+
+Q1 to Q7 are ruled (2026-11-28); each rule lives in the section named, the text below is the record. Q8 is open.
 
 - **Q1. The class (b) bound.** Ruled (owner 2026-11-28): as recommended. Recommendation: k ≤ 72 (≈ 82 KB, about 15 to 20 s at 5 frames a second), so a PQZL transfer at
   `n2048-kmax1024` goes by animated QR, fixed after the simulation and measurement of §11; the alternative is k ≤ 24 (≈ 27 KB,
@@ -672,7 +840,13 @@ phones for each class and for signature parts above version 30, reported, not a 
   number shown beside a hidden amount invites fraud (the amount paid on chain differs from the one in the QR), and a scanner
   never decrypts the payload's ciphertexts to find it (ARCH-POS-13). A recipient learns what it received only from its own
   balance in chain state after the operation lands. The SDK's JSON cap rises to 1 MiB, the figure recorded against the largest
-  PQZH transfer of the vectors, when this is built.
+  PQZH transfer of the vectors, when this is built. The rule as specified: §6 (the import's checks, the cost cap, the public
+  signed fields), §9 (the fixed line).
+- **Q8. A payee-fee request and the unbound default** (open; post-review D-3 / E-7). A payee that pays its relayer by
+  `UAPayeeFee` needs the payer's payment bound: the contract refuses an unbound one (`PayeeFeeShape`, `MODE_RESTRICT_RELAYER`
+  required, [CTR-MTX-06](../../contracts/metatx.md#CTR-MTX-06)), so a payer who keeps the default cannot settle such a request the way it
+  was meant. Proposed: a `pay-request` whose fee mode is payee-fee requires binding to its relayer hint (forced by the contract);
+  every other mode stays unbound by default. Today a `pay-request` carries no fee mode.
 
 ## 13. Appendix: refusals
 
@@ -681,6 +855,10 @@ Named refusals of the format core and the SDK's QR calls (the CLI maps each to i
 `QrNotCanonical` (the CBOR or the URI form), `QrFieldUnknown`, `QrFieldDuplicate`, `QrVersion`, `QrKindUnknown`, `QrDepth`,
 `QrTooLarge` (a part, a line, a file, a count above its bound), `QrInfoTooLarge`, `QrInfoConflict`, `QrPartForeign`,
 `QrPartConflict`, `QrPartIndex`, `QrPartCount`, `QrIncomplete`, `QrDigestMismatch`, `QrSignatureInvalid`, `QrPinRefused`,
-`QrBulkMismatch` (a pin or the CRC-32 of an assembled object), `QrBulkMissing`, `QrEip681Refused` (a payload the EIP-681 export cannot carry), `QrNotScaas` (an EIP-681 or other non-`scaas:` URI scanned), `QrSchemaRefused`, `QrPayMetaRefused`,
+`QrBulkMismatch` (a pin or the CRC-32 of an assembled object), `QrBulkMissing`, `QrEip681Refused` (a payload the EIP-681 export
+cannot carry), `QrNotScaas` (an EIP-681 or other non-`scaas:` URI scanned), `QrNoReadableForm` (a payload the readable URI form
+cannot carry), `QrConfidentialAmount` (an `amount` on a confidential token's `receive`, a `pay-request` on one), `QrSchemaRefused`,
+`QrPayMetaRefused`,
 `QrPayerMismatch`, `QrExpired`, `QrSourceRefused`, `QrNeedsScaas`, `QrNotFound` (no QR in an image), `QrImageTooLarge`,
-`QrTerminalTooSmall`; and the existing `ProfileMismatch` and `Import*` refusals of the hand-off import.
+`QrTerminalTooSmall`; and the existing `ProfileMismatch` (a chain pair not the active profile's, or an unknown chain key, the
+message telling which) and `Import*` refusals of the hand-off import.

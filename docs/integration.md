@@ -344,7 +344,7 @@ Per-namespace filtering at serve time: only contracts in the namespace token sub
 | Ranges | Reject a gap (`from_block > indexed + 1`) ⇒ halt events; straddle (`from_block ≤ indexed < to_block`) ⇒ drop events at or below `indexed`; dedup events by `(chain_key, tx_hash, log_index)` |
 | Unknown contract | Event for a contract that is not a client token ⇒ drop and count, never fail the page |
 | Finality | A job is **final** when a `MetaTransactionExecuted` with its digest arrives in a range (by any relayer: `landed_elsewhere = relayer ∉ our signers`). A range is served only after ≥ `quorum` independent RPC endpoints returned the same event set ([NODE-IDX-01](node/indexer-feeds.md#NODE-IDX-01)); a chain with `quorum = 1` is single-provider trust — confirm the chain's quorum with the node operator (gauge `scaas_finality_quorum{chain}`) before booking material amounts on it |
-| Business booking | Only from `PaymentSettled` (or the family equivalent) in a range, matched on `(chain, contract, from, to, entryRef)` for a request the client issued (payer locked at `start`); isolate business hooks (savepoint) so a failing hook never blocks the cursor |
+| Business booking | Only from `PaymentSettled` (or the family equivalent) in a range, matched on `(chain, contract, from, to, entryRef)` for a request the client issued (payer locked at `start`; a request issued without a payer on `(chain, contract, to, entryRef)` over every payer, [payment references](#payment-references)); isolate business hooks (savepoint) so a failing hook never blocks the cursor |
 | Consumed | `consumed` keeps the business request pending; it becomes final via the event, or dead if no event arrives by `valid_until + grace + 1 h` (superseded) |
 | Latency | Poll with `wait = 0` every minute, and every ~10 s while pushed jobs are live (≤ 25 s long-poll available for clients that can hold a connection) |
 
@@ -419,7 +419,8 @@ batch    = any lane of the payer                      # convention for one payme
   `valid_until > now + 30 d` gives none after a prune; wallet connectors and `clientkeys` refuse
   such ops ([NET-ALL-01](networks/README.md#NET-ALL-01)). The non-EVM families keep their pay-once lane until their rounds.
 - The client stores `entryRef` with a UNIQUE constraint on the request, together with `chain`, `token`,
-  `receiving_address`, `payer_address` (locked at start), `amount_base`, `issued_valid_until` and the `PayMeta` preimage (a
+  `receiving_address`, `payer_address` (locked at start; none for a request issued without a payer), `amount_base`,
+  `issued_valid_until` and the `PayMeta` preimage (a
   payment landed through the generic `mtxExecuteTransfer` carries no `PaymentMeta`, O12, and is reconciled from it).
 - Do **not** derive `entryRef` from business identifiers (`keccak256(company ‖ move ‖ amount ‖ salt)` as in older
   drafts): a random salt needs no management and cannot be brute-forced from known invoice numbers.
@@ -446,13 +447,15 @@ batch    = any lane of the payer                      # convention for one payme
 4. Drift checks: unmatched inbound `Transfer` to a watched wallet ⇒ drift A record; hourly `balances` vs ledger balance
    of the token's bank journal ⇒ drift C ([accounting](#accounting)).
 
-A third party paying 1 unit with someone else's `entryRef` is not counted (`from` is not the request's payer), so it can neither complete a request nor push it into needs attention; it is just money received. Reconciliation matches on (chain, token contract, payer, receiving address,
+A third party paying 1 unit with someone else's `entryRef` is not counted (`from` is not the request's payer), so it can neither complete a request nor push it into needs attention; it is just money received. A request issued without a payer (a QR `pay-request` with no `payer`, owner 2026-11-28, [QR spec](superpowers/specs/2026-11-28-qr-payloads.md) §3.2; SPECIFIED) is matched in step 1 without the `from` term, over every payer: that protection does not hold for it, and its reconciliation (who paid, partial, too much, a refund to each payer on its own key) is the payee's. Reconciliation matches on (chain, token contract, payer, receiving address,
 `entryRef`) — never on the amount alone.
 
 <a id="payment-terms"></a><a id="INT-ERP-06"></a>**INT-ERP-06** — **Self-service payment terms use token-fee mode `NONE` and
 `MODE_RESTRICT_RELAYER` to the company relayer, `fee = 0` (the company relayer pays the gas fee), and a server-chosen validity (default 300 s).** This trades
 payer self-submission for front-run safety; payee self-relay stays available ([inbound](#inbound)). With bus scope
-`open` the relayer is left unbound instead ([INT-ERP-15](#INT-ERP-15)).
+`open` the relayer is left unbound instead ([INT-ERP-15](#INT-ERP-15)). A request issued as a QR `pay-request` pins no relayer:
+there the payer's client builds the payment, and the request's `relayer` is a hint the payer may bind, unbound by default (owner
+2026-11-28, [QR spec](superpowers/specs/2026-11-28-qr-payloads.md) §3.2).
 
 <a id="currency"></a><a id="INT-ERP-07"></a>**INT-ERP-07** — **No FX: the token's currency equals the order currency.**
 A rate quote would need a price source; only a token pegged to the document's currency is offered (the example
@@ -773,7 +776,9 @@ request it issues; the payer's terms stay fee `NONE`; once the payer's address i
 payee signs `UAPayeeFee` over the `paymentDigest` (a `SmartKeyAccount` payee signs through `mtxExecuteAsOwner` rules) and
 books payment `N` received and fee `F` paid from `PaymentSettled` + `UAPayeeFeePaid`. The **payer ERP** is unchanged
 (pays `N`, books `N`). **E-cheque flow:** the payee's request names the relayer lane; the payer signs offline with that
-relayer bound and hands the intent to the payee, which co-signs over the digest and pushes it to that node.
+relayer bound and hands the intent to the payee, which co-signs over the digest and pushes it to that node. In a QR
+`pay-request` that relayer is a hint and binding it is the payer's choice (QR spec §3.2; how a payee-fee request meets the unbound
+default is put to the owner, QR spec §12 Q8).
 
 Never accept raw subject-signed native transactions (Sui `txBytes`, GRAM BOC from the subject wallet, Stellar envelopes)
 as the integration format: they order operations by the subject's account sequence. Always use the contract-level

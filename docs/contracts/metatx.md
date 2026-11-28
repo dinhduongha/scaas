@@ -617,7 +617,8 @@ batch    = any lane of the payer                      # convention for one payme
 - On a family that prunes lane state the horizon rules of [CTR-MTX-04](#CTR-MTX-04) stay: a signature with
   `valid_until > now + 30 d` there gives no replay guarantee after a prune. Wallet connectors and `clientkeys` refuse such ops.
 - The client stores `entryRef` with a UNIQUE constraint on the request, together with `chain`, `token`,
-  `receiving_address`, `payer_address` (locked at start), `amount_base`, `issued_valid_until`, and the `PayMeta` preimage.
+  `receiving_address`, `payer_address` (locked at start; none for a request issued without a payer), `amount_base`,
+  `issued_valid_until`, and the `PayMeta` preimage.
 - Do **not** derive `entryRef` from business identifiers (`keccak256(company ‖ move ‖ amount ‖ salt)` as in older
   drafts): a random salt needs no management and cannot be brute-forced from known invoice numbers; a business number, if
   any, goes in `payNo` or the body, not recommended in clear ([ARCH-POS-17](../decisions.md#ARCH-POS-17)).
@@ -653,8 +654,11 @@ cross-check `UAMetaTransactionExecuted(digest)` to mark the job final; a taxed r
 ([CTR-AS-18](asset-suite.md#CTR-AS-18)); (4) drift checks: an unmatched inbound
 `Transfer` to a watched wallet ⇒ a drift record; hourly `balances` vs the ledger balance of the token's journal. A
 third party paying 1 unit with someone else's `entryRef` is not counted at all (`from` is not the request's payer), so it can neither complete a request nor push it into "needs attention";
-it is just money received (review C5-10: one rule, the key `(token, payer, payee, entryRef)`, in every document). The full client procedure is in
-[integration.md](../integration.md#payment-references).
+it is just money received (review C5-10: one rule, the key `(token, payer, payee, entryRef)`, in every document). A request issued
+without a payer (a QR `pay-request` with no `payer`, owner 2026-11-28, [QR spec](../superpowers/specs/2026-11-28-qr-payloads.md)
+§3.2; SPECIFIED) is matched on `(token, payee, entryRef)` over every payer: C5-10's protection does not hold for it, any payer's
+payment counts, and reconciling it (who paid, partial, too much, a refund to each payer on its own key) is the payee's. The full
+client procedure is in [integration.md](../integration.md#payment-references).
 
 ## 7. Pay-once horizon
 
@@ -1418,7 +1422,7 @@ on a Hedera profile); an `msig` payer at its 12 M budget with any PQ payee does 
 | Threat | Defence |
 |---|---|
 | A client prices its own payment (sends a small amount) | `value` is built from the business document server-side; the client only returns a signature |
-| A third party pays 1 unit with someone else's `entryRef` | not counted: the match requires `from == request.payer_address`; a stranger's payment is only money received |
+| A third party pays 1 unit with someone else's `entryRef` | not counted: the match requires `from == request.payer_address`; a stranger's payment is only money received. A request issued without a payer counts every payer's payment; the payee reconciles it ([CTR-MTX-03](#CTR-MTX-03)) |
 | Paying twice | one pay lane with nonce 0 per request ([CTR-MTX-03](#CTR-MTX-03)) |
 | A relayer front-runs and changes the recipient | every field of both structs is in the digest (`MetaTransfer.to`/`value`/`entryRef`, `MetaTransaction.data`); `MODE_RESTRICT_RELAYER` |
 | Replay across chains or tokens | domain `chainId` + `salt = chain_uid` + `verifyingContract` ([CTR-GEN-05](README.md#CTR-GEN-05)) |
