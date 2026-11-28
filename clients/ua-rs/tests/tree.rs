@@ -1095,7 +1095,9 @@ const KNOWN_FAULTS: &[&str] = &[
     "small-order/epoch-1",
     "small-order/epoch-2",
     "flag-clear/epoch-1",
-    // the path-less delta's faults: a bad Welcome, wrong tags, a bad sealedInfo; an insider's record under B's UA
+    // the path-less delta's faults: a wrong tag on an unanchored joiner's own record (F-1); a bad Welcome, wrong tags, a bad
+    // sealedInfo; an insider's record under B's UA
+    "pathless-first/epoch-3",
     "pathless-faults/epoch-2",
     "pathless-faults/epoch-3",
     "pathless-faults/epoch-5",
@@ -3346,11 +3348,22 @@ fn tree_resume_keeps_the_leaves_under_review() {
         cold.suspects.iter().map(|s| s.epoch).collect::<Vec<_>>(),
         "the C45 epochs"
     );
+    // F-1 (owner 2026-11-28): A's own wrong-tag record at 6 lies between the resume's start and the head
+    assert_eq!(
+        resumed.warnings.iter().map(|w| w.epoch).collect::<Vec<_>>(),
+        vec![6],
+        "the F-1 warning across the resume"
+    );
+    assert_eq!(
+        resumed.warnings.iter().map(|w| w.epoch).collect::<Vec<_>>(),
+        cold.warnings.iter().map(|w| w.epoch).collect::<Vec<_>>(),
+        "the warnings"
+    );
     // fable-F-2 = C-4: `tree_resume` adopts, and the consumed replay keeps no head's `next`
     assert!(early.head.is_none(), "the old head's next dropped by adopt");
-    // the compromise warnings as well (the first P9 mutant run: dropping them survived, `pathless-faults` has none for A
-    // before epoch 8): B's own path-less record of `pathless-own` it cannot reproduce warns at epoch 3 and puts leaf 4
-    // under review; a resume that finds no new epoch keeps both
+    // the compromise warnings as well (the first P9 mutant run: dropping them survived): B's own path-less record of
+    // `pathless-own` it cannot reproduce warns at epoch 3 and puts leaf 4 under review; a resume that finds no new epoch
+    // keeps both
     let sc = v["scenarios"]
         .as_array()
         .unwrap()
@@ -3387,5 +3400,82 @@ fn tree_resume_keeps_the_leaves_under_review() {
         ),
         (vec![3], vec![4]),
         "a resume keeps the warning and its leaf"
+    );
+}
+
+/// F-1 (owner 2026-11-28): a device's own path-less record whose nonce its seed reproduces but whose tag it could not have
+/// written is the compromise warning, with no key and no chain until a path commit, at an anchored device (`pathless-faults`:
+/// B at 3, A at 6) and at one unanchored in the run (`pathless-first`: C joined path-less at 1, its own Add at 3); the
+/// controls: another member's wrong tag stays C45 at an anchored device and "welcome may not match" at an unanchored one.
+#[test]
+fn tree_pathless_own_wrong_tag_is_the_warning() {
+    let v = pq("tree-secrets");
+    let (_w, keys) = keys();
+    let world = World::new(&v);
+    let mut differs = vec![];
+    let mut replay = |name: &str, who: &str| {
+        let sc = v["scenarios"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["name"] == name)
+            .unwrap();
+        let mut home = scenario(&keys, &v, &world, sc, &mut differs, None);
+        let (d, kem) = &world.devices[who];
+        let dev = TreeDevice {
+            ua: a32(&d["ua"]),
+            key_id: u(&d["keyId"]),
+            kem,
+        };
+        let r = keys
+            .tree_replay(SC, &mut home, &dev, None, 0)
+            .unwrap()
+            .unwrap();
+        let rows: BTreeMap<u64, (State, bool)> = r
+            .epochs
+            .iter()
+            .map(|e| (e.epoch, (e.state, e.k.is_some())))
+            .collect();
+        (rows, r.head.is_some())
+    };
+    let (b, _) = replay("pathless-faults", "B");
+    let (a, _) = replay("pathless-faults", "A");
+    let (c, c_head) = replay("pathless-first", "C");
+    assert_eq!(b[&3], (State::Compromise, false), "B's own record");
+    assert_eq!(a[&6], (State::Compromise, false), "A's own record");
+    assert_eq!(
+        c[&2],
+        (State::Followed, true),
+        "control: C's own honest Add"
+    );
+    assert_eq!(
+        c[&3],
+        (State::Compromise, false),
+        "C's own record, unanchored"
+    );
+    assert!(!c_head, "C holds no head");
+    // no chain after it: B's next path-less epoch is not followed until A's path commit at 7
+    assert_eq!(
+        b[&4].0,
+        State::NotFollowed("parent not followed"),
+        "B lost the chain"
+    );
+    assert_eq!(b[&7].0, State::Followed, "the path commit reaches B");
+    // controls: another member's wrong tag
+    assert_eq!(a[&3], (State::AuthorDidNotHold, true), "B's record at A");
+    assert_eq!(
+        replay("pathless-faults", "C").0[&6].0,
+        State::AuthorDidNotHold,
+        "A's record at C"
+    );
+    assert_eq!(
+        replay("pathless-first", "A").0[&3].0,
+        State::AuthorDidNotHold,
+        "C's record at A"
+    );
+    assert_eq!(
+        replay("pathless-first", "C2").0[&3].0,
+        State::NotFollowed("welcome may not match"),
+        "C's record at C2, unanchored"
     );
 }

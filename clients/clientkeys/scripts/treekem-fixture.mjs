@@ -763,7 +763,9 @@ export function pathlessScenario() {
   commit(w, "A", { pathless: true, adds: [["G", 7]] }); // 6: sincePath 1
   return w;
 }
-/** Row 20: the first commit after creation is path-less (parent epoch 0, `next_0` under genesisCtx), bound 0. */
+/** Row 20: the first commit after creation is path-less (parent epoch 0, `next_0` under genesisCtx), bound 0. Then C, a
+ *  path-less joiner still unanchored in the run, finds its own record with a reproduced nonce and a wrong tag (F-1, owner
+ *  2026-11-28: the compromise warning at C, no key; A and B "author did not hold"; C2, unanchored, "Welcome may not match"). */
 export function pathlessFirstScenario() {
   const w = createSession({
     tag: "pathless-first",
@@ -776,6 +778,7 @@ export function pathlessFirstScenario() {
   });
   commit(w, "A", { pathless: true, adds: [["C", 2]] }); // 1
   commit(w, "C", { pathless: true, adds: [["C2", 3]] }); // 2: the joiner adds its own second key
+  commit(w, "C", { pathless: true, adds: [["C3", 4]], faults: { tag: hex(rnd("tree-secrets/pathless-first/tag-3")) } }); // 3
   return w;
 }
 /** The faults a path-less record can carry (§6.2, §6.3, §6.5): a bad Welcome (D: not followed at its join); a wrong tag

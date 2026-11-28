@@ -1643,13 +1643,26 @@ test("the path-less re-check's R-1: a resume keeps the compromise warnings, as a
 
 test("F-1 (owner 2026-11-28): a device's own path-less record whose nonce its seed reproduces but whose tag it could not have written is the compromise warning, with no key and no chain until a path commit; another member's wrong tag stays C45", () => {
   const w = f.pathlessFaultsScenario(false);
-  const st = (name) =>
-    Object.fromEntries(f.replayOf(w, name).epochs.map((e) => [e.epoch, [e.state, e.reason ?? null]]));
+  const rows = (w, name) => Object.fromEntries(f.replayOf(w, name).epochs.map((e) => [e.epoch, e]));
+  const st = (name, at = w) =>
+    Object.fromEntries(Object.entries(rows(at, name)).map(([n, e]) => [n, [e.state, e.reason ?? null]]));
   const B = st("B");
   const A = st("A");
-  // epoch 3: B's own path-less Add with a wrong tag; epoch 6: A's own
+  // epoch 3: B's own path-less Add with a wrong tag; epoch 6: A's own; neither takes a key (C-11 / G-4)
   assert.deepEqual(B[3], ["compromise", null], "B's own record");
   assert.deepEqual(A[6], ["compromise", null], "A's own record");
+  assert.equal(rows(w, "B")[3].K, undefined, "B takes no key");
+  assert.equal(rows(w, "A")[6].K, undefined, "A takes no key");
+  // the same own record at a device unanchored in the run (C joined path-less at 1; its own Add at 3 has a wrong tag):
+  // the warning too, before the unanchored test; C2, unanchored, reads another's wrong tag as "welcome may not match"
+  const first = f.pathlessFirstScenario();
+  const C = st("C", first);
+  assert.deepEqual(C[2], ["followed", null], "control: C's own honest Add");
+  assert.deepEqual(C[3], ["compromise", null], "C's own record, unanchored");
+  assert.equal(rows(first, "C")[3].K, undefined, "C takes no key");
+  assert.equal(f.replayOf(first, "C").head, null, "C holds no head");
+  assert.deepEqual(st("C2", first)[3], ["not followed", "welcome may not match"], "control: C's record at C2");
+  assert.equal(st("A", first)[3][0], "author did not hold", "control: C's record at A");
   // no chain after it: B's next path-less epochs are not followed until A's path commit at 7
   assert.deepEqual(B[4], ["not followed", "parent not followed"], "B lost the chain");
   assert.equal(B[7][0], "followed", "the path commit reaches B");
