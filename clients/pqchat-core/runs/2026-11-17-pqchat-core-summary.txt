@@ -169,3 +169,14 @@ chainstore | bind | 605060077 | 0 | -
 chainstore | pqc-chain | 605060077 | 0 | 9 passed, 0 failed, 0 ignored (24 binaries)
 chainstore-merge | pqc-test | c6bdf53c5 | 0 | 156 passed, 0 failed, 9 ignored (24 binaries)
 chainstore-merge | bind | c6bdf53c5 | 0 | -
+chainstore-c4 | pqc-reads | d902e84c2 | 0 | reads 61 (50 trusted), writes 19, R2 50; 0 refused
+chainstore-c4 | docs | d902e84c2 | 0 | -
+chainstore-c4 | mutants-check | d902e84c2 | 0 | -
+chainstore-c4 | pqc-clippy | d902e84c2 | 0 | -
+chainstore-c4 | pqc-wasm | d902e84c2 | 0 | -
+chainstore-c4 | pqc-test | d902e84c2 | 0 | 157 passed, 0 failed, 9 ignored (24 binaries)
+chainstore-c4 | pqc-chain | d902e84c2 | 0 | 9 passed, 0 failed, 0 ignored (24 binaries)
+chainstore-c4 | sdk-clippy | d902e84c2 | 0 | -
+chainstore-c4 | sdk-test | d902e84c2 | 0 | 409 passed, 0 failed, 17 ignored (36 binaries)
+chainstore-c4 | bind | d902e84c2 | 0 | -
+# chainstore-c4, scaas-cli at d902e84c2 (by hand, CI's commands): cargo test --features dev-profiles 11 + 13 passed (one_command_per_sdk_call_both_ways ok); cargo clippy --all-targets --features dev-profiles -D warnings rc 0
