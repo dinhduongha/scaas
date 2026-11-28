@@ -39,6 +39,14 @@ stays keyless and only carries or fetches verdicts. The key is an encrypted JSON
 keystore's path and the environment variable holding its password, never a secret
 ([`pqz-verifier.example.toml`](pqz-verifier.example.toml)).
 
+**Keystore rules at start** ([CTR-PQZ-28](../docs/decisions.md#ctr-pqz-28--the-verifier-ua-kinds-frozen-shape-fixed-or-transferable-with-notice-immediate-revocation)'s
+Change of 2026-11-28): the verdict key signs with k256 0.14. The keystore must be a v3 JSON file of at most 64 KiB,
+`aes-128-ctr` with a 16-byte `iv`, a 32-byte ciphertext and MAC, `dklen` 32 to 64, and scrypt (`n` a power of two up to
+2^18, `r` ≤ 8, `p` ≤ 4) or PBKDF2-HMAC-SHA256 (`c` ≤ 2^22); anything else is refused by name at start. **A keystore whose
+plaintext is 24 to 31 bytes** (some tools drop a key's leading zero bytes) loaded before this change and is refused now:
+re-export the key as 32 bytes. Errors name the reason only, never the password or the file's content; the password may be
+any bytes, and the process environment keeps its own copy of it while the verifier runs.
+
 ## Operator rule: trusted nodes, or a majority
 
 **Under `rpc_policy = "failover"` (the default) every `rpc_urls` endpoint must be a node the verifier's operator trusts**

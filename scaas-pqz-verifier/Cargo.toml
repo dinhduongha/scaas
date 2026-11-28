@@ -44,6 +44,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # the alloy signer as the reference the verdict key is checked against (tests/verdict_key.rs) and the anvil tests' wallets;
 # the binary signs with VerdictKey only
 alloy = { version = "~1.6", default-features = false, features = ["signer-local"] }
+# tests/keystore.rs: a deterministic rng for eth-keystore's writer (its rand_core generation)
+rand_core = { version = "0.6", default-features = false }
 # tests/anvil.rs: anvil_dumpState is gzipped, --load-state reads its JSON (the strict-majority case, plan T9)
 flate2 = "1"
 tower = { version = "0.5", features = ["util"] }

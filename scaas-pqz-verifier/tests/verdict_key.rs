@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! The verdict key on k256 0.14 (owner 2026-11-28, CTR-PQZ-28 Change): byte for byte the signature of the alloy path it
-//! replaces (`PrivateKeySigner`, k256 0.13), for the contracts' verdict vectors and for 2,000 derived keys.
+//! The verdict key on k256 0.14 (owner 2026-11-28, CTR-PQZ-28 Change): byte-identical to the signature of the alloy path
+//! it replaces (`PrivateKeySigner`, k256 0.13) for every prehash below n, so for every keccak256 digest: the contracts'
+//! verdict vectors and 2,000 derived keys. A prehash >= n (unreachable for a digest) differs: k256 0.13 fed it unreduced
+//! to RFC 6979; the new path's signature there is still valid, low s and recoverable (review VK-4).
 
 use alloy::primitives::{keccak256, Address, Signature, B256, U256};
 use alloy::signers::local::PrivateKeySigner;
@@ -97,4 +99,27 @@ fn refuses_a_secret_that_is_no_key() {
         );
     }
     let _: Address = key(B256::with_last_byte(1)).address();
+}
+
+/// A prehash >= n (k256 0.13 and 0.14 differ there, VK-4): the new path's signature is valid, low s, v in {27, 28} and
+/// recovers the signer.
+#[test]
+fn prehash_at_or_above_n_signs_validly() {
+    let n = U256::from_str_radix(
+        "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
+        16,
+    )
+    .unwrap();
+    let k = key(B256::with_last_byte(0x42));
+    for h in [n, n + U256::from(1), U256::MAX] {
+        let hash = B256::from(h);
+        let sig = k.sign_hash(&hash);
+        assert!(sig[64] == 27 || sig[64] == 28);
+        assert!(U256::from_be_slice(&sig[32..64]) <= n >> 1, "high s");
+        let back = Signature::from_raw(&sig)
+            .unwrap()
+            .recover_address_from_prehash(&hash)
+            .unwrap();
+        assert_eq!(back, k.address());
+    }
 }

@@ -3806,6 +3806,7 @@ dependencies = [
  "pqcrypto-traits",
  "pqz-ffi",
  "pqz-offchain",
+ "rand_core 0.6.4",
  "scaas-rpc",
  "serde",
  "serde_json",

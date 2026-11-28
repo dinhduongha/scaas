@@ -29,7 +29,7 @@ use abi::{
 };
 use chain::{Block, Chain, ChainError};
 
-pub use key::VerdictKey;
+pub use key::{password_from_env, VerdictKey};
 pub use pqz_ffi::{Word, INVALID, VALID};
 
 /// pqz-ffi's verdict on a precompile input `u8(op) ‖ be32(len) ‖ statement ‖ proof`; in production [`offchain`].
