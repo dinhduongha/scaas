@@ -20,6 +20,7 @@ import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
 import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
 import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
 import {PqChatTreeMembers} from "../../src/pqchat/PqChatTreeMembers.sol";
+import {PqChatLib} from "../../src/pqchat/PqChatLib.sol";
 
 /// @dev `PqChatTypes` over calldata, run in the script's own EVM (never broadcast): the typed digests and ids.
 contract PqChatDigests {
@@ -190,18 +191,21 @@ contract PqChatOnchain is OnchainBase {
                 e.registry = address(reg);
                 e.params = new bytes32[](1);
                 e.params[0] = bytes32(vm.envOr("CHAIN_CODE_LIMIT", uint256(131_072)));
-                (e.libs, e.libCodeHashes) = (new address[](4), new bytes32[](4));
-                (e.libs[0], e.libCodeHashes[0]) = (topics, topics.codehash);
-                (e.libs[1], e.libCodeHashes[1]) = (tree, tree.codehash);
-                (e.libs[2], e.libCodeHashes[2]) = (views, views.codehash);
-                (e.libs[3], e.libCodeHashes[3]) = (members, members.codehash);
+                // CTR-CHAT-32: the release's linked library first (forge deploys and links it), then the modules
+                address lib = address(PqChatLib);
+                (e.libs, e.libCodeHashes) = (new address[](5), new bytes32[](5));
+                (e.libs[0], e.libCodeHashes[0]) = (lib, lib.codehash);
+                (e.libs[1], e.libCodeHashes[1]) = (topics, topics.codehash);
+                (e.libs[2], e.libCodeHashes[2]) = (tree, tree.codehash);
+                (e.libs[3], e.libCodeHashes[3]) = (views, views.codehash);
+                (e.libs[4], e.libCodeHashes[4]) = (members, members.codehash);
                 f.publishClassEnv(3, 0, 1, f.chainUid(), e);
                 impl = f.deployImplementation{gas: RELEASE_GAS}(
                     id,
                     1,
                     IPqChat.initialize.selector,
                     type(IPqChat).interfaceId,
-                    vm.getCode("PqChat.sol:PqChat"),
+                    type(PqChatFace).creationCode, // linked (vm.getCode reads the unlinked artifact)
                     abi.encode(topics, tree, views, members),
                     f.chainUid()
                 );
@@ -217,6 +221,19 @@ contract PqChatOnchain is OnchainBase {
         _book(PqChatFace(impl).modules()[1], "PqChatTree");
         _book(PqChatFace(impl).modules()[2], "PqChatTreeViews");
         _book(PqChatFace(impl).modules()[3], "PqChatTreeMembers");
+        // CTR-CHAT-32 (Fable D-3): the library the release runs, `libs[0]` of its class env, held in the release's code
+        IFactoryToken.Env memory ce = f.classEnvOf(3, 0, f.classReleaseOf(IOpenFactory.ReleaseId(3, 0, 1)).envVersion);
+        require(_holds(impl.code, abi.encodePacked(ce.libs[0])), "PqChat: libs[0] is not the release's linked library");
+        _book(ce.libs[0], "PqChatLib");
+    }
+
+    function _holds(bytes memory code, bytes memory x) internal pure returns (bool) {
+        for (uint256 i; i + x.length <= code.length; ++i) {
+            uint256 j;
+            while (j < x.length && code[i + j] == x[j]) ++j;
+            if (j == x.length) return true;
+        }
+        return false;
     }
 
     function _instance() internal {
@@ -545,7 +562,10 @@ contract PqChatOnchain is OnchainBase {
 
     /// @dev UA-7 P48, the race of the Fable review P1-2: a session of A, B, C where A removes C from epoch 0 and no child
     ///      follows, so the refusals hold against the final state: C's rekey (PqChatNotMember), B's plain rekey keeping C
-    ///      (PqChatRemovedKept), the remove replayed (PqChatNonceUsed).
+    ///      (PqChatRemovedKept), and A's used nonce in a second `remove` (PqChatNonceUsed). Since E-3 (owner 2026-11-25) an
+    ///      exit checks membership before the nonce, so the byte-for-byte replay of the first `remove` stops at C's
+    ///      membership (PqChatNotMember) and never reaches the nonce; the replay negative names a member still in the epoch
+    ///      (B), signed by A, at the first record's nonce: only the nonce refuses it.
     function _removeRace() internal {
         uint256[] memory abc = new uint256[](3);
         (abc[0], abc[1], abc[2]) = (0, 1, 2);
@@ -558,12 +578,13 @@ contract PqChatOnchain is OnchainBase {
         vm.broadcast(k2);
         chat.remove(r, sg);
         require(chat.removedIn(s3, uas[2]), "removedIn");
+        IPqChat.PqChatRemove memory again = IPqChat.PqChatRemove(s3, s3, 1, _uas(_ids(1)), uas[0], 1);
         _neg(
             a2,
             address(chat),
-            abi.encodeCall(IPqChat.remove, (r, sg)),
+            abi.encodeCall(IPqChat.remove, (again, _sigOf(0, h.remove(again)))),
             IPqChat.PqChatNonceUsed.selector,
-            "pqchat: remove replayed"
+            "pqchat: remove replayed (the admin's used nonce, a member still in the epoch)"
         );
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(s3, 2, 1, 1, s3, s.admins, abc);
         _neg(

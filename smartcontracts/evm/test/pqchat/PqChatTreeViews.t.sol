@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {VmSafe} from "forge-std/Vm.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IPqChatTreeViews} from "../../src/pqchat/IPqChatTreeViews.sol";
 import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
 import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
@@ -27,11 +28,12 @@ contract PqChatTreeViewsPaying is PqChatTreeViews {
     }
 }
 
-/// Owner 2026-11-24 (option A): the tree views of spec §6 in the read-only body module `PqChatTreeViews`, reached through
-/// `PqChat`'s `fallback`. The module's runtime holds no writing opcode; a view through the instance writes no slot of any
-/// account; the fallback refuses value and reaches no selector of `PqChat`, `PqChatTopics` or `PqChatTree`; each view is
-/// checked against the test's own tree model and the clone's storage read slot by slot; the pages keep their caps (C36).
-/// **UNAUDITED.**
+/// Owner 2026-11-24 (option A): the tree views of spec §6 in the read-only body module `PqChatTreeViews`; since CTR-CHAT-32
+/// (owner 2026-11-28: no `fallback` routing) each is declared in `PqChat`'s own ABI and forwarded to the module. The
+/// module's runtime holds no writing opcode; a view through the instance writes no slot of any account; `PqChat` has no
+/// `fallback` or `receive`: value is refused and a selector it does not declare reverts with no data, a writing module's
+/// included; each view is checked against the test's own tree model and the clone's storage read slot by slot; the pages
+/// keep their caps (C36). **UNAUDITED.**
 contract PqChatTreeViewsTest is PqChatTreeModel {
     using stdJson for string;
 
@@ -270,7 +272,7 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
     }
 
     /// Not payable: a view with value, and value with no calldata, refused; a selector nobody has reverts with no data.
-    function test_fallbackRefusesValueAndUnknown() public {
+    function test_noFallbackRefusesValueAndUnknown() public {
         (M memory m,,) = _grown();
         vm.deal(address(this), 1 ether);
         (bool ok,) = address(vchat).call{value: 1}(abi.encodeCall(IPqChatTreeViews.treeOf, (m.sid)));
@@ -307,20 +309,20 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
         return false;
     }
 
-    /// The module's selectors are the interface's and `FACTORY()` (which `PqChat` answers itself), none of `PqChat`'s,
-    /// `PqChatTopics`' or `PqChatTree`'s: the fallback serves no selector another part handles. Every selector of the two
-    /// writing modules that `PqChat` lacks (`treeCreate` among them) reaches neither of them through the instance: it
-    /// reverts with no data, nothing written.
-    function test_fallbackReachesNoOtherModule() public {
+    /// CTR-CHAT-32: every view selector of the module (all but `FACTORY()`, which `PqChat` answers itself) is declared by
+    /// `PqChat` and by neither writing module; every selector of the two writing modules that `PqChat` lacks (`treeCreate`
+    /// among them) reaches nothing through the instance: no `fallback`, so it reverts with no data, nothing written.
+    function test_viewsDeclaredReachNoOtherModule() public {
         (M memory m,,) = _grown();
         bytes4[] memory chatS = _sels("PqChat.sol/PqChat");
         bytes4[] memory viewS = _sels("PqChatTreeViews.sol/PqChatTreeViews");
         bytes4[] memory topicS = _sels("PqChatTopics.sol/PqChatTopics");
         bytes4[] memory treeS = _sels("PqChatTree.sol/PqChatTree");
-        assertEq(viewS.length, 14, "12 views, 2 caps, FACTORY");
+        assertEq(viewS.length, 14, "11 views, 2 caps, FACTORY");
         for (uint256 i; i < viewS.length; ++i) {
             if (viewS[i] == bytes4(keccak256("FACTORY()"))) continue;
-            assertFalse(_in(chatS, viewS[i]) || _in(topicS, viewS[i]) || _in(treeS, viewS[i]), "a view of its own");
+            assertTrue(_in(chatS, viewS[i]), "declared by PqChat");
+            assertFalse(_in(topicS, viewS[i]) || _in(treeS, viewS[i]), "no writing module's");
         }
         assertTrue(
             _in(treeS, PqChatTree.treeCreate.selector) && !_in(chatS, PqChatTree.treeCreate.selector), "treeCreate"
@@ -336,7 +338,7 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
                 (bool ok, bytes memory ret) = address(vchat).call(abi.encodePacked(s, new bytes(1024)));
                 (, bytes32[] memory wr) = vm.accesses(address(vchat));
                 assertFalse(ok, "a writing module's selector refused");
-                assertEq(ret.length, 0, "by the views module: no data");
+                assertEq(ret.length, 0, "no data");
                 assertEq(wr.length, 0, "nothing written");
             }
         }
@@ -345,7 +347,93 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
         assertTrue(ok2, "a view reached");
     }
 
-    /// The interface ids (pins): `IPqChat`'s unchanged by the views, which have their own; both reported.
+    /// CTR-CHAT-32 (what a verified source shows, Blockscout's ABI): `PqChat`'s ABI (`forge inspect PqChat abi`, the
+    /// artifact's `abi`) lists the 13 tree views, each `view`, and holds no `fallback` and no `receive` entry.
+    function test_abiListsTheViewsAndNoFallback() public view {
+        string memory art =
+            vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/PqChat.sol/PqChat.json"));
+        string[13] memory want = [
+            "TREE_RANGE_MAX",
+            "TREE_LEAF_PAGE_MAX",
+            "treeOf",
+            "treeLeaves",
+            "treeNodes",
+            "treeNodeKey",
+            "commitOf",
+            "pathListOf",
+            "pathKeys",
+            "pathCtAt",
+            "goneOf",
+            "goneKeyOf",
+            "goneOwnKeyOf"
+        ];
+        uint256 found;
+        for (uint256 i;; ++i) {
+            string memory at = string.concat(".abi[", vm.toString(i), "]");
+            if (!vm.keyExistsJson(art, at)) break;
+            string memory kind = art.readString(string.concat(at, ".type"));
+            assertTrue(
+                keccak256(bytes(kind)) != keccak256("fallback") && keccak256(bytes(kind)) != keccak256("receive"),
+                "no fallback, no receive"
+            );
+            if (keccak256(bytes(kind)) != keccak256("function")) continue;
+            bytes32 name = keccak256(bytes(art.readString(string.concat(at, ".name"))));
+            for (uint256 j; j < want.length; ++j) {
+                if (name != keccak256(bytes(want[j]))) continue;
+                found |= 1 << j;
+                assertEq(art.readString(string.concat(at, ".stateMutability")), "view", want[j]);
+            }
+        }
+        assertEq(found, (1 << 13) - 1, "the 13 tree views in PqChat's ABI");
+        // Fable D-6: each declared view's inputs and outputs, names included, are the interface's (what Blockscout shows)
+        string memory face = vm.readFile(
+            string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/IPqChatTreeViews.sol/IPqChatTreeViews.json")
+        );
+        for (uint256 j; j < want.length; ++j) {
+            (string memory a, string memory b) = (_fnAt(art, want[j]), _fnAt(face, want[j]));
+            assertEq(
+                keccak256(vm.parseJson(art, string.concat(a, ".inputs"))),
+                keccak256(vm.parseJson(face, string.concat(b, ".inputs"))),
+                string.concat(want[j], ": the interface's inputs")
+            );
+            assertEq(
+                keccak256(vm.parseJson(art, string.concat(a, ".outputs"))),
+                keccak256(vm.parseJson(face, string.concat(b, ".outputs"))),
+                string.concat(want[j], ": the interface's outputs")
+            );
+        }
+        assertEq(_v().TREE_RANGE_MAX(), viewsModule.TREE_RANGE_MAX(), "PqChat's cap is the module's");
+        assertEq(_v().TREE_LEAF_PAGE_MAX(), viewsModule.TREE_LEAF_PAGE_MAX(), "PqChat's leaf cap is the module's");
+    }
+
+    /// The ABI path of the function `name` in `art`.
+    function _fnAt(string memory art, string memory name) internal view returns (string memory at) {
+        for (uint256 i;; ++i) {
+            at = string.concat(".abi[", vm.toString(i), "]");
+            require(vm.keyExistsJson(art, at), string.concat("no function ", name));
+            if (!vm.keyExistsJson(art, string.concat(at, ".name"))) continue;
+            if (keccak256(bytes(art.readString(string.concat(at, ".name")))) == keccak256(bytes(name))) return at;
+        }
+    }
+
+    /// Fable A-1, E-5: a tree session's message goes through `PqChatTree`'s own copy of the store step (`PqChatCore._post`),
+    /// not the library; it is stored in the same form as a flat session's (`PqChatLib.t.sol` test_flatMessageBlobForm):
+    /// the code's STOP byte, the flag 0, `abi.encode(m, sigHash, sig)`.
+    function test_treeMessageBlobIsTheFlatForm() public {
+        (M memory m, Step memory st,) = _grown();
+        IPqChat.PqChatMessage memory msg_;
+        (msg_.sessionId, msg_.epochId, msg_.sender, msg_.counter, msg_.ciphertext) =
+        (m.sid, st.epochId, A, 1, hex"0a0b0c");
+        IUARegistry.UASig memory sig = _sig(A, h.message(msg_));
+        vchat.postMessage(msg_, sig);
+        uint256 root = uint256(keccak256(abi.encode(uint256(keccak256("scaas.pqchat")) - 1))) & ~uint256(0xff);
+        uint256 list = uint256(keccak256(abi.encode(m.sid, root + 5)));
+        address at = address(uint160(uint256(vm.load(address(vchat), keccak256(abi.encode(list))))));
+        assertEq(at.code, bytes.concat(hex"0000", abi.encode(msg_, keccak256(abi.encode(sig)), sig)), "the flat form");
+    }
+
+    /// The interface ids (pins): `IPqChat`'s unchanged by the views, which have their own; both reported. CTR-CHAT-32:
+    /// `PqChat` declares both interfaces; neither id moved (0xec42e734, 0xe9e2068a).
     function test_interfaceIdsArePinned() public view {
         assertEq(type(IPqChatTreeViews).interfaceId, bytes4(0xec42e734), "IPqChatTreeViews (new)");
         // the path-less delta (C41-C43, `createSession` and `commit` take the new records): 0x7b7acc12 -> 0x8412b2f1

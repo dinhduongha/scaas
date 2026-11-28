@@ -1,0 +1,32 @@
+# pqchat-no-fallback (CTR-CHAT-32, ARCH-POS-29): the round's gates. Full output in git-ignored logs (<tmp>).
+step | commit | rc | counts
+size (forge build --sizes) | d58e4758f | 0 | PqChat 34,029 -> 33,605 B (36,022 B with the views declared and no split); PqChatRecordLib 4,918 B; PqChatTreeViews 9,761 B; size gate 0 errors
+test/pqchat + GovDeploy | d58e4758f | 0 | 356 passed, 0 failed, 2 skipped
+review fixes (bytecode identical to d58e4758f) | df745d072 | 0 | PqChatRecordLib, PqChatTreeViews, GovDeploy: 43 passed
+mutants | df745d072 | 0 | 11 of 11 killed (runs/2026-11-28-pqchat-no-fallback-all-mutants.txt)
+forge, every directory at the default set (24, per directory, -j 1) | 533bfd88b | 0 | account 103, as 568, confidential 5, factory 2, fork 0 (+1 skipped), gas 406 (+1), governance 1013, hedera 20, liquidity 93 (+1), merge 350, metatx 550 (+1), modules 253, p6f 4, pqchat 338 (+2), pqvault 105, pqz 694 (+4), pqzh 42, research 360 (+7), top 29, ua 1051, v2 758, wallet 185, wrap 324, zether 478 (+4); 0 failed
+at-set --clean others sensitive | 533bfd88b | 0 | n2048-kmax1024 ok, n2560-kmax16384 ok, n2816-kmax65536 ok; 0 failed
+at-set --clean others modules | 533bfd88b | 0 | n2048-kmax1024 ok, n2560-kmax16384 ok, n2816-kmax65536 ok
+onchain matrix local, deploy without DEPLOY_PQCHAT + PqChat group (the script makes the release) | 040a9d144 | 1 | deploy 116 txs ok; PqChat txs 44/44; negatives 9/10: "remove replayed" NotMember for NonceUsed, the same at dev 048131710 (baseline run: deploy 123 txs, the same red): not this change
+onchain matrix local, DEPLOY_PQCHAT=1 + PqChat group (the release from the deploy) | 040a9d144 | 1 | deploy 124 txs ok (baseline 123: + the library); PqChat txs 36/36; negatives 9/10, the same red
+library placement (D-8, D-9) | 040a9d144 | 0 | every library by CREATE2 through the deterministic deployer, on every run; PqChatRecordLib 0xF162b68D0030347A886797328cd607be9409Cf1a
+scaas-node lib: pqchat / pqvault rows both directions | 040a9d144 | 0 | 2 passed
+scaas-node e2e router_instance_creations_signed_by_an_eoa (Deploy.s.sol with DEPLOY_PQCHAT on anvil) | 040a9d144 | 0 | 1 passed
+pqchat-core chain_tree (--ignored, one thread: a real deploy, the tree views read through PqChat's declared functions) | 040a9d144 | 0 | 3 passed
+pqchat-core gen_abi --check / check_reads | 040a9d144 | 0 | equal; 59 reads, 0 refused; the 13 views' selectors in PqChat's ABI equal IPqChatTreeViews'
+clientkeys pqchat.test.js | 040a9d144 | 0 | 22 passed
+format.sh --check (every language) | 040a9d144 | 0 | ok
+docs_check check / paths / test | 040a9d144 | 0 | 0 errors
+# after the dev merge d8756f55f (fc2ebdbaf), D-1 and the E-3 replay negative (6b788e717), the rename to PqChatLib (265249b87):
+rename: forge build src before / after | 265249b87 | 0 | 326 contracts, runtime and init identical (link placeholders zeroed); PqChatLib init hash = PqChatRecordLib's (0xdac7845f…66ac), CREATE2 0xF162b68D0030347A886797328cd607be9409Cf1a unchanged
+size gate | 265249b87 | 0 | 185 contracts, 0 errors; PqChat 33,605 B (T-2 notice)
+forge test/pqchat, test/governance | 265249b87 | 0 | 338 passed (+2 skipped); 1013 passed
+onchain matrix local without DEPLOY_PQCHAT | 265249b87 | 0 | deploy 116 txs; PqChat txs 44/44, negatives 10/10 (the replay negative: PqChatNonceUsed)
+onchain matrix local with DEPLOY_PQCHAT | 265249b87 | 0 | deploy 124 txs; PqChat txs 36/36, negatives 10/10
+pqchat-core (all) + chain_tree (--ignored, one thread) | 265249b87 | 0 | 154 passed in 24 binaries; chain_tree 3 passed
+gen_abi --check | 265249b87 | 0 | equal
+scaas-node lib pqchat / pqvault rows | 265249b87 | 0 | 11 passed
+scaas-cli | 265249b87 | 0 | 22 passed
+clientkeys pqchat.test.js | 265249b87 | 0 | 22 passed
+vcheck offline tests | 265249b87 | 0 | ok (linked libraries shown)
+format.sh --check, docs_check check / paths / test | 265249b87 | 0 | ok; 0 errors

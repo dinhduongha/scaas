@@ -458,8 +458,18 @@ the gas tables alone, never a simulation: the base row `(entry's name, "app", no
 `sig_bytes` at the calldata price), the transaction row with the unsigned calldata, in the lookup order chain → module →
 reference, with the margin; `AppQuote.quote` none (unquoted) without the rows. It is no transaction: the signed record's call
 is still `prepare_app_call`'s, whose simulation follows the signature. `AppCore::seal` wipes the plaintext it is given.
-`pqvault-core` BUILT, UNAUDITED; BUILT-gap in `pqchat-core`, which still signs when it builds a record (it changes after the
-path-less branch lands).
+`pqvault-core` and `pqchat-core` BUILT, UNAUDITED ([CLI-PQC-21](pqchat-core.md#CLI-PQC-21)).
+A signed record's call of the app's own contract may go relayed (owner 2026-11-27, [CLI-PQC-18](../decisions.md#CLI-PQC-18) F3;
+BUILT, UNAUDITED): `AppCore::relay_app_call(chain, kind, contract, entry, args)` checks `entry` and `args` as `prepare_app_call`
+does (`Argument`, `AppDomainRefused`), takes `kind` `pqchat` only (the one app kind door A takes), writes every `int8` as a JSON
+number (the job API's form; every other value as given: a caller passes the job API's forms) and posts `{chain, op: {entry,
+contract: kind, token: contract, args, validUntil}}` to every gateway the profile keeps (`POST /v1/op`,
+[NODE-GW-09](../node/gateway.md#NODE-GW-09)); `validUntil` is now plus the profile's validity window, a job field the record
+does not sign; nothing is simulated here (the gateway simulates). `AppRelay { queued, refused, unreachable }`: whether a gateway
+queued it (a queue is no landing), each refusal as its code and detail (a revert the simulation named, an operator's limit),
+and the gateways unreachable; a profile with no gateway is `SubmitPathNone`. No row is kept: the signed record is the
+caller's. `pqchat_entry_hash(PqTopicEntry)` and `pqchat_edit_hash(PqTopicEdit)` give the typed digest a topic `ref` pins
+(G5, [CTR-CHAT-31](../contracts/pqchat.md#CTR-CHAT-31)); no key.
 
 <a id="CLI-SDK-21"></a>**CLI-SDK-21** — **`seal_for_arweave`, `upload_file`, `fetch_file` and `open_file` put an app core's
 file on Arweave and read it back; the upload key signs only the item `ua-rs` built; the client keeps the signed bytes until

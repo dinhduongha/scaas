@@ -324,7 +324,7 @@ Change (2026-11-12, branch `ua-mtx-fix2-node`, Fable recheck R-6 and recheck 2 P
 | Round | Scope | Reviewers (as run) | Target | Status |
 |---|---|---|---|---|
 | Core review 2026-10-25 | `pqz-core`: part 0 (design) to part 4 (transcript and code) (`pqz-core/research/code-review-2026-10-25/`) | Codex, agy, Claude workflow; Fable on part 0 | `008e196c` | done; the part-0 fixes a + b merged. Files changed since `008e196c` are `UNAUDITED` |
-| Pre-freeze AI audit (was: Contracts audit (EVM)) | the 32 units of [audit/](audit/README.md) on the pre-freeze tag, before the freeze (owner 2026-11-12): EVM contracts, `pqz-core`, the Nethermind precompiles, `ua-rs`, the node, the SDK, the app cores, the bindings, CLI and CI, and the cross-cutting units | Fable, Codex, agy, Claude workflow | `<TAG>` | PLANNED |
+| Pre-freeze AI audit (was: Contracts audit (EVM)) | the 35 units of [audit/](audit/README.md) on the pre-freeze tag, before the freeze (owner 2026-11-12): EVM contracts, `pqz-core`, the Nethermind precompiles, `ua-rs`, the node, the SDK, the app cores, the Matrix client, the user profiles' store, the TUI, the bindings, CLI and CI, and the cross-cutting units | Fable, Codex, agy, Claude workflow | `<TAG>` | PLANNED |
 | `ua-rs-sign` T21 | `clients/ua-rs`, `ua-c` and the bindings, at audit grade | Codex, agy, Claude lenses, Fable | the pushed SHA | PLANNED |
 
 **Why.** Owner 2026-11-02: an AI audit is better than a human one; a label tied to a round and a commit cannot claim more than was reviewed.
@@ -691,6 +691,31 @@ signature beside the Ed25519 one keeps a verifier without `ua-rs` able to check.
 **Cost if wrong.** A store listing refused for the licence; an update channel whose key compromise reaches every install; a
 release whose binaries no one can tie to a commit.
 **Source.** Owner ruling 2026-11-27: the recommendations of the owner questions of 2026-11-27 accepted as recommended, A3 (publishing entity, key custody) left open; A2 accept, A4 register once A3, A5 not now, A6 none, A7 upload our own key, A9 AMO then Chrome then Safari, A10 Ed25519 offline plus a UA PQ signature beside it; [app-distribution note](research/2026-11-27-app-distribution.md) §1.2, §3, §5, §7, §8.
+
+<a id="ARCH-POS-29"></a>
+### ARCH-POS-29 — No `fallback()` routing: every callable entry is declared in its contract's ABI; a size split prefers a linked external library
+- old: — · status: current · owner: yes · date: 2026-11-28 · normative: decisions.md#ARCH-POS-29 · superseded-by: —
+
+**Rule.**
+- **No routing `fallback()`.** No contract routes a call by `fallback()`. Every entry a user can call is a function declared
+  in the contract's own ABI, so the contract's verified source lists it (Blockscout shows each one).
+- **A size split prefers an external library.** The library is linked and its address shows on the verified contract. A body
+  module is used only where a library does not fit (for example, code that needs the contract's internal, overridable hooks),
+  and then behind declared forwarders.
+- **What is not routing.** An empty `receive()` that only accepts the native coin (`SmartKeyAccount`, `MandateWallet`,
+  `RescueVault`; TON's `receive()` top-ups); TON's `bounced` handlers; declared forwarders into linked libraries (the
+  `UARegistry` `_lib` / `_libRaw` entries, `ZetherLayer`'s `_lib`).
+**Status.** BUILT for `PqChat` ([CTR-CHAT-32](contracts/pqchat.md#CTR-CHAT-32), branch `pqchat-no-fallback`), UNAUDITED. A
+scan of every EVM source found `PqChat.fallback()` the only routing fallback.
+**Why.** A user, a block explorer and an auditor see every entry in the ABI and every linked library's address; nothing runs
+through an entry the ABI does not name.
+**Cost if wrong.** A declared forwarder costs runtime bytes in the contract, the return encoder of each declared function
+included; a contract near its size line needs a split, which is the owner's call (`PqChat`: owner 2026-11-28).
+**Source.** Owner rulings 2026-11-27 (the three rules above) and 2026-11-27/28 (the library split of `PqChat` approved).
+
+Change (owner: yes, 2026-11-28): the rule stands in `AGENTS.md`, "Smart contracts (EVM)", beside the library-split
+bullet: no `fallback()` routing; every callable entry is declared in the contract's ABI; a size split is a linked external
+library first, a body module only behind declared forwarders.
 
 ## 2. Node — General
 
@@ -6577,6 +6602,33 @@ Change (2026-11-25, the path-less [delta spec](superpowers/specs/2026-11-25-tree
 **Cost if wrong.** A view only.
 **Source.** owner 2026-11-27; research §1, §8. It replaces the owner's Change of 2026-11-22 under CLI-PQC-08 that left the nonce view for the release after the audit: the view is in this release, before the 8b-6 reset. Status: BUILT on branch `pqchat-g125` (EVM; `pqchat-core` decodes it), UNAUDITED; the digest check in `pqchat-core`'s `resolve_ref` is not built yet (`HashUnchecked` stays).
 
+### CTR-CHAT-32 — `PqChat` has no `fallback`: the 13 tree views are declared in its ABI; the signed-record step is the linked library `PqChatLib`
+- old: — · status: current · owner: yes · date: 2026-11-28 · normative: contracts/pqchat.md#CTR-CHAT-32 · superseded-by: —
+
+**Rule.** Owner 2026-11-27/28 under ARCH-POS-29:
+- **Views and fallback.** `PqChat` implements `IPqChatTreeViews`. Its 13 views are declared in `PqChat`'s ABI and their
+  selectors are unchanged. The two caps are constants in `PqChat`; the 11 others are forwarded by `DELEGATECALL` to the
+  read-only body module `PqChatTreeViews`. `fallback()` is removed.
+- **Why a module for the views.** They read the tree through `PqGroupTree`'s and `PqChatCore`'s internal, overridable hooks,
+  which a library cannot inherit (controller call).
+- **The size split (owner: yes).** Declaring the views alone would make the release 36,022 B, over the plain form's T-1 line
+  of 35,286 B (the release transaction would ask more than 60 M). So the signed-record step of `createSession`, `rekey` and
+  `postMessage` moves into the linked external library `PqChatLib`: the signer's portable signature over the record's
+  typed digest, and `abi.encode(record)`.
+- **How the library is called.** `PqChat` forwards the entry's own calldata under the library selector by `DELEGATECALL`,
+  nothing appended. The library reads the registry from the instance's own code (`ChainEnvCode`), touches no storage and
+  emits nothing. The check order is unchanged: shapes, signature, nonce, store.
+- **The env.** The class env pins the library first (the release's link closure), then the four modules.
+**Why.** ARCH-POS-29: every entry visible in the ABI, and the split in a library whose address a verified source shows.
+**Cost if wrong.** One more `DELEGATECALL` per session, rekey and message write. The library's address is in the release's
+code, so a new library means a new release.
+**Source.** Owner rulings 2026-11-27 (no fallback, the library preferred) and 2026-11-27/28 (the split approved); sizes
+measured 2026-11-28 (contracts/pqchat.md §12). Status: BUILT on branch `pqchat-no-fallback`, UNAUDITED.
+
+Change (owner: yes, 2026-11-28): the library is named `PqChatLib` (`src/pqchat/PqChatLib.sol`), first built as
+`PqChatRecordLib`. The rename moves no bytecode: every contract's runtime and init code and the library's own code are
+unchanged, and so is its CREATE2 address.
+
 ### CTR-PQV-01 — PqVault: PqChat's group rules with at least one member plus a topics-style item model
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-01 · superseded-by: —
 
@@ -12117,6 +12169,25 @@ falcon-rs's keygen cap named `FalconKeygenCap` (FR-9). The gate gains the encodi
 796 refuse) and the key pairs of 1,000 seeds per degree (FR-5, FR-11), and runs in CI (job `ua-rs-fndsa-wasm`, FR-4). Evidence:
 `clients/runs/2026-11-26-falcon-rs-fixes-summary.txt`.
 
+### CLI-UAL-67 — Every exact `serde_json` pin is `=1.0.154`
+- old: — · status: current · owner: no · date: 2026-11-28 · normative: clients/ua-libraries.md#CLI-UAL-67 · superseded-by: —
+
+**Rule.** (Summary; normative [ua-libraries.md](clients/ua-libraries.md#CLI-UAL-67).) `ua-rs` (feature `json`), `ua-qt`,
+`ua-rs/fuzz`, `ua-rs/tests/fndsa/wasm` and `smartcontracts/evm/script/pqz/wallet` pin `serde_json = "=1.0.154"` (was `=1.0.145`);
+every lock file that resolved 1.0.145 resolves 1.0.154.
+**Status.** BUILT on branch `serde-json-pin`. 1.0.154 writes what 1.0.145 wrote byte for byte except a float with a positive
+exponent (`1e+20` for `1e20`; a differential run over 2,000,000 f64 and f32 values, 2,000,000 parses, integers, 100,000 strings,
+both key orders), and nothing here writes a float through `serde_json`; the vector readers and canonical forms of `ua-rs`, `ua-c`,
+`ua-cxx`, `ua-qt`, `ua-dart-frb`, `scaas-sdk`, `pqvault-core` and `pqchat-core` pass, and `ua-rs`'s `write_wallet_rows` regenerates
+`wallet_state.json` unchanged. Evidence: `clients/runs/2026-11-28-serde-json-pin-summary.txt`.
+**Why.** `scaas-matrix` (matrix-sdk `=0.19.1`) needs `serde_json ^1.0.151`, and `ua-rs`'s exact `=1.0.145` (resolved even with
+feature `json` off) kept every build that links `scaas-sdk` from linking it: `scaas-tui` and scaas-app's `scaas` build. 1.0.154
+(2026-10-11) is the highest release at least 14 days old (1.0.151 2026-07-20, 1.0.152 2026-10-10, 1.0.153 and 1.0.154
+2026-10-11); it formats floats with `zmij` 1.0.23 (MIT, 2026-07-13) in place of `ryu`.
+**Cost if wrong.** A vector or canonical form written by `serde_json` changes bytes, and a signature or digest over it differs
+between clients.
+**Source.** Controller call 2026-11-28 (owner: no; owner may override).
+
 ## 40. Clients — network crate (`scaas-rpc`)
 
 The rules are in [clients/scaas-rpc.md](clients/scaas-rpc.md); the design is the [scaas-rpc spec](superpowers/specs/2026-11-17-scaas-rpc.md), reviewed by Fable on 2026-11-17 (findings F1–F28, I1–I3, all applied before any code).
@@ -13323,8 +13394,14 @@ left makes zero signing calls, its confirmed twin one.
 **Status.** BUILT for `pqvault-core`, UNAUDITED: every write returns a `Prepared` (the unsigned record, its wraps, the SDK's
 `AppCore::quote_app_call` quote from the gas rows), `PqVault::confirm` makes its one signing call and then the signed record's
 `prepare_app_call`; `tests/devices.rs` `nothing_is_signed_before_the_confirm` counts zero signing calls for each write's
-dropped review and one for its confirmed twin. BUILT-gap still in `pqchat-core` (its session, epoch and topic records signed
-when built; it changes after the path-less branch lands), found in `scaas-tui`'s plan work.
+dropped review and one for its confirmed twin. BUILT for `pqchat-core` too (branch `pqchat-core-confirm`, UNAUDITED; the gap
+found in `scaas-tui`'s plan work closed): every write but a message (a session, an epoch, a leave, a removal, a tree creation,
+a tree commit path or path-less, a tree exit, the six topic records) returns a `Prepared` (the SDK's review of the record, the
+`quote_app_call` quote of the payer's call, none for a relayed topic write or a tree commit, whose cost is its plan);
+`PqChat::confirm` makes its one signing call through the chain port; tests counting the port's signing calls over every write
+kind: `tests/session.rs` and `tests/topics.rs` `nothing_is_signed_before_the_confirm` /
+`topic_writes_sign_after_confirm_relayed_by_default`, `tests/tree_scenarios.rs` (the tree exits), `tests/chain_tree.rs` (a
+creation and a commit on a local chain). [CLI-PQC-21](clients/pqchat-core.md#CLI-PQC-21).
 **Why.** A signature made before the confirm exists whether or not the user agrees; a relayer or a bug may then submit it.
 **Cost if wrong.** A signed record the user declined, valid on chain.
 **Source.** Owner ruling 2026-11-27: the recommendations of the owner questions of 2026-11-27 accepted as recommended, F4: sign after the user's confirm, everywhere, PqVault included; [public topics note](research/2026-11-27-public-topics-ui.md) §8 G6; [PqVault UI note](research/2026-11-27-pqvault-ui.md) §8 row 23, §9 G16.
@@ -13917,12 +13994,55 @@ Change (owner: yes, 2026-11-28, relayed by the controller; status: BUILT in `ua-
   count (G2); the version's `nonce` in `entryOf` and `versionAt`, so a `ref`'s pinned `contentHash` can be checked (G5). The
   layout and gas pins move with their old and new figures; record typehashes and vectors stay.
 
-**Status.** F3 to F6 SPECIFIED, nothing built (today a topic write goes only by the payer's own transaction, and the record is
-signed before the review); F1 and F2 PLANNED for the next contract release. UNAUDITED.
+**Status.** F1, F2 and G5's nonce BUILT in the contract ([CTR-CHAT-29](contracts/pqchat.md#CTR-CHAT-29) to
+[CTR-CHAT-31](contracts/pqchat.md#CTR-CHAT-31)). In `pqchat-core` (branch `pqchat-core-confirm`, UNAUDITED): F3 BUILT (the six
+topic records relayed by the chain's gateways by default, fee 0, the SDK's `AppCore::relay_app_call`, the node's door A
+[NODE-GW-09](node/gateway.md#NODE-GW-09); the payer's own transaction an option), F4 BUILT ([CLI-SDK-36](#CLI-SDK-36)), F6
+BUILT (`entry_rows`, `page_newest`, `ranked` and `rank`, the fold at the threshold the caller passes), the pinned `contentHash`
+checked (G5); F5 (drafts in the profile's sealed store) is the app's, with user profiles. The client's own calls:
+[CLI-PQC-21](clients/pqchat-core.md#CLI-PQC-21).
 **Why.** A UA with no gas can post; a page of 16 posts costs about 65 reads today and about 2 with G2; Hot needs a time no
 entry carries.
 **Cost if wrong.** Posting only for funded UAs; feeds slow enough that clients add an indexer the state rule does not need.
 **Source.** Owner ruling 2026-11-27: the recommendations of the owner questions of 2026-11-27 accepted as recommended, F1 yes with the next contract release, F2 yes, F3 yes with a fee of 0 allowed, F4 yes everywhere, F5 local only in the profile's sealed store, F6 as proposed (a 256-id window); [public topics note](research/2026-11-27-public-topics-ui.md) §6, §7.3, §8, §10.
+
+### CLI-PQC-21 — `pqchat-core`'s sign after confirm, relayed topic writes, window sorts and the pinned `contentHash`: the client's calls
+- old: — · status: current · owner: no · date: 2026-11-28 · normative: clients/pqchat-core.md#CLI-PQC-21 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-21).) Controller calls under the owner's rulings
+[CLI-SDK-36](#CLI-SDK-36) and [CLI-PQC-18](#CLI-PQC-18): every write returns `Prepared<W>`; `PqChat::confirm` checks what must
+hold before the signature (a creation binds its Matrix room and accepts the session there, so a dropped review leaves no
+binding), signs once through the chain port and builds the output; a record write's confirm touches no network, its call is
+`dispatch` (relayed, or the payer's call; `dispatch_paid` for a relay no gateway queued); `Confirmed::within_review` is
+CLI-PQV-18's rule, `false` without a reviewed payer quote (a relayed write, a tree commit). Only the six topic records are
+relayed; a port without gateways is `RelayUnavailable`. The sorts: Top `up − down`, Controversial `min · log2(up + down) /
+max` in Q32 integer arithmetic (Reddit's `(up + down)^(min/max)` order without a platform `pow`), Best the Wilson lower bound
+at z = 1.2816 with `+ − × ÷ √` on `f64` only, ties by the lower list index; Top and Controversial over the newest 256 ids
+against the snapshot, Best over the first 256; a repeated id ranked once; a row folds when `down ≥ up + threshold`, the
+threshold the caller's (`None`: no fold). A pinned `contentHash` is compared with the typed digest of each version rebuilt by
+the SDK (`pqchat_entry_hash` for version 1, `pqchat_edit_hash` after), the newest 64 versions read: a match names its version,
+none equal is `HashMismatch` when every version was read, else `HashUnchecked`. After the review of 2026-11-28: a topic
+record's `seq` or `version` from trusted reads; a rekey's slot and a path-less `try` checked (the `try` reserved) before the
+signature; a creation's room bound after it; the relay's outcome names each refusal.
+**Status.** BUILT on branch `pqchat-core-confirm`, UNAUDITED (tests named in the normative section).
+**Why.** The owner's rulings left the API shape, the sort arithmetic and the bound of the version scan open; a `pow` or `exp`
+of a platform's libm is not correctly rounded, so two clients could order a near-tie apart.
+**Cost if wrong.** A front-end that cannot follow the API; two clients that order one feed differently; a reader that reads
+an unbounded number of versions a node claims.
+**Source.** Controller calls 2026-11-28 under the owner rulings of 2026-11-27 (CLI-SDK-36, CLI-PQC-18).
+
+### NODE-GW-09 — Door A takes the six signed `PqChat` topic records
+- old: — · status: current · owner: no · date: 2026-11-28 · normative: node/gateway.md#NODE-GW-09 · superseded-by: —
+
+**Rule.** (Summary; normative [gateway.md](node/gateway.md#NODE-GW-09).) `POST /v1/op` takes `createTopic`, `updateTopic`,
+`setTopicWriter`, `postEntry`, `editEntry` and `voteEntry` with `contract: "pqchat"` on an instance the guard's `pqchat` rule
+accepts, fee 0 allowed, under the operator's switch `params.relay_pqchat_topics` (default on for a `private` chain, off for a
+`public` one) and an hourly bucket per signing key (`params.pqchat_topics_per_hour`, 60), a call queued this hour answered
+queued once; every other `PqChat` write stays a namespace's job.
+**Status.** BUILT (`scaas-node` `gateway.rs`, test `door_a_takes_a_pqchat_topic_write`), UNAUDITED.
+**Why.** The owner's ruling F3 relays topic writes by default; door A took a registered token's entries only.
+**Cost if wrong.** A topic write that only a funded UA can make, or a door that relays a session's writes the owner did not name.
+**Source.** Controller call 2026-11-28 under [CLI-PQC-18](#CLI-PQC-18) F3 (owner 2026-11-27).
 
 <a id="CLI-PQC-19"></a>
 ### CLI-PQC-19 — Chat in the front-ends: Matrix rooms and PqChat sessions as two row kinds, private Matrix defaults, PqChat pushes on opt-in, chat in the web build later

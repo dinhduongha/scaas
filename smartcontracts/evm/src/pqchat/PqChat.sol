@@ -8,6 +8,7 @@ import {PqChatTopics} from "./PqChatTopics.sol";
 import {PqChatTree} from "./PqChatTree.sol";
 import {PqChatTreeViews} from "./PqChatTreeViews.sol";
 import {PqChatTreeMembers} from "./PqChatTreeMembers.sol";
+import {PqChatLib} from "./PqChatLib.sol";
 import {IPqChatTreeViews} from "./IPqChatTreeViews.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
@@ -24,9 +25,11 @@ import {RescueLib} from "../governance/RescueLib.sol";
 ///         Records are stored in SSTORE2 blobs (3C-D3), never only in an event. The public topics and votes run in the
 ///         body module `PqChatTopics` by `DELEGATECALL` (CTR-TOK-30, 3C-D2); the sessions, messages and the store, the 1:1
 ///         path, stay here. The TreeKEM mode (`groupMode = 1`, CTR-CHAT-26) runs in the body module `PqChatTree`; its
-///         views (`IPqChatTreeViews`) in the read-only body module `PqChatTreeViews`, reached by the `fallback`.
-///         **UNAUDITED.**
-contract PqChat is IPqChat, PqChatCore {
+///         views (`IPqChatTreeViews`) are declared here and run in the read-only body module `PqChatTreeViews`. No
+///         `fallback`, no `receive`: every entry is in this contract's ABI (CTR-CHAT-32, owner 2026-11-28). The signed-record
+///         step of `createSession`, `rekey` and `postMessage` (the signature check and the record's encoding) is the linked
+///         external library `PqChatLib` (the size split, CTR-CHAT-32). **UNAUDITED.**
+contract PqChat is IPqChat, IPqChatTreeViews, PqChatCore {
     uint16 internal constant CLASS = 3;
     uint16 internal constant KIND = 0;
     /// @inheritdoc IPqChat
@@ -39,6 +42,10 @@ contract PqChat is IPqChat, PqChatCore {
     uint256 public constant REMOVE_MAX = 16;
     /// @notice CTR-CHAT-30: the largest `entryRows` batch (`PqChatTopics.ENTRY_ROWS_MAX`, which enforces it).
     uint256 public constant ENTRY_ROWS_MAX = 64;
+    /// @inheritdoc IPqChatTreeViews
+    uint256 public constant TREE_RANGE_MAX = 256;
+    /// @inheritdoc IPqChatTreeViews
+    uint256 public constant TREE_LEAF_PAGE_MAX = 64;
 
     address public immutable FACTORY;
     uint64 internal immutable VERSION;
@@ -125,12 +132,15 @@ contract PqChat is IPqChat, PqChatCore {
     {
         (IUARegistry reg, uint256 limit, bytes32 uid) = _env();
         _checkSession(reg, s);
-        _auth(reg, s.creator, PqChatTypes.hashSession(s), sig);
-        _useNonce(PqChatTypes.scopeSession(s.creator), s.nonce);
-        sid = PqChatTypes.sessionId(s.creator, s.nonce);
-        Epoch storage ep = _s().epochs[sid];
-        ep.sessionId = sid;
-        ep.record = _put(_blob(abi.encode(s), sig), limit);
+        Epoch storage ep;
+        {
+            bytes memory rec = _record(PqChatLib.sessionRecord.selector);
+            _useNonce(PqChatTypes.scopeSession(s.creator), s.nonce);
+            sid = PqChatTypes.sessionId(s.creator, s.nonce);
+            ep = _s().epochs[sid];
+            ep.sessionId = sid;
+            ep.record = _put(_blob(rec, sig), limit);
+        }
         ep.wraps = uint32(s.members.length);
         ep.home = s.homeChain == uid && s.homeChatContract == address(this);
         emit PqChatSessionCreated(sid, s.creator, s.homeChain);
@@ -169,12 +179,12 @@ contract PqChat is IPqChat, PqChatCore {
         (IUARegistry reg, uint256 limit,) = _env();
         if (_isTree(e.sessionId)) revert PqChatModeEntry(1); // CTR-CHAT-27: a tree session's epochs are commits
         _indexAdded(e, _rightsOf(reg, _parentOf(e.parentEpochId, e.sessionId, e.epoch), e));
-        _auth(reg, e.author, PqChatTypes.hashEpoch(e), sig);
+        bytes memory rec = _record(PqChatLib.epochRecord.selector);
         _useNonce(PqChatTypes.scopeEpoch(e.sessionId, e.author), e.nonce);
         eid = PqChatTypes.epochId(e.sessionId, e.author, e.nonce);
         Epoch storage ep = _s().epochs[eid];
         (ep.sessionId, ep.parent, ep.epoch) = (e.sessionId, e.parentEpochId, e.epoch);
-        ep.record = _put(_blob(abi.encode(e), sig), limit);
+        ep.record = _put(_blob(rec, sig), limit);
         ep.wraps = uint32(e.members.length);
         emit PqChatEpochAdded(e.sessionId, eid, e.parentEpochId, e.epoch, e.author);
         _landWraps(eid, ep, 0, wraps, e.members, e.wrapHashes, limit);
@@ -279,7 +289,7 @@ contract PqChat is IPqChat, PqChatCore {
     ///         blob appended to the session's list, the signature's bytes in the event.
     function postMessage(PqChatMessage calldata m, IUARegistry.UASig calldata sig) external returns (uint256 index) {
         if (_isTree(m.sessionId)) _forward(TREE); // CTR-CHAT-27: a member holds a live leaf and is not gone
-        (IUARegistry reg, uint256 limit,) = _env();
+        (, uint256 limit,) = _env();
         Epoch storage ep = _known(m.epochId);
         if (ep.sessionId != m.sessionId) revert PqChatUnknown(m.epochId);
         if (ep.landed != ep.wraps) revert PqChatIncomplete(m.epochId);
@@ -289,7 +299,25 @@ contract PqChat is IPqChat, PqChatCore {
         if (child != 0) revert PqChatEpochTaken(m.epochId, child);
         (, MemberKey[] memory mk,) = _lists(ep);
         if (_memberAt(mk, m.sender) == type(uint256).max) revert PqChatNotMember(m.sender);
-        index = _post(reg, limit, m, sig);
+        (bytes32 hm, bytes memory rec) = abi.decode(_record(PqChatLib.messageRecord.selector), (bytes32, bytes));
+        _useNonce(PqChatTypes.scopeMessage(m.epochId, m.sender, m.device), m.counter);
+        bytes memory blob = _blob(rec, sig);
+        if (blob.length + 2 > _codeCap(limit)) revert PqChatShape(); // one blob (P16), the kept signature included
+        address[] storage list = _s().messages[m.sessionId];
+        index = list.length;
+        list.push(_put(blob, limit));
+        emit PqChatMessagePosted(m.sessionId, PqChatTypes.typed(hm), m.sender, index, sig);
+    }
+
+    /// @dev CTR-CHAT-32: this entry's calldata under `sel` to the linked `PqChatLib` by `DELEGATECALL` (the record's
+    ///      signature check and its encoding); its revert data verbatim; `sessionRecord` and `epochRecord` return the bytes
+    ///      as they are, `messageRecord` its ABI tuple.
+    function _record(bytes4 sel) private returns (bytes memory) {
+        (bool ok, bytes memory ret) = address(PqChatLib).delegatecall(bytes.concat(sel, msg.data[4:]));
+        assembly ("memory-safe") {
+            if iszero(ok) { revert(add(ret, 32), mload(ret)) }
+        }
+        return sel == PqChatLib.messageRecord.selector ? ret : abi.decode(ret, (bytes));
     }
 
     /// @notice P29: no signature, membership or nonce; the payload `abi.encode(v, hint, env)` raw in one blob.
@@ -515,11 +543,11 @@ contract PqChat is IPqChat, PqChatCore {
     }
 
     function topicOf(bytes32) external view returns (PqTopic memory, uint64) {
-        _forwardView();
+        _topicsView();
     }
 
     function entryOf(bytes32) external view returns (EntryView memory) {
-        _forwardView();
+        _topicsView();
     }
 
     function versionAt(bytes32, uint32)
@@ -527,55 +555,55 @@ contract PqChat is IPqChat, PqChatCore {
         view
         returns (string memory, bytes memory, bytes32, uint64, uint64, uint64)
     {
-        _forwardView();
+        _topicsView();
     }
 
     function entryRows(bytes32[] calldata, bytes32) external view returns (EntryRow[] memory) {
-        _forwardView();
+        _topicsView();
     }
 
     function writerOf(bytes32, bytes32) external view returns (bool, uint64) {
-        _forwardView();
+        _topicsView();
     }
 
     function scoreOf(bytes32) external view returns (uint128, uint128) {
-        _forwardView();
+        _topicsView();
     }
 
     function voteOf(bytes32, bytes32) external view returns (int8, uint64) {
-        _forwardView();
+        _topicsView();
     }
 
     function topics(uint256, uint256) external view returns (bytes32[] memory, uint256) {
-        _forwardView();
+        _topicsView();
     }
 
     function topicsByAdmin(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
-        _forwardView();
+        _topicsView();
     }
 
     function writersOf(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
-        _forwardView();
+        _topicsView();
     }
 
     function posts(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
-        _forwardView();
+        _topicsView();
     }
 
     function replies(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
-        _forwardView();
+        _topicsView();
     }
 
     function byAuthor(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
-        _forwardView();
+        _topicsView();
     }
 
     function topicNonceUsed(bytes32, uint64) external view returns (bool) {
-        _forwardView();
+        _topicsView();
     }
 
     function entryNonceUsed(bytes32, bytes32, uint64) external view returns (bool) {
-        _forwardView();
+        _topicsView();
     }
 
     /// @dev CTR-TOK-30's unguarded stub (no entry here holds a guard): `DELEGATECALL` of this call's calldata to the module,
@@ -598,7 +626,7 @@ contract PqChat is IPqChat, PqChatCore {
     }
 
     /// @dev A `view` entry (the module's body writes nothing): `_forward` under a view cast, as the token faces do.
-    function _forwardView() internal view {
+    function _topicsView() internal view {
         function() f = _forwardTopics;
         function() view v;
         assembly ("memory-safe") {
@@ -617,19 +645,99 @@ contract PqChat is IPqChat, PqChatCore {
         (m[0], m[1], m[2], m[3]) = (TOPICS, TREE, VIEWS, MEMBERS);
     }
 
-    /// @notice Owner 2026-11-24 (option A): a selector this contract does not have goes to the read-only `PqChatTreeViews`
-    ///         by `DELEGATECALL` (the tree views, `IPqChatTreeViews`), its return and revert data verbatim; the module has
-    ///         no `fallback`, so a selector it lacks too reverts with empty data, and it writes nothing. Not payable: a call
-    ///         with value is refused.
-    fallback() external {
-        address v = VIEWS;
-        assembly {
-            calldatacopy(0, 0, calldatasize())
-            let ok := delegatecall(gas(), v, 0, calldatasize(), 0, 0)
-            returndatacopy(0, 0, returndatasize())
-            if iszero(ok) { revert(0, returndatasize()) }
-            return(0, returndatasize())
+    // ------------------------------------------------------------------ the tree views: declared, run in `PqChatTreeViews`
+    // CTR-CHAT-32 (owner 2026-11-28): each view of `IPqChatTreeViews` is declared here (a verified source lists it) and
+    // forwarded by `DELEGATECALL` to the read-only module, its return and revert data verbatim; the caps are constants here.
+
+    /// @inheritdoc IPqChatTreeViews
+    function treeOf(bytes32 sessionId)
+        external
+        view
+        returns (
+            bytes32 treeId,
+            uint32 leaves,
+            uint32 used,
+            bytes32 treeHash,
+            bytes32 genesisTreeHash,
+            bytes32 headEpochId,
+            uint32 owed,
+            uint32 sincePath
+        )
+    {
+        _treeView();
+    }
+
+    /// @inheritdoc IPqChatTreeViews
+    function treeLeaves(bytes32 sessionId, uint256 first, uint256 count) external view returns (TreeLeafView[] memory) {
+        _treeView();
+    }
+
+    /// @inheritdoc IPqChatTreeViews
+    function treeNodes(bytes32 sessionId, uint256 first, uint256 count) external view returns (TreeNodeView[] memory) {
+        _treeView();
+    }
+
+    /// @inheritdoc IPqChatTreeViews
+    function treeNodeKey(bytes32 sessionId, uint256 node) external view returns (bytes memory) {
+        _treeView();
+    }
+
+    /// @inheritdoc IPqChatTreeViews
+    function commitOf(bytes32 epochId) external view returns (PqChatCommit memory c, bytes32 sigHash) {
+        _treeView();
+    }
+
+    /// @inheritdoc IPqChatTreeViews
+    function pathListOf(bytes32 epochId) external view returns (uint32[] memory ctTargets, bytes32[] memory ctHashes) {
+        _treeView();
+    }
+
+    /// @inheritdoc IPqChatTreeViews
+    function pathKeys(bytes32 epochId) external view returns (bytes[] memory) {
+        _treeView();
+    }
+
+    /// @inheritdoc IPqChatTreeViews
+    function pathCtAt(bytes32 epochId, uint256 i) external view returns (PathCt memory) {
+        _treeView();
+    }
+
+    /// @inheritdoc IPqChatTreeViews
+    function goneOf(bytes32 sessionId, bytes32 ua) external view returns (uint8 kind, uint64 epoch) {
+        _treeView();
+    }
+
+    /// @inheritdoc IPqChatTreeViews
+    function goneKeyOf(bytes32 sessionId, bytes32 kemHash)
+        external
+        view
+        returns (bool gone, uint64 joinEpoch, uint64 endEpoch)
+    {
+        _treeView();
+    }
+
+    /// @inheritdoc IPqChatTreeViews
+    function goneOwnKeyOf(bytes32 sessionId, bytes32 ua, bytes32 kemHash)
+        external
+        view
+        returns (bool gone, uint64 joinEpoch, uint64 endEpoch)
+    {
+        _treeView();
+    }
+
+    /// @dev A tree view: `_forward` to the read-only `PqChatTreeViews` under a view cast, as `_topicsView` (Fable A-2: the
+    ///      two casts named by their module).
+    function _treeView() internal view {
+        function() f = _forwardViewsModule;
+        function() view v;
+        assembly ("memory-safe") {
+            v := f
         }
+        v();
+    }
+
+    function _forwardViewsModule() internal {
+        _forward(VIEWS);
     }
 
     // ------------------------------------------------------------------ internal: the group's errors (PqGroupBase)

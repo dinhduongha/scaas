@@ -109,6 +109,8 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
   (owner 2026-11-17). PR CI still runs everything. A format-only commit to a family contract (Rust) runs that family's own
   tests: panic locations move its wasm, so its bytes cannot be compared.
 - A library split is not free: check DELEGATECALL storage, `this`, `msg.sender`, return data, reentrancy guards and `LinkClosure` release pins.
+- **No `fallback()` routing** ([ARCH-POS-29](docs/decisions.md#ARCH-POS-29)): every callable entry is declared in the contract's ABI;
+  a size split is a linked external library first, a body module only behind declared forwarders.
 - **EIP-8037:** a transaction fits only if regular + state gas fits the block limit. `gas_used = max(...)` is accounting, not inclusion. Do not
   conclude from it that a large deploy fits.
 - `foundry.toml` sets `isolate = true` and a raised `gas_limit`; a gas figure measured another way is not comparable.

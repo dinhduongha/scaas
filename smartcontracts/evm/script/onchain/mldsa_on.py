@@ -668,7 +668,14 @@ def g_pqchat(pq, sd, sr, s3):
     r = [s3_, s3_, 1, [uas[2]], uas[0], 1]
     sg = sig(0, h("remove", r))
     sr.send(chat, cdx(F["remove"], r, sg), "remove C from epoch 0")
-    nneg(cdx(F["remove"], r, sg), "PqChatNonceUsed", "remove replayed")
+    # E-3 (owner 2026-11-25): an exit checks membership before the nonce, so the byte-for-byte replay stops at C's
+    # membership; the replay negative names B (still a member), signed by A at the first record's nonce
+    again = [s3_, s3_, 1, [uas[1]], uas[0], 1]
+    nneg(
+        cdx(F["remove"], again, sig(0, h("remove", again))),
+        "PqChatNonceUsed",
+        "remove replayed (the admin's used nonce)",
+    )
     e, ew = epoch(s3_, 2, 1, 1, s3_, s[4], [0, 1, 2])
     nneg(cdx(F["rekey"], e, ew, sig(2, h("epoch", e))), "PqChatNotMember", "the removed member's rekey")
     e, ew = epoch(s3_, 1, 1, 1, s3_, s[4], [0, 1, 2])

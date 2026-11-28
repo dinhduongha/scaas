@@ -12,9 +12,10 @@
 )]
 mod common;
 
+use common::called;
 use common::chain::*;
 use pqchat_core::model::ZERO32;
-use pqchat_core::topics::{At, List, RefFault, RefState, Vote};
+use pqchat_core::topics::{At, List, Rank, RefFault, RefState, Vote};
 use pqchat_core::PqChatError;
 use scaas_sdk::pqchat_records::PqEntryRef;
 
@@ -38,15 +39,18 @@ async fn chain_topics() {
         chain: CHAIN.into(),
         instance: l.home.clone(),
     };
-    let p = &l.payer;
+    let p = &pqchat_core::confirm::Path::Payer(l.payer.clone());
 
     // create: openReplies true, home this instance
-    let t = pq
-        .create_topic(&on, &alice, 1, "pqchat", b"# about", p)
-        .await
-        .unwrap();
-    let tid = t.id.clone().unwrap();
-    land(&l, t.call).await;
+    let t = called(
+        &pq,
+        pq.create_topic(&on, &alice, 1, "pqchat", b"# about", p)
+            .await,
+    )
+    .await
+    .unwrap();
+    let tid = t.0.clone().unwrap();
+    land(&l, t.1).await;
     let topic = pq.topic(&on, &tid).await.unwrap();
     assert!(topic.open_replies);
     assert_eq!(
@@ -60,14 +64,16 @@ async fn chain_topics() {
     println!("[topics] topic {tid} created");
 
     // posts: the admin's lands, a stranger's is refused by the contract (the quote), then a granted writer's lands
-    let a1 = pq
-        .post(&on, &tid, &alice, 1, None, None, b"first", p)
-        .await
-        .unwrap();
-    let a1_id = a1.id.clone().unwrap();
-    land(&l, a1.call).await;
+    let a1 = called(
+        &pq,
+        pq.post(&on, &tid, &alice, 1, None, None, b"first", p).await,
+    )
+    .await
+    .unwrap();
+    let a1_id = a1.0.clone().unwrap();
+    land(&l, a1.1).await;
     let e = refused(
-        pq.post(&on, &tid, &bob, 1, None, None, b"no", p).await,
+        called(&pq, pq.post(&on, &tid, &bob, 1, None, None, b"no", p).await).await,
         "PqTopicNotWriter",
     );
     assert_eq!(
@@ -75,56 +81,74 @@ async fn chain_topics() {
         "false\n0"
     );
     println!("[topics] a stranger's post refused: {e}");
-    let g = pq
-        .set_writer(&on, &tid, &alice, &bob.ua, true, p)
-        .await
-        .unwrap();
-    land(&l, g.call).await;
-    let b1 = pq
-        .post(&on, &tid, &bob, 1, None, None, b"bob's", p)
-        .await
-        .unwrap();
-    let b1_id = b1.id.clone().unwrap();
-    land(&l, b1.call).await;
+    let g = called(
+        &pq,
+        pq.set_writer(&on, &tid, &alice, &bob.ua, true, p).await,
+    )
+    .await
+    .unwrap();
+    land(&l, g.1).await;
+    let b1 = called(
+        &pq,
+        pq.post(&on, &tid, &bob, 1, None, None, b"bob's", p).await,
+    )
+    .await
+    .unwrap();
+    let b1_id = b1.0.clone().unwrap();
+    land(&l, b1.1).await;
 
     // replies: open (a stranger's lands, depth 1, then 2); closed: the stranger refused, the writer lands
-    let c1 = pq
-        .post(&on, &tid, &carol, 1, Some(b1_id.clone()), None, b"re", p)
-        .await
-        .unwrap();
-    let c1_id = c1.id.clone().unwrap();
-    land(&l, c1.call).await;
-    let c2 = pq
-        .post(&on, &tid, &carol, 2, Some(c1_id.clone()), None, b"re re", p)
-        .await
-        .unwrap();
-    let c2_id = c2.id.clone().unwrap();
-    land(&l, c2.call).await;
+    let c1 = called(
+        &pq,
+        pq.post(&on, &tid, &carol, 1, Some(b1_id.clone()), None, b"re", p)
+            .await,
+    )
+    .await
+    .unwrap();
+    let c1_id = c1.0.clone().unwrap();
+    land(&l, c1.1).await;
+    let c2 = called(
+        &pq,
+        pq.post(&on, &tid, &carol, 2, Some(c1_id.clone()), None, b"re re", p)
+            .await,
+    )
+    .await
+    .unwrap();
+    let c2_id = c2.0.clone().unwrap();
+    land(&l, c2.1).await;
     assert_eq!(pq.entry(&on, &c2_id).await.unwrap().depth, 2);
-    let u = pq
-        .update_topic(&on, &tid, &alice, "pqchat", b"# about", false, p)
-        .await
-        .unwrap();
-    land(&l, u.call).await;
+    let u = called(
+        &pq,
+        pq.update_topic(&on, &tid, &alice, "pqchat", b"# about", false, p)
+            .await,
+    )
+    .await
+    .unwrap();
+    land(&l, u.1).await;
     let topic = pq.topic(&on, &tid).await.unwrap();
     assert_eq!((topic.open_replies, topic.seq), (false, 1));
     let e = refused(
-        pq.post(
-            &on,
-            &tid,
-            &carol,
-            3,
-            Some(b1_id.clone()),
-            None,
-            b"closed",
-            p,
+        called(
+            &pq,
+            pq.post(
+                &on,
+                &tid,
+                &carol,
+                3,
+                Some(b1_id.clone()),
+                None,
+                b"closed",
+                p,
+            )
+            .await,
         )
         .await,
         "PqTopicNotWriter",
     );
     println!("[topics] a reply to a closed topic refused: {e}");
-    let b2 = pq
-        .post(
+    let b2 = called(
+        &pq,
+        pq.post(
             &on,
             &tid,
             &bob,
@@ -134,18 +158,26 @@ async fn chain_topics() {
             b"writer's reply",
             p,
         )
-        .await
-        .unwrap();
-    land(&l, b2.call).await;
+        .await,
+    )
+    .await
+    .unwrap();
+    land(&l, b2.1).await;
 
     // a revoked writer: its new post refused, its old post still listed
-    let g = pq
-        .set_writer(&on, &tid, &alice, &bob.ua, false, p)
-        .await
-        .unwrap();
-    land(&l, g.call).await;
+    let g = called(
+        &pq,
+        pq.set_writer(&on, &tid, &alice, &bob.ua, false, p).await,
+    )
+    .await
+    .unwrap();
+    land(&l, g.1).await;
     let e = refused(
-        pq.post(&on, &tid, &bob, 3, None, None, b"late", p).await,
+        called(
+            &pq,
+            pq.post(&on, &tid, &bob, 3, None, None, b"late", p).await,
+        )
+        .await,
         "PqTopicNotWriter",
     );
     assert_eq!(
@@ -192,11 +224,13 @@ async fn chain_topics() {
 
     // edits: the author's version 2 and 3 land; the topic admin's edit of it refused
     for (n, body) in [(10, &b"v2"[..]), (11, &b"v3"[..])] {
-        let d = pq.edit(&on, &b1_id, &bob, n, body, p).await.unwrap();
-        land(&l, d.call).await;
+        let d = called(&pq, pq.edit(&on, &b1_id, &bob, n, body, p).await)
+            .await
+            .unwrap();
+        land(&l, d.1).await;
     }
     let e = refused(
-        pq.edit(&on, &b1_id, &alice, 12, b"not yours", p).await,
+        called(&pq, pq.edit(&on, &b1_id, &alice, 12, b"not yours", p).await).await,
         "PqTopicNotAuthor",
     );
     println!("[topics] another UA's edit refused: {e}");
@@ -225,13 +259,17 @@ async fn chain_topics() {
         (Vote::Down, (0, 1), 2),
         (Vote::Withdraw, (0, 0), 3),
     ] {
-        let x = pq.vote(&on, &b1_id, &carol, v, p).await.unwrap();
-        land(&l, x.call).await;
+        let x = called(&pq, pq.vote(&on, &b1_id, &carol, v, p).await)
+            .await
+            .unwrap();
+        land(&l, x.1).await;
         assert_eq!(pq.score(&on, &b1_id).await.unwrap(), score);
         assert_eq!(pq.vote_of(&on, &b1_id, &carol.ua).await.unwrap().1, seq);
     }
-    let x = pq.vote(&on, &b1_id, &alice, Vote::Up, p).await.unwrap();
-    land(&l, x.call).await;
+    let x = called(&pq, pq.vote(&on, &b1_id, &alice, Vote::Up, p).await)
+        .await
+        .unwrap();
+    land(&l, x.1).await;
     assert_eq!(pq.score(&on, &b1_id).await.unwrap(), (1, 0));
 
     // a ref to an entry of this instance at its topic's home: unresolved, then verified; an unlisted address or a pinned
@@ -242,12 +280,15 @@ async fn chain_topics() {
         entry_id: a1_id.clone(),
         content_hash: ZERO32.into(),
     };
-    let x = pq
-        .post(&on, &tid, &alice, 4, None, Some(r.clone()), b"see also", p)
-        .await
-        .unwrap();
-    let x_id = x.id.clone().unwrap();
-    land(&l, x.call).await;
+    let x = called(
+        &pq,
+        pq.post(&on, &tid, &alice, 4, None, Some(r.clone()), b"see also", p)
+            .await,
+    )
+    .await
+    .unwrap();
+    let x_id = x.0.clone().unwrap();
+    land(&l, x.1).await;
     let xe = pq.entry(&on, &x_id).await.unwrap();
     assert_eq!(
         (xe.entry_ref.clone(), xe.ref_state),
@@ -262,13 +303,60 @@ async fn chain_topics() {
         pq.resolve_ref(&unlisted).await,
         RefState::Unverified(RefFault::Unlisted)
     );
+    // G5 (CTR-CHAT-31): a pinned contentHash names one version, rebuilt from state: bob's post at versions 1 and 2 (an edit)
+    // verifies; a hash of no version does not
+    for v in [1, 2] {
+        let pinned = PqEntryRef {
+            entry_id: b1_id.clone(),
+            content_hash: pq.content_hash_at(&on, &b1_id, v).await.unwrap(),
+            ..r.clone()
+        };
+        assert_eq!(
+            pq.resolve_ref(&pinned).await,
+            RefState::VerifiedVersion(v),
+            "v{v}"
+        );
+    }
     let pinned = PqEntryRef {
         content_hash: format!("0x{}", "c4".repeat(32)),
         ..r
     };
     assert_eq!(
         pq.resolve_ref(&pinned).await,
-        RefState::Unverified(RefFault::HashUnchecked)
+        RefState::Unverified(RefFault::HashMismatch)
     );
-    println!("[topics] ok: posts, replies, edits, votes, lists and refs from state");
+
+    // F6, G7 (CTR-CHAT-30): the feed's rows in one call, newest first, ranked over the window, the fold at the user's threshold
+    let posts = List::Posts(tid.clone());
+    let total = pq.page(&on, &posts, 0, 0).await.unwrap().total;
+    let newest = pq.page_newest(&on, &posts, total, 2).await.unwrap();
+    assert_eq!(newest.ids, vec![x_id.clone(), b1_id.clone()]);
+    let rows = pq
+        .entry_rows(&on, &[b1_id.clone(), a1_id.clone()], &alice.ua, Some(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            rows[0].up,
+            rows[0].down,
+            rows[0].vote,
+            rows[0].replies,
+            rows[0].version_count
+        ),
+        (1, 0, 1, 1, 3)
+    );
+    assert_eq!(
+        (rows[1].id.as_str(), rows[1].folded),
+        (a1_id.as_str(), false)
+    );
+    let top = pq
+        .ranked(&on, &posts, Rank::Top, total, &alice.ua, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        top.rows.first().map(|r| r.1.id.clone()),
+        Some(b1_id.clone())
+    );
+    assert!(top.whole);
+    println!("[topics] ok: posts, replies, edits, votes, lists, rows, sorts and refs from state");
 }

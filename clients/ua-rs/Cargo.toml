@@ -38,7 +38,8 @@ rand_chacha = { version = "=0.3.1", optional = true }
 # this crate (the pairing kinds' keys and signatures, MuSig2-bn254 nonces, FROST-BN254 through its element newtype)
 scaas-ct = { path = "../scaas-ct", optional = true }
 # feature `json`: the registry's explicit arguments as JSON string calls (src/json.rs), for ua-c, ua-cxx, ua-qt, ua-dart-frb
-serde_json = { version = "=1.0.145", optional = true }
+# (=1.0.154, CLI-UAL-67: the highest release at least 14 days old; scaas-matrix's matrix-sdk needs ^1.0.151)
+serde_json = { version = "=1.0.154", optional = true }
 # feature `pq`: the off-chain verifier's PQ kinds (src/pq.rs): the relayer's and the node's only check of what Soroban stores unverified.
 # Falcon (ua-rs-sign T3b, MD-8): PQClean vendored in vendor/pqclean-falcon-seeded at the repository root, built by build.rs (`cc`); pqcrypto-falcon
 # =0.4.1 / pqcrypto-traits =0.3.5 (and pqcrypto-internals 0.2.11, getrandom 0.3.4) left the graph (RUSTSEC-2026-0162/-0163/-0165).

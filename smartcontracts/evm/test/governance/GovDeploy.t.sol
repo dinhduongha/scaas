@@ -29,6 +29,7 @@ import {WrappedZetherRegulatedToken} from "../../src/regulated/WrappedZetherRegu
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
+import {PqChatLib} from "../../src/pqchat/PqChatLib.sol";
 import {PqVault} from "../../src/pqvault/PqVault.sol";
 import {IPqVault} from "../../src/pqvault/IPqVault.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
@@ -173,17 +174,25 @@ contract GovDeployTest is Test {
         address topics = vm.parseJsonAddress(json, ".pqchat_topics");
         address tree = vm.parseJsonAddress(json, ".pqchat_tree");
         address views = vm.parseJsonAddress(json, ".pqchat_tree_views");
-        assertEq(e.libs.length, 4);
-        assertEq(e.libs[0], topics, "the body module pinned in libs (CTR-TOK-30, 3C-D2)");
-        assertEq(e.libCodeHashes[0], topics.codehash);
-        assertEq(e.libs[1], tree, "the tree module pinned in libs (CTR-CHAT-26)");
-        assertEq(e.libCodeHashes[1], tree.codehash);
-        assertEq(e.libs[2], views, "the tree views module pinned in libs (owner 2026-11-24)");
-        assertEq(e.libCodeHashes[2], views.codehash);
+        assertEq(e.libs.length, 5);
+        {
+            // CTR-CHAT-32 (owner 2026-11-28): the linked library first (the release's link closure), then the modules
+            address lib = vm.parseJsonAddress(json, ".pqchat_record_lib");
+            assertEq(lib, address(PqChatLib), "the linked library");
+            assertEq(e.libs[0], lib, "the linked library pinned in libs");
+            assertEq(e.libCodeHashes[0], lib.codehash);
+            assertTrue(_holds(r.implementation.code, abi.encodePacked(lib)), "the release links it");
+        }
+        assertEq(e.libs[1], topics, "the body module pinned in libs (CTR-TOK-30, 3C-D2)");
+        assertEq(e.libCodeHashes[1], topics.codehash);
+        assertEq(e.libs[2], tree, "the tree module pinned in libs (CTR-CHAT-26)");
+        assertEq(e.libCodeHashes[2], tree.codehash);
+        assertEq(e.libs[3], views, "the tree views module pinned in libs (owner 2026-11-24)");
+        assertEq(e.libCodeHashes[3], views.codehash);
         {
             address members = vm.parseJsonAddress(json, ".pqchat_tree_members");
-            assertEq(e.libs[3], members, "the tree exits module pinned in libs (owner 2026-11-24)");
-            assertEq(e.libCodeHashes[3], members.codehash);
+            assertEq(e.libs[4], members, "the tree exits module pinned in libs (owner 2026-11-24)");
+            assertEq(e.libCodeHashes[4], members.codehash);
             assertEq(PqChat(r.implementation).modules()[3], members, "named in implArgs");
         }
         assertEq(PqChat(r.implementation).modules()[0], topics, "named in implArgs");

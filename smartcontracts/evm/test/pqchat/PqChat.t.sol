@@ -10,6 +10,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
+import {PqChatLib} from "../../src/pqchat/PqChatLib.sol";
 import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
 import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
 import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
@@ -158,10 +159,11 @@ contract PqChatTest is PqChatBase {
     }
 
     /// The factory checks the code hash of every library the class env pins (the module among them) when it deploys a
-    /// release (`LibraryCodeHashMismatch`); the same env with the right hash is the control.
+    /// release (`LibraryCodeHashMismatch`); the same env with the right hash is the control. CTR-CHAT-32: the linked
+    /// `PqChatLib` is pinned first and checked the same way (`test_deployImplementation_libraryCodeHashChecked`).
     function test_deployImplementation_moduleCodeHashChecked() public {
         IFactoryToken.Env memory e = _classEnv(address(p), LIMIT);
-        e.libCodeHashes[0] = keccak256("another code");
+        e.libCodeHashes[1] = keccak256("another code");
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 2, EnvKit.uidOf(address(f)), e);
         vm.prank(REGISTRAR);
@@ -188,6 +190,34 @@ contract PqChatTest is PqChatBase {
         f.deployImplementation(
             IOpenFactory.ReleaseId(3, 0, 2),
             3,
+            IPqChat.initialize.selector,
+            type(IPqChat).interfaceId,
+            type(PqChat).creationCode,
+            _args(),
+            EnvKit.uidOf(address(f))
+        );
+    }
+
+    /// CTR-CHAT-32: the linked library's pin (`libs[0]`) is checked as a module's: another code hash is
+    /// `LibraryCodeHashMismatch` naming the library; the control is the test above's.
+    function test_deployImplementation_libraryCodeHashChecked() public {
+        IFactoryToken.Env memory e = _classEnv(address(p), LIMIT);
+        assertEq(e.libs[0], address(PqChatLib), "the library first");
+        e.libCodeHashes[0] = keccak256("another code");
+        vm.prank(REGISTRAR);
+        f.publishClassEnv(3, 0, 2, EnvKit.uidOf(address(f)), e);
+        vm.prank(REGISTRAR);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IOpenFactory.LibraryCodeHashMismatch.selector,
+                address(PqChatLib),
+                keccak256("another code"),
+                address(PqChatLib).codehash
+            )
+        );
+        f.deployImplementation(
+            IOpenFactory.ReleaseId(3, 0, 2),
+            2,
             IPqChat.initialize.selector,
             type(IPqChat).interfaceId,
             type(PqChat).creationCode,

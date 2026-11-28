@@ -13,6 +13,7 @@ import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
 import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
 import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
 import {PqChatTreeMembers} from "../../src/pqchat/PqChatTreeMembers.sol";
+import {PqChatLib} from "../../src/pqchat/PqChatLib.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {UARegistryBase} from "../ua/UARegistryBase.sol";
@@ -141,22 +142,19 @@ abstract contract PqChatBase is UARegistryBase {
         }
     }
 
-    /// The class env: the registry, the code-size limit `params[0]`, the body modules pinned in `libs` (3C-D2).
+    /// The class env: the registry, the code-size limit `params[0]`, in `libs` the linked library `PqChatLib`
+    /// (CTR-CHAT-32) and then the body modules (3C-D2), as the deploy pins them.
     function _classEnv(address registry, uint256 limit) internal view returns (IFactoryToken.Env memory e) {
         e.registry = registry;
         e.params = new bytes32[](1);
         e.params[0] = bytes32(limit);
-        e.libs = new address[](4);
-        (e.libs[0], e.libs[1], e.libs[2], e.libs[3]) =
-        (address(topics), address(treeModule), address(viewsModule), address(membersModule));
-        e.libCodeHashes = new bytes32[](4);
-        (e.libCodeHashes[0], e.libCodeHashes[1], e.libCodeHashes[2], e.libCodeHashes[3]) =
-        (
-            address(topics).codehash,
-            address(treeModule).codehash,
-            address(viewsModule).codehash,
-            address(membersModule).codehash
-        );
+        e.libs = new address[](5);
+        (e.libs[0], e.libs[1], e.libs[2], e.libs[3], e.libs[4]) =
+        (address(PqChatLib), address(topics), address(treeModule), address(viewsModule), address(membersModule));
+        e.libCodeHashes = new bytes32[](5);
+        for (uint256 i; i < 5; ++i) {
+            e.libCodeHashes[i] = e.libs[i].codehash;
+        }
     }
 
     /// The release's `implArgs`: its body modules.

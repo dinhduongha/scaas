@@ -8,10 +8,10 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
 
 /// @title `PqChatTreeViews`: the read-only body module of `PqChat`'s tree views (spec §6; owner 2026-11-24, option A).
-/// @notice `PqChat`'s `fallback` sends it every selector `PqChat` does not have, by `DELEGATECALL` in the clone's context, so
-///         it reads `PqChat`'s state and env through the same hooks as `PqChatTree`. It writes nothing: its runtime holds no
-///         `SSTORE`, `TSTORE`, `LOG`, `CREATE`, `CREATE2`, `CALL`, `CALLCODE`, `DELEGATECALL` or `SELFDESTRUCT`
-///         (`test/pqchat/PqChatTreeViews.t.sol` scans it); an unknown selector reverts with empty data (no `fallback`);
+/// @notice `PqChat` declares each view of `IPqChatTreeViews` and forwards it here by `DELEGATECALL` in the clone's context
+///         (CTR-CHAT-32: no `fallback`), so it reads `PqChat`'s state and env through the same hooks as `PqChatTree`. It
+///         writes nothing: its runtime holds no `SSTORE`, `TSTORE`, `LOG`, `CREATE`, `CREATE2`, `CALL`, `CALLCODE`,
+///         `DELEGATECALL` or `SELFDESTRUCT` (`test/pqchat/PqChatTreeViews.t.sol` scans it); an unknown selector reverts with empty data (no `fallback`);
 ///         called directly it has no env and no tree. **UNAUDITED.**
 contract PqChatTreeViews is IPqChatTreeViews, PqChatCore {
     /// @inheritdoc IPqChatTreeViews

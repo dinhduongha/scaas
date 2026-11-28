@@ -131,7 +131,7 @@ venue and one adapter per family. Every input is untrusted (section 6). The node
 **Scope (paths under `T/`):**
 - `scaas-node/src/` in full: `gateway.rs`, `gwauth.rs`, `admin.rs`, `typed.rs`, `guard.rs`, `metatx.rs`, `abi.rs`, `submit.rs`,
   `nonce.rs`, `signer.rs`, `keys.rs`, `chain.rs`, `breaker.rs`, `drift.rs`, `finality.rs`, `indexer.rs`, `external_pull.rs`,
-  `service.rs`, `pqz.rs`, `dex.rs`, `dex/venue.rs`, `mesh/`, `store/`, `config.rs`, `addresses.rs`, `adapter.rs`, `main.rs`,
+  `service.rs`, `pqz.rs`, `tree_set.rs`, `dex.rs`, `dex/venue.rs`, `mesh/`, `store/`, `config.rs`, `addresses.rs`, `adapter.rs`, `main.rs`,
   `adapters/{evm,hedera,soroban,cosmos,near,algorand,aptos,solana,sui,ton}.rs`
 - `scaas-node/migrations/`, `scaas-node/node.example.toml`, `Cargo.toml`, `Cargo.lock`; `scaas-node/tests/` and the in-file
   `mod tests` (read for what a test can and cannot fail)
@@ -244,6 +244,22 @@ m. **The review-fix round's rows** (added 2026-11-26): an empty `addWraps` / `ad
    signature object (CTR-UA-74), so the node forwards it unchanged and a job with a stale tag fails on chain
    `UAUnauthorized`, as `T/docs/node/job-api.md`'s operators' note says (A-4); a reverted exit within the lag is a SPECIFIED
    plan row (D2-5, TreeKEM plan T4): report it only where code claims it.
+n. **The whole-set guard and path-less commits** (added 2026-11-28; `T/docs/node/job-api.md#tree-set-guard`, CTR-CHAT-27's
+   Changes of 2026-11-26 / -27, the path-less delta spec R17-R20): `tree_set.rs` with `submit.rs` relays a tree commit as one
+   `commit` job holding its whole set; every piece checked against its signed hash and every node key against the admission
+   check before any send (`TREE_SET_REFUSED`, zero sends); the parts sent in C37's order, each only after the one before is
+   in state at the final block, the job `queued` under `TREE_SET_SENDING` meanwhile and never `dead` while a part may land; a
+   path-less commit (no path list) passes the same guard with the rows the contract accepts and no more.
+o. **Door A takes the six signed `PqChat` topic records** (NODE-GW-09, CLI-PQC-18 F3; landed from `pqchat-core-confirm`):
+   `gateway.rs` and `guard.rs`: only `createTopic`, `updateTopic`, `setTopicWriter`, `postEntry`, `editEntry`, `voteEntry`,
+   each with its `UASig` and `validUntil`, on a target the chain's `token_factory` lists as class 3 with a release
+   (`CALL_TARGET_REFUSED` otherwise); every other `PqChat` write stays a job of a namespace with the grant; the intake (the
+   operator's switch `params.relay_pqchat_topics`, `PQCHAT_TOPICS_NOT_RELAYED`, whose default follows NODE-GW-01 (c):
+   the node operator's deployment profile, `private` (fee 0 kept) or `public` (fee 0 refused without a sponsor policy), not
+   a chain kind, so every chain gets the same rule and the operator picks the profile; the hourly bucket per signing key
+   `PQCHAT_TOPICS_RATE`; a repeat in the hour answered `queued` without a second queueing) bounded in memory; the allow-list
+   equal to the contract's both ways (`typed.rs`, `selector_audit.json`); the bytes sent are the signed record rebuilt from
+   named fields, nothing else.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `scratchpad/review-ua-mtx-merge/E-node-clients.md`, `recheck-node.md`, `recheck2-node.md` (Fable E N-1 to N-11 and the
@@ -259,6 +275,10 @@ m. **The review-fix round's rows** (added 2026-11-26): an empty `addWraps` / `ad
   `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
   `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 - `T/docs/research/security-review-record.md` (part 3, the node relay, not done before this unit)
+- added 2026-11-28 (local, `STATUS.md` in each): the TreeKEM client round's review `scratchpad/treekem-t4-t9-review-20261126-1808/`
+  and re-check `scratchpad/treekem-t4-t9-recheck-20261126-2332/` (the node's whole-set guard); the path-less review
+  `scratchpad/treekem-pathless-review-20261127-1527/`; `scratchpad/pqchat-core-confirm-review-20261128-0133/`
+  (NODE-GW-09: C-1 = E-3, C-2)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - `T/smartcontracts/evm/runs/2026-11-18-prefreeze-matrix-summary.txt`, `2026-11-19-pr-a-matrix-summary.txt` (node test,
@@ -269,6 +289,9 @@ m. **The review-fix round's rows** (added 2026-11-26): an empty `addWraps` / `ad
 - the review-fix round: `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt` (with
   `2026-11-24-review-fix-contract-mutants.py`), `2026-11-26-review-fix4-contract-summary.txt`, and the round's closing
   matrix (`2026-11-26-round-matrix.sh` and its summary)
+- added 2026-11-28: `T/runs/2026-11-27-treekem-pathless-combined-summary.txt`, `-matrix-summary.txt`,
+  `-nethermind-rows.txt`; the `pqchat-core-confirm` rows of `T/clients/pqchat-core/runs/2026-11-17-pqchat-core-summary.txt`
+  and `2026-11-28-pqchat-core-confirm-mutants.txt` (the gateway's door-A rows)
 
 **Also accepted or known for this unit (do not report as such):**
 - Documented status: what a node doc marks SPECIFIED or PLANNED is not a finding for being unbuilt (the start-up probe

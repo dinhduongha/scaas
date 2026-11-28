@@ -20,9 +20,12 @@
 # OpenFactory release, arguments abi.encode(envVersion, env, implArgs) as OpenFactory._deploy appends them (implArgs
 # empty, as e2e.py passes); "<sym> at 0x…" with no artifact (pqUSD, pqW): an EIP-1167 clone of a release: not verified
 # itself, the row checks that Blockscout links it to its (verified) implementation (proxy_type eip1167).
-# No --libraries: forge links the deployed bytecode after compiling, so its metadata has no libraries; the verifier
-# matches the unlinked placeholders as library transformations (full match), while --libraries changes the metadata
-# hash (partial match only).
+# No --libraries by default: forge links the deployed bytecode after compiling, so its metadata has no libraries; the
+# verifier matches the unlinked placeholders as library transformations. Except the names in VERIFY_LIBRARIES (default
+# PqChat; ARCH-POS-29, CTR-CHAT-32: the owner wants the linked library shown on the verified contract): each library the
+# artifact links is declared with --libraries <source>:<name>:<address>, the address from the broadcast's `libraries`, so
+# the explorer records it among the contract's external libraries. With `bytecode_hash = "none"` (owner 2026-11-17) no
+# metadata hash is in the bytecode, so declaring the libraries cannot turn a full match into a partial one.
 # --skip-is-verified-check: forge's own check takes a contract Blockscout shows through a verified twin (same code,
 # `verified_twin_address_hash`, e.g. a second e2e run's verifiers) for verified and skips it; the script checks
 # `is_verified` itself.
@@ -71,6 +74,19 @@ known() { for _ in 1 2 3 4 5; do
     sleep 3
 done; }
 
+# The --libraries values of artifact $1: each linked source:name with its address from the broadcasts' `libraries`
+# ("source:name:address" rows); a linked library no broadcast names is an error.
+libs_of() {
+    jq -r '.deployedBytecode.linkReferences | to_entries[] | .key as $f | .value | keys[] | "\($f):\(.)"' "$1" |
+        while read -r sn; do
+            row=$(jq -r '.libraries[]?' "${bs[@]}" | grep -m1 "^$sn:") || {
+                echo "verify-blockscout: no broadcast places $sn" >&2
+                exit 2
+            }
+            echo "$row"
+        done
+}
+
 # verify <name> <address> <constructor args hex without 0x> [label]
 verify() {
     local name=$1 addr=$2 args=$3 label=${4:-$1} arts art src out opt=()
@@ -89,6 +105,7 @@ verify() {
     sleep 2
     src="$(jq -r '.metadata.settings.compilationTarget | keys[0]' "$art")"
     [ -n "$args" ] && opt=(--constructor-args "0x$args")
+    case " ${VERIFY_LIBRARIES:-PqChat} " in *" $name "*) while read -r l; do opt+=(--libraries "$l"); done < <(libs_of "$art") ;; esac
     out="$("$CAPPED" timeout "${VERIFY_TIMEOUT:-600}" forge verify-contract "$addr" "$src:$name" --verifier blockscout --verifier-url "$API/" \
         --chain-id "$CHAIN" "${opt[@]}" --watch --delay 10 --skip-is-verified-check 2>&1)"
     if [ "$(addr_field "$addr" is_verified)" = true ]; then

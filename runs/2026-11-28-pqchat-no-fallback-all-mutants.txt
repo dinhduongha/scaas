@@ -1,0 +1,13 @@
+# all mutants at commit df745d072 (name | outcome | test)
+a view routed to the topics module | killed | ../../scripts/capped forge test --match-path test/pqchat/PqChatTreeViews.t.sol --match-test test_viewsReadTheTree
+a view missing from the ABI (goneOwnKeyOf undeclared) | killed | ../../scripts/capped forge test --match-path test/pqchat/PqChatTreeViews.t.sol --match-test test_abiListsTheViewsAndNoFallback
+the fallback back | killed | ../../scripts/capped forge test --match-path test/pqchat/PqChatTreeViews.t.sol --match-test test_abiListsTheViewsAndNoFallback
+the library unpinned from the class env | killed | ../../scripts/capped forge test --match-path test/governance/GovDeploy.t.sol --match-test test_deployPqChatPath
+createSession through the epoch record | killed | ../../scripts/capped forge test --match-path test/pqchat/PqChat.t.sol --match-test test_createSession_forgedRecordBurnsNoNonce
+the library skips the session signature | killed | ../../scripts/capped forge test --match-path test/pqchat/PqChat.t.sol --match-test test_createSession_forgedRecordBurnsNoNonce
+the library signs the message under another UA | killed | ../../scripts/capped forge test --match-path test/pqchat/PqChatMessages.t.sol --match-test test_postMessage_forgedBurnsNoNonce
+the nonce before the signature (createSession) | killed | ../../scripts/capped forge test --match-path test/pqchat/PqChat.t.sol --match-test test_createSession_signatureBeforeNonce
+the library's message inputs reordered (no longer the entry's) | killed | ../../scripts/capped forge test --match-path test/pqchat/PqChatRecordLib.t.sol --match-test test_entriesAndLibraryTakeTheSameInputs
+the tree path stores the message in another form | killed | ../../scripts/capped forge test --match-path test/pqchat/PqChatTreeViews.t.sol --match-test test_treeMessageBlobIsTheFlatForm
+a library revert swallowed | killed | ../../scripts/capped forge test --match-path test/pqchat/PqChat.t.sol --match-test test_createSession_forgedRecordBurnsNoNonce
+11 mutants, 11 killed, 0 survived (0 killed elsewhere), 0 not loaded

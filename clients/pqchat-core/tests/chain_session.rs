@@ -9,6 +9,7 @@
     clippy::indexing_slicing
 )]
 mod common;
+use common::{called, confirmed};
 
 use common::chain::*;
 use pqchat_core::reads::SessionRef;
@@ -106,7 +107,9 @@ async fn chain_sessions_epochs_removal_leave() {
     );
     let pq = l.pq();
     // the 2-member session, every wrap in one write
-    let b = pq.create(create_req(&l, &alice, 1, &[&bob])).await.unwrap();
+    let b = confirmed(&pq, pq.create(create_req(&l, &alice, 1, &[&bob])).await)
+        .await
+        .unwrap();
     assert_eq!(b.sent, 2);
     let (b, gas) = land_all(&l, &pq, b).await;
     assert_eq!(gas.len(), 1);
@@ -133,10 +136,13 @@ async fn chain_sessions_epochs_removal_leave() {
         .await
         .unwrap();
     // a plain rekey by bob (a member, no admin): a fresh K
-    let r1 = pq
-        .rekey(&s, &ep0, rekey(&l, &bob, 2, &[&alice, &bob], &[&alice]))
-        .await
-        .unwrap();
+    let r1 = confirmed(
+        &pq,
+        pq.rekey(&s, &ep0, rekey(&l, &bob, 2, &[&alice, &bob], &[&alice]))
+            .await,
+    )
+    .await
+    .unwrap();
     assert_eq!(r1.epoch.epoch, 1);
     let (r1, _) = land_all(&l, &pq, r1).await;
     let ep1 = pq
@@ -145,18 +151,24 @@ async fn chain_sessions_epochs_removal_leave() {
         .unwrap();
     assert_eq!(ep1.epoch.members, r1.epoch.members);
     // a membership change by bob: NotAdmin
-    let e = pq
-        .rekey(
+    let e = confirmed(
+        &pq,
+        pq.rekey(
             &s,
             &ep1,
             rekey(&l, &bob, 3, &[&alice, &bob, &carol], &[&alice]),
         )
-        .await;
+        .await,
+    )
+    .await;
     assert_eq!(code(e), "NotAdmin");
     // a child of e0 now: the slot is taken; rebuilt on the winner
-    let e = pq
-        .rekey(&s, &ep0, rekey(&l, &alice, 4, &[&alice, &bob], &[&alice]))
-        .await;
+    let e = confirmed(
+        &pq,
+        pq.rekey(&s, &ep0, rekey(&l, &alice, 4, &[&alice, &bob], &[&alice]))
+            .await,
+    )
+    .await;
     assert_eq!(code(e), "EpochTaken");
     assert_eq!(
         pq.child_of(&s, &b.session_id).await.unwrap().as_deref(),
@@ -165,30 +177,41 @@ async fn chain_sessions_epochs_removal_leave() {
     // alice removes bob from e1, then rekeys listing bob: he is left out; he authors no rekey of e1
     land(
         &l,
-        pq.remove(
-            &s,
-            &ep1.epoch,
-            &alice,
-            5,
-            std::slice::from_ref(&bob.ua),
-            &l.payer,
+        called(
+            &pq,
+            pq.remove(
+                &s,
+                &ep1.epoch,
+                &alice,
+                5,
+                std::slice::from_ref(&bob.ua),
+                &l.payer,
+            )
+            .await,
         )
         .await
+        .map(|x| x.1)
         .unwrap(),
     )
     .await;
-    let e = pq
-        .rekey(&s, &ep1, rekey(&l, &bob, 6, &[&alice, &bob], &[&alice]))
-        .await;
+    let e = confirmed(
+        &pq,
+        pq.rekey(&s, &ep1, rekey(&l, &bob, 6, &[&alice, &bob], &[&alice]))
+            .await,
+    )
+    .await;
     assert_eq!(code(e), "NotMember");
-    let r2 = pq
-        .rekey(
+    let r2 = confirmed(
+        &pq,
+        pq.rekey(
             &s,
             &ep1,
             rekey(&l, &alice, 7, &[&alice, &bob, &carol], &[&alice]),
         )
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         r2.epoch
             .members
@@ -211,18 +234,26 @@ async fn chain_sessions_epochs_removal_leave() {
     // carol leaves e2; she authors no rekey of it
     land(
         &l,
-        pq.leave(&s, &ep2.epoch, &carol, 8, &l.payer).await.unwrap(),
+        called(&pq, pq.leave(&s, &ep2.epoch, &carol, 8, &l.payer).await)
+            .await
+            .map(|x| x.1)
+            .unwrap(),
     )
     .await;
-    let e = pq
-        .rekey(&s, &ep2, rekey(&l, &carol, 9, &[&alice], &[&alice]))
-        .await;
+    let e = confirmed(
+        &pq,
+        pq.rekey(&s, &ep2, rekey(&l, &carol, 9, &[&alice], &[&alice]))
+            .await,
+    )
+    .await;
     assert_eq!(code(e), "NotMember");
     // a UA without a KEM key: skipped and named
-    let b = pq
-        .create(create_req(&l, &alice, 10, &[&bob, &dave]))
-        .await
-        .unwrap();
+    let b = confirmed(
+        &pq,
+        pq.create(create_req(&l, &alice, 10, &[&bob, &dave])).await,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         b.epoch
             .members
@@ -262,8 +293,7 @@ async fn chain_twenty_members_in_chunks() {
         if let Some(g) = limit {
             l.block_gas(g);
         }
-        let b = pq
-            .create(create_req(&l, &ms[0], nonce, &refs))
+        let b = confirmed(&pq, pq.create(create_req(&l, &ms[0], nonce, &refs)).await)
             .await
             .unwrap();
         assert_eq!(b.epoch.members.len(), 20);

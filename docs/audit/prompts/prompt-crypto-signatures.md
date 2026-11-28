@@ -182,6 +182,12 @@ alone.
 - **BLS** (BLS12-381 and bn254 multi-signatures, RFC 9380 hash-to-curve, EIP-2537): Solidity `src/common/Bls12381.sol`,
   `HashToCurve.sol`, `src/ua/verifiers/PairingVerifiers.sol`, `BlsMultiBls12381Verifier.sol`, `src/ua/BlsMultiKeyData.sol`;
   `ua-rs` `src/bls_multi.rs`; clientkeys `src/bls-multi.js`; SDK `clients/scaas-sdk/src/op/bls_multi.rs`
+- **Constant-time secret multiplication** (added 2026-11-28; held here, in this unit only, as no unit held it):
+  `clients/scaas-ct/` (`src/lib.rs` `CtSwap`, `src/secret_mul.rs`: the blinded integer and the fixed 384-step ladder;
+  `tests/`, `Cargo.toml`, `Cargo.lock`, `clippy.toml`), used for every secret multiplication on an arkworks curve: `ua-rs`
+  `src/musig2.rs` (`Curve::secret_g`, bn254), `src/frost.rs` (`Bn254Element`), `src/bls_multi.rs`, `src/wallet/pairing.rs`,
+  `src/wallet/derive.rs` (the pairing kinds' public keys), and `clients/zether-prover/src/curve.rs` (Zether's nonces and
+  keys; unit `crypto-zether` reads that use only)
 - **Purposes and domains**: `src/ua/UAKinds.sol` (`uaMessage(kind, purpose, typedDigest)`, `TAG(kind)`, the purpose
   constants, `uaAuthDigest`), `src/common/SaltedEIP712.sol`; `ua-rs` `src/wallet/uasig.rs`, `src/wallet/eip712.rs`; clientkeys
   `src/ua.js`, `src/ua-verify.js`; the node's kind rules (`scaas-node/src/guard.rs`); the verifier service's
@@ -209,7 +215,11 @@ alone.
    clientkeys give the same verdict on every shared vector, negative rows included; the precompile's absence never reads as
    true, and the software path stays within 2^24 regular gas on a path a user must take.
 6. Constant time where a secret is used (signing in `ua-rs` and clientkeys; no secret-dependent branch in the vendored Falcon
-   wrapper's length checks).
+   wrapper's length checks). `scaas-ct` (added 2026-11-28): the ladder's step count and memory accesses independent of the
+   scalar and its blinding; the blinding factor's width and its source (the OS generator, the RNG failure a named error,
+   never a fallback); `CtSwap` branch-free for every field it is implemented for; the result equal to arkworks' plain
+   multiplication on the crate's tests; every caller passes secrets only through it (list any `* scalar` on a secret that
+   bypasses it).
 7. **Falcon on wasm32** (added 2026-11-26; CLI-UAL-66): a seed gives the same Falcon key pair, and a fixed `(sk, msg, rnd)`
    the same signature, natively (PQClean) and on wasm32 (falcon-rs `fpemu`), and both give PQClean's verdict on every FN-DSA
    vector row; the stated exception (FR-1 of the falcon-rs record: another, equally valid signature with probability about

@@ -142,7 +142,8 @@ pub struct AppKey {
 }
 
 impl AppKey {
-    /// The seed whose arena holds the key.
+    /// The seed whose arena holds the key (its callers: the Arweave seal and PqChat's chain positions).
+    #[cfg(any(feature = "arweave", feature = "pqchat-records"))]
     pub(crate) fn seed(&self) -> &str {
         &self.seed
     }
@@ -465,6 +466,58 @@ pub struct AppQuote {
     pub quote: Option<crate::op::SubmitQuote>,
 }
 
+/// What the gateways did with a relayed call ([`AppCore::relay_app_call`]): whether one queued it (a queue is no landing),
+/// each refusal as `code: detail` (at most 200 characters, a gateway's own words), and how many could not be reached.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AppRelay {
+    pub queued: bool,
+    pub refused: Vec<String>,
+    pub unreachable: u32,
+}
+
+impl AppRelay {
+    fn of(out: scaas_rpc::node::SubmitOutcome) -> Self {
+        use scaas_rpc::node::{NodeOutcome, SubmitOutcome};
+        let said = |e: &scaas_rpc::RpcError| -> String {
+            let t = match e {
+                scaas_rpc::RpcError::NodeRefused { code, detail, .. } => match detail {
+                    Some(d) => format!("{code}: {d}"),
+                    None => code.clone(),
+                },
+                e => e.code().to_string(),
+            };
+            t.chars().filter(|c| !c.is_control()).take(200).collect()
+        };
+        match out {
+            SubmitOutcome::Queued {
+                refused,
+                unreachable,
+                ..
+            } => AppRelay {
+                queued: true,
+                refused: refused.iter().map(|(_, e)| said(e)).collect(),
+                unreachable: u32::try_from(unreachable.len()).unwrap_or(u32::MAX),
+            },
+            SubmitOutcome::NotQueued { outcomes } => {
+                let mut r = AppRelay {
+                    queued: false,
+                    refused: vec![],
+                    unreachable: 0,
+                };
+                for (_, o) in outcomes {
+                    match o {
+                        NodeOutcome::Refused(e) => r.refused.push(said(&e)),
+                        NodeOutcome::Unreachable(_) => r.unreachable += 1,
+                        NodeOutcome::Queued { .. } => r.queued = true,
+                    }
+                }
+                r
+            }
+        }
+    }
+}
+
 /// One registry record as [`AppCore::verify_app_record`] reads it: `(kind, keyData)` of `registrationOf`, an `msig`'s current
 /// structure with its `enabled` word (`None`: never updated) and `version`, the structures of the versions the record's tags
 /// name (`msigAt`, CTR-UA-74: [`tagged_versions`]) and its accepted bits (`msigStateOf.accepted`: acceptance is per slot and
@@ -777,6 +830,26 @@ fn entry_call(entry: &str, args: &str) -> Result<EntryCall, SdkError> {
         .abi_encode_input(&values)
         .map_err(|_| SdkError::Argument)?;
     Ok((f, o, data))
+}
+
+/// Every `int8` of a call's argument `v` of type `ty` as a JSON number (the job API's form of a `PqChat` vote): a decimal
+/// string becomes the number, arrays and tuples by their components; anything else as it is (`entry_call` checked it).
+fn int8_numbers(ty: &str, components: &[alloy::json_abi::Param], v: &mut serde_json::Value) {
+    if let Some(base) = ty.strip_suffix("[]") {
+        for x in v.as_array_mut().into_iter().flatten() {
+            int8_numbers(base, components, x);
+        }
+    } else if ty == "tuple" {
+        for c in components {
+            if let Some(x) = v.get_mut(&c.name) {
+                int8_numbers(&c.ty, &c.components, x);
+            }
+        }
+    } else if ty == "int8" {
+        if let Some(n) = v.as_str().and_then(|s| s.parse::<i8>().ok()) {
+            *v = n.into();
+        }
+    }
 }
 
 /// The deepest a [`AppCore::read_app`] output type nests (each tuple and each array dimension one level).
@@ -1931,6 +2004,47 @@ impl AppCore {
             None => None,
         };
         Ok(AppQuote { review, quote })
+    }
+
+    /// A signed record's call of the app's own contract relayed by the profile's gateways (CLI-PQC-18 F3, owner 2026-11-27: the
+    /// default path of a topic write, fee 0 allowed): `POST /v1/op {chain, op: {entry, contract: kind, token: contract, args,
+    /// validUntil}}`, the same bytes to every gateway that announces the profile's chain (`kept_gateways`). `entry` and `args`
+    /// as [`Self::prepare_app_call`]'s, checked the same way (`Argument`, `AppDomainRefused`); `kind` the node's contract kind,
+    /// `pqchat` only (the one app kind door A takes, NODE-GW-09; another: `Argument`); every `int8` sent as a JSON number (the
+    /// job API's form, a `PqChat` vote), every other value as given; `validUntil` now plus the profile's validity window, a job
+    /// field the record does not sign. Nothing is simulated here: the gateway simulates before it queues. [`AppRelay`]: whether
+    /// a gateway queued it, each refusal by its code and detail, and how many gateways were unreachable (the same bytes may go
+    /// again, or the payer sends them itself). A queue is no landing. The SDK keeps no row: the signed record is the caller's.
+    pub async fn relay_app_call(
+        self: &Arc<Self>,
+        chain: String,
+        kind: String,
+        contract: String,
+        entry: String,
+        args: String,
+    ) -> Result<AppRelay, SdkError> {
+        // NODE-GW-09: the one app kind a gateway's door takes
+        if kind != "pqchat" {
+            return Err(SdkError::Argument);
+        }
+        let (f, mut o, _, _) = call_review(&entry, &args, &contract)?;
+        let (profile, chain_id, pool) = crate::op::evm(&self.sdk, &chain)?;
+        self.refuse_contract(&profile, &pool, &contract).await?;
+        for p in &f.inputs {
+            if let Some(v) = o.get_mut(&p.name) {
+                int8_numbers(&p.ty, &p.components, v);
+            }
+        }
+        let secs = profile
+            .max_valid_secs
+            .unwrap_or(self.sdk.limits.max_valid_secs);
+        let op = serde_json::json!({"entry": f.name, "contract": kind, "token": contract.to_ascii_lowercase(),
+            "args": o, "validUntil": self.sdk.now().saturating_add(secs).to_string()});
+        let node = crate::op::quote::kept_gateways(&self.sdk, &chain).await?;
+        let out = node
+            .submit_op(chain_id, &op, scaas_rpc::node::Fanout::All)
+            .await?;
+        Ok(AppRelay::of(out))
     }
 
     /// Whether `ua`'s single key (`kind`, `key_data`, read by the caller from the UA's record) signs `typed_json` on `path`.

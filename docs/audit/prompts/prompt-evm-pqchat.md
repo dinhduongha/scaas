@@ -145,6 +145,12 @@ The `PqChat` contract (UA-7): sessions, epochs, wraps, messages, topics and entr
   `PqChatTreeViews.t.sol`, `PqGroupTreeBase.t.sol`, `PqChatEpochs.t.sol` (the mode-0 exits and the replica copies),
   `PqChatTreeModel.sol`; the tree rows of `test/vectors/selector_audit.json`; `T/smartcontracts/vectors/pqchat/tree.json`
   (with a depth-9 commit), `tree-secrets.json` (read for the bytes)
+- **additions of 2026-11-28** (invariants 12 to 14): the path-less Adds in mode 1 (`PqChatTree.sol`, `PqGroupTree.sol`, `PqChatTreeViews.sol`,
+  `PqChatTypes.sol`: `pathless`, `confirmTag`, `pathRefreshBound`, `sincePath`; landed), the topic views of G1 / G2 / G5
+  (`PqChatTopics.sol`, `PqChatCore.sol`, `IPqChat.sol`: `postedAt`, `editedAt`, `entryRows`, the version nonce; landed);
+  **PENDING LANDING (`pqchat-no-fallback`):** `src/pqchat/PqChatLib.sol` (the new linked external library), the
+  `PqChat.sol` and `PqChatTreeViews.sol` changes (the 13 tree views declared, `fallback()` removed), tests
+  `test/pqchat/PqChatLib.t.sol`, `PqChatTreeViews.t.sol`; the deploy side of the library is unit `pqz-verifier-deploy`
 
 **Specifications and rules to read first:**
 - `T/docs/contracts/pqchat.md`, decisions CTR-CHAT-01 to -25 (D1-D22, P1-P49 as recorded; CTR-CHAT-20 removal, -21 home,
@@ -158,6 +164,9 @@ The `PqChat` contract (UA-7): sessions, epochs, wraps, messages, topics and entr
   bounds and gas, §14 threats), plan `T/docs/superpowers/plans/2026-11-23-pqchat-treekem.md`, decisions CTR-CHAT-26 (the
   mode, two layers, no return), CTR-CHAT-27 (the checks and bounds, controller calls C1-C40, R8 512 leaves at depth 9, C10's `TREE_CHANGES_MAX` 20), CTR-CHAT-28 (the tree is
   app-agnostic); `T/docs/clients/pqchat-core.md` CLI-PQC-17 (what only clients check)
+- added 2026-11-28: the path-less delta spec `T/docs/superpowers/specs/2026-11-25-treekem-pathless-add.md` (R17-R20, C41-C47)
+  and the Changes of 2026-11-25 to -28 under CTR-CHAT-26 / -27; CTR-CHAT-29, -30, -31 (G1, G2, G5); pending landing:
+  ARCH-POS-29 and CTR-CHAT-32 (branch `pqchat-no-fallback`)
 
 **Invariants to check (beyond section 5):**
 1. Every accepted record kept in full in state (SSTORE2 within the code-size limit, CTR-CHAT-05); events only notify.
@@ -200,6 +209,24 @@ The `PqChat` contract (UA-7): sessions, epochs, wraps, messages, topics and entr
    `UASig.signature`, accepted only when current (CTR-UA-74), and a replica's copy carries the replica registry's current tag
    (`test_a1_replicaCopyCarriesTheReplicaTag`), so a home record and its copy differ in `sigHash`: check every view and
    check that assumed them equal.
+12. **Path-less Adds** (added 2026-11-28; CTR-CHAT-26 R17-R20, CTR-CHAT-27 C24, C41-C47): in mode 1 only; `pathless` true
+   requires Adds only, an empty `nodeKeyHashes`, `ctCount` 0 and the empty list's hash (`PqChatShape`), no Remove and the
+   head's `admins` element for element (`PqChatTreePathRequired`); the rights of the spec's §9 (an admin adds anyone, a member
+   keys of its own UA up to `KEYS_PER_UA_MAX`); `pathRefreshBound` fixed at creation (0 in mode 0, at most 510 in mode 1),
+   the (N + 1)-th path-less leaf since the last path commit refused (`PqChatTreePathBound`), `sincePath` moved only at
+   completion and reset by every completed path commit; removals, exits, admin changes and refreshes keep a path (R19); a
+   path-less set sent in several transactions holds one Welcome wrap back (C37); mode 0 and `PqVault` unchanged.
+13. **Topic times, rows and nonces** (added 2026-11-28; CTR-CHAT-29, -30, -31): `postedAt` and `editedAt` stored in the free
+   bits of existing slots (no new slot, the layout pin moving only inside them), records, typehashes and vectors unchanged;
+   `entryRows` at most `ENTRY_ROWS_MAX` = 64 ids (`PqTopicRows`), an unknown id `PqTopicUnknown`, no `body`, the viewer's
+   vote without its `seq`; `entryOf`, `entryRows` and `versionAt` return the nonce that rebuilds the version's typed digest.
+14. **PENDING LANDING (`pqchat-no-fallback`): no `fallback()` routing** (ARCH-POS-29, CTR-CHAT-32): `PqChat` implements
+   `IPqChatTreeViews`, its 13 views declared in its ABI with their selectors unchanged (two caps as constants, eleven
+   forwarded by DELEGATECALL to `PqChatTreeViews`); `fallback()` removed, so no selector reaches a module unless declared;
+   `PqChatLib`, the linked external library for the signed-record step of `createSession`, `rekey` and `postMessage`:
+   its calldata decoding, the signature check and encoding equal to the code it replaced (no test, pin or vector edited for
+   behaviour), storage, `msg.sender` and return data correct across the library call, and its address the one the
+   verified contract shows (the sweep of the other contracts under ARCH-POS-29 is unit `cross-layer`'s).
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `T/pqz-core/research/code-review-2026-10-26/README.md` (whole-contract review at `64549aa4`) and `code-review-2026-10-19/README.md`
@@ -211,6 +238,9 @@ The `PqChat` contract (UA-7): sessions, epochs, wraps, messages, topics and entr
   mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
   `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
   `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
+- added 2026-11-28 (local): the path-less spec review `scratchpad/treekem-pathless-spec-review-20261125-2241/` and code
+  review `scratchpad/treekem-pathless-review-20261127-1527/`; the G1 / G2 / G5 notes `scratchpad/pqchat-g125/`; pending
+  landing: `scratchpad/pqchat-no-fallback-review-20261128-0112/` (Fable D-8, D-9 settled)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - the tag's closing gate summary under `T/smartcontracts/evm/runs/` (every forge directory at the default set, the set-sensitive tests at the other three sets)
@@ -223,6 +253,10 @@ The `PqChat` contract (UA-7): sessions, epochs, wraps, messages, topics and entr
 - the review-fix round: `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt` (with
   `2026-11-24-review-fix-contract-mutants.py`), `2026-11-26-review-fix4-contract-summary.txt`, and the round's closing
   matrix (`2026-11-26-round-matrix.sh` and its summary)
+- added 2026-11-28: `T/runs/2026-11-27-treekem-pathless-combined-summary.txt`, `-matrix-summary.txt`,
+  `-nethermind-rows.txt` (the path-less commits on the local Nethermind copy, which enforces 2^24), the path-less mutant
+  records `-p3-` to `-p9-`; `T/runs/2026-11-27-pqchat-g125-all-mutants.txt`; pending landing:
+  `T/runs/2026-11-28-pqchat-no-fallback-all-mutants.txt`
 
 **Dimension table** (ARCH-POS-22, `T/docs/review.md` §1; added 2026-11-24). Apply every dimension within this unit's
 scope; each row says what to hunt here. A row marked `N/A` gives its reason and stays. Every finding names its dimension
@@ -238,7 +272,7 @@ number (section 9).
 | 6 | Robustness and denial of service | Bounds: name 1-512 B, wraps chunked, at most 8 keys per UA, `TREE_LEAVES_MAX` 512 (depth 9), `TREE_CHANGES_MAX` 20, `TREE_ADMINS_MAX` 32, `TREE_INFO_MAX` 4,124 B, 64 leaves per `treeLeaves` call; `PqChatTreeBacklog`; a staged commit no piece can complete; the completion's transaction (about 49.1 M asked) and the last-leaf commit (near 2^24) against EIP-8037 and EIP-7825; open topics' state growth (accepted); the exit lag's ancestor walk (at most `EXIT_LAG_MAX` reads). |
 | 7 | Failure handling | Named errors; no partial epoch after a refused wrap or piece; a closed tree session; recovery from state alone (CTR-CHAT-14: `sessionsOf`, `latestEpoch`, `storedRange`, the tree's commits since a Welcome); reentrancy through the registry call. |
 | 8 | Consistency across languages and layers | Records, typehashes and wrap hashes equal `T/smartcontracts/vectors/pqchat/` (`records.json`, `tree.json`) as clientkeys `pqchat.js` / `pqchat-tree.js` / `treekem.js`, `ua-rs` `wallet/pqchat.rs` / `tree.rs` / `tree_public.rs` and pqchat-core build them; the six tree rows and the flat rows of `selector_audit.json` equal the node's `typed.rs` rows both ways; PqVault's use of `PqGroupBase` unchanged; the node refuses an empty `addWraps` as the contract does (A-5). |
-| 9 | Contract specifics | Layout pins `PqChat.json`, `PqChatStore.json`, `namespaces.json` (the tree namespace `scaas.pqchat.tree` apart); typehash pins (`PqChatTypes.t.sol`); the body modules (`PqChatTopics`, `PqChatTree`, `PqChatTreeMembers`, the read-only `PqChatTreeViews`; the `implArgs` order) by DELEGATECALL: storage, `msg.sender`, return data; the size gate; gas pins with old -> new figures (`PqChatGas.t.sol`, `PqChatSigGas.t.sol`, the tree gas rows). |
+| 9 | Contract specifics | Layout pins `PqChat.json`, `PqChatStore.json`, `namespaces.json` (the tree namespace `scaas.pqchat.tree` apart); typehash pins (`PqChatTypes.t.sol`); the body modules (`PqChatTopics`, `PqChatTree`, `PqChatTreeMembers`, the read-only `PqChatTreeViews`, each view declared in `PqChat`'s ABI, no `fallback`; the `implArgs` order) by DELEGATECALL, and the linked library `PqChatLib` (the signature check and encoding of `createSession`, `rekey`, `postMessage`, CTR-CHAT-32; pinned first in the class env): storage, `msg.sender`, return data, the calldata it decodes; the size gate; gas pins with old -> new figures (`PqChatGas.t.sol`, `PqChatSigGas.t.sol`, the tree gas rows). |
 | 10 | Performance and cost | Gas per entry against `docs/contracts/pqchat.md` and the TreeKEM spec §13 (estimates until pinned); the state gas of the no-return slots (97,920 each); who pays the last piece's completion. |
 | 11 | Interfaces and misuse | Entries hard to misuse: a flat entry on a tree session refused by name; the piece order a client must follow (one ciphertext held back) documented; stable error codes. |
 | 12 | Tests | Each refusal has a positive twin; the sigs mutants (14 of 14) and the TreeKEM mutants (T3a-T3d) and the review-fix round's contract mutants cover each check; `PqChatTreeModel.sol` as an independent model that can disagree with the contract; vectors read by the forge tests. |

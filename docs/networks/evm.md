@@ -472,7 +472,10 @@ the gate of `DeployBase.sol`: `chainUid()` of the factory and of each implementa
 block 0's hash; past block 256 `CHAIN_UID` is required). The script stops when the deployer has no code: on such a
 chain, deploy it first (the keyless presigned deployment transaction of that proxy, funded by a transfer to its signer)
 and re-run. `forge script … --broadcast` needs `--sender <deployer address>`, which `deploy.sh` and the e2e pass; forge
-places the linked libraries from that sender, not by CREATE2. It deploys `OpenFactory` (notice period `NOTICE_PERIOD`
+places every library the script links, through the deterministic deployer by CREATE2 (checked 2026-11-28 on a local
+chain: each library's transaction is `CREATE2`, `PqChatLib` at the same address in forge's tests and on the chain),
+so a release whose init code links a library has the same address on every chain; it places them on every run, whatever
+the script's flags (`PqChatLib` too without `DEPLOY_PQCHAT`, about 8.5 M gas asked). It deploys `OpenFactory` (notice period `NOTICE_PERIOD`
 seconds; owner ruling 2026-10-20: every mainnet — any chain outside `DeployBase._isTestChain`'s fixed list of test /
 dev chains, so 22777, Hedera 295 and an unknown chain too — defaults to and may not go below 3 days; the SCaaS testnet defaults to 10
 minutes, the other listed test / dev chains to 0; at most 30 days, the factory's `MAX_NOTICE_PERIOD`; `DEMO_SUPPLY`
@@ -781,6 +784,13 @@ binaries.soliditylang.org, never Blockscout's hosted service) backs the backend,
 every contract on the chain is verified by the step of [NET-EVM-12](#NET-EVM-12), `sh script/onchain/verify.sh
 scaas-testnet` (this Blockscout's API `http://127.0.0.1:8548/api` and the RPC `http://127.0.0.1:8545`, both on the host's
 loopback: the earlier LAN address is gone; the whole-chain scan on; the older per-broadcast `verify-blockscout.sh` stays);
+a contract whose linked libraries must show on the explorer ([ARCH-POS-29](../decisions.md#ARCH-POS-29); `VERIFY_LIBRARIES`,
+default `PqChat`, owner 2026-11-28) is verified with `--libraries <source>:<name>:<address>` (`vcheck.py` reads each
+address from the deployed code at the artifact's link offset; `verify-blockscout.sh` from the broadcast), and its row
+passes only when Blockscout lists every one of them in the contract's `external_libraries`. With `bytecode_hash = "none"`
+no metadata hash is in the bytecode, so declaring the libraries keeps a full match: the verify request for `PqChat` (its
+`--show-standard-json-input`, `settings.libraries` naming `PqChatLib`) compiles to the linked release's runtime byte
+for byte (checked 2026-11-28 with solc 0.8.37); every other linked contract keeps the library transformation;
 upstream v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so the live stack uses a locally patched verifier
 image (built outside the repo, `~dockers/mba-chain-nethermind/blockscout/sc-verifier/`), temporary until upstream supports
 Amsterdam (owner ruling 2026-10-31 option (a)): the 31 `Deploy.s.sol` contracts and the PQZ e2e contracts verified, full match; the e2e tokens are EIP-1167 clones Blockscout links to their verified implementations (RUNBOOK § Contract verification).

@@ -17,7 +17,7 @@ scaas-ua-cxx = { path = "../ua-cxx" }
 cxx = "=1.0.202"
 cxx-qt = "=0.10.0"
 cxx-qt-lib = "=0.10.0"
-serde_json = "=1.0.145"
+serde_json = "=1.0.154"
 zeroize = "=1.9.1"
 
 [build-dependencies]

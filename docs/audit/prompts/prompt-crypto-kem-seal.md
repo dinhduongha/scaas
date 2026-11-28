@@ -166,6 +166,12 @@ layer alone.
   `src/wallet/mod.rs`, tests `tests/pqz_leaf.rs`, `tests/vectors_marker.rs`; the wrappers (`ua-c`, `ua-cxx`, `ua-cs`, `ua-py`,
   `ua-go`, `ua-dart-frb`); the Zether confidential key's `sealConfKey` pattern (`src/zether-keys.js`, `src/zether.js`)
 - **The PQZ sealed opening's KEM use** (three-key model): `pqz-core/ffi/src/opening.rs`, `pqz-core/ffi/src/bin/pqz-vectors.rs`
+- **PENDING LANDING (`user-profiles`, added 2026-11-28): the user profile's seals** (CLI-UPR-12, -17 to -21): the data key
+  wrapped by Argon2id of the passphrase (per-field bounds, `p` fixed), the sealed store's AES-256-GCM-SIV with a random nonce
+  and length-framed associated data, the export seal under `ExportKey`, the Matrix store key as a sealed item (CLI-UPR-29):
+  `ua-rs` `src/wallet/profile.rs`, `appkey.rs` (`key-handles`); clientkeys `src/profile.js`; `clients/scaas-profile/src/`
+  (how it calls the arena); rows `smartcontracts/vectors/profile/`. Hunt nonce reuse under one key, associated data that
+  does not bind an item to its profile and name, a KDF floor a file can lower, and the same bytes in Rust and JS.
 
 **Specifications and standards to read first:**
 - FIPS 203, RFC 7748, RFC 5869, RFC 9106, RFC 8265, BIP-39, NIST SP 800-38D (AES-GCM)

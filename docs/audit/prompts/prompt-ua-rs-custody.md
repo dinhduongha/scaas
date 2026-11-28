@@ -129,6 +129,12 @@ ua-rs wallet custody: vault, store, AEAD, seal / open, KEM, derivation, pairing,
 - `src/wallet/{tree,tree_public}.rs` (added 2026-11-26, as no layer unit held them: the `ua-rs` side of CLI-PQC-17, BUILT:
   path secrets from the KEM seed, node keys, the replay from a pin, rosters, every tree secret in key memory); tests `tree`;
   unit `crypto-pqchat-tree` reads them vertically
+- additions of 2026-11-28 (invariants 8, 9): `src/wallet/appkey.rs` (the app-core key handles, `AppKeys`, `seal_key`,
+  `generated_passphrase`; on `dev`, held by no layer unit until now) and the path-less and F-1 code of
+  `src/wallet/tree.rs` (landed); **PENDING LANDING (`user-profiles`):** `src/wallet/profile.rs` (the profile arena
+  `ProfileKeys`, `ExportKey`), the `key-handles` and `user-profile` features in `Cargo.toml` (no signing code, no seed, no UA
+  kind), the changes to `src/wallet/{appkey,manifest,store,vault,mod}.rs` and `src/lib.rs`, tests `tests/profile.rs` and the
+  new rows of `tests/wallet_vault.rs`, `runs/2026-11-27-key-handles-nm.py`
 
 **Specifications and rules to read first:**
 - spec `T/docs/superpowers/specs/2026-11-05-ua-rs-sign.md`, plan `T/docs/superpowers/plans/2026-11-05-ua-rs-sign.md`
@@ -181,6 +187,19 @@ ua-rs wallet custody: vault, store, AEAD, seal / open, KEM, derivation, pairing,
    B2-8); the replay keeps only the trees at 0, the pin and the head, and rosters for the secret range only (E-3 / B2-2); a
    resumed replay keeps its held keys and pin when a read lies (`tree_resume` by reference, C-6 of the fix check); every
    bound on served counts (544) holds before an allocation.
+8. **PENDING LANDING (`user-profiles`): the profile arena** (CLI-UPR-02, -12, -19, -21, -32; owner 2026-11-27, O15):
+   `ProfileKeys` is an arena of its own (no seed, no UA kind, no signing code reachable under `key-handles` /
+   `user-profile`; `runs/2026-11-27-key-handles-nm.py` checks the symbols), its keys only as handles, zeroized and `mlock`ed
+   where the platform allows (`memory_protection` reported); Argon2id within the per-field bounds with `p` fixed and the
+   test-only KDF set (`test-hooks`) refused in a release; AES-256-GCM-SIV with a random nonce per seal and the pinned
+   associated data; `ExportKey` used only for the export seal; the random bytes of the profile id and the Matrix store key
+   from the OS generator. `appkey.rs` under `key-handles` alone keeps the rules it had under `wallet`.
+9. **Path-less Adds and F-1 in the tree** (added 2026-11-28; CTR-CHAT-26 R17-R20, C45-C47; F-1, C-11 / G-4, owner
+   2026-11-28): the joiner of a path-less Add derives from the parent's `next` secret, `hash(adds)` and the context, the
+   chain reset by every path commit; the `addNonce` seed-derived, so the device tests its own records by it; a path-less
+   record of the device's own `(ua, keyId)` with a reproduced nonce and a foreign tag is the compromise warning, after which
+   the device takes no key and drops the chain until the next path commit (fail closed); no tree key leaves key memory on
+   either path.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `scratchpad/review-t21/` (T21 at `806f4f2c2`: `scope.md`, `ledger.md` with its FIX-NOW / OWNER / LATER / REJECT rows and the owner decisions O1-O8, the Fable and Codex part reports); the fix waves landed after it (`git -C T log --grep 't21'`)
@@ -190,8 +209,14 @@ ua-rs wallet custody: vault, store, AEAD, seal / open, KEM, derivation, pairing,
   mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
   `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
   `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
+- added 2026-11-28 (local, `STATUS.md` in each): the path-less review `scratchpad/treekem-pathless-review-20261127-1527/`
+  and the F-1 notes `scratchpad/treekem-f1/`; pending landing: `scratchpad/user-profiles-review-20261127-0819/`,
+  `scratchpad/user-profiles-code-review-20261128-0230/`
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
+- added 2026-11-28: `T/runs/2026-11-28-treekem-f1-f1-mutants.txt` (F-1, one mutant per language), the path-less mutant
+  records `T/runs/2026-11-27-treekem-pathless-p3-` to `-p9-mutants*.txt`; pending landing: the `-kh-` and `-up2-` records
+  under `T/clients/scaas-sdk/runs/2026-11-27-user-profiles-*` and `T/clients/ua-rs/runs/2026-11-27-key-handles-nm.py`
 - `T/smartcontracts/evm/runs/2026-11-16-ua-rs-sign-t21-summary.txt`, `2026-11-16-ua-rs-sign-sync7-summary.txt`, `2026-11-09-ua-rs-sign-t20d-summary.txt`, and the tag's own client gate summary
 
 **Also accepted for this unit (do not report):**

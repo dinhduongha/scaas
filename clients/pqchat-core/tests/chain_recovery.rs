@@ -11,6 +11,7 @@
     clippy::indexing_slicing
 )]
 mod common;
+use common::confirmed;
 
 use async_trait::async_trait;
 use common::chain::*;
@@ -87,8 +88,9 @@ async fn chain_recovery_from_state() {
         chain_uid: l.uid.clone(),
         contract: l.home.clone(),
     };
-    let b = pa
-        .create(CreateSession {
+    let b = confirmed(
+        &pa,
+        pa.create(CreateSession {
             me: alice.clone(),
             chain: CHAIN.into(),
             home: l.home.clone(),
@@ -103,8 +105,10 @@ async fn chain_recovery_from_state() {
             },
             payer: l.payer.clone(),
         })
-        .await
-        .unwrap();
+        .await,
+    )
+    .await
+    .unwrap();
     land(&l, b.call.clone()).await;
     let s = SessionRef {
         chain: CHAIN.into(),
