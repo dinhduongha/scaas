@@ -1,7 +1,7 @@
 # up1 mutants (name | outcome | commit | test | first failure line)
-the HMAC file name over the item name only (no part) | killed | 0a2a9f86e dirty | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (6947.732784ms)
-the last-chunk flag ignored at import (either flag accepted) | killed | 0a2a9f86e dirty | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (4924.521073ms)
-rev left out of the item AD | killed | 0a2a9f86e dirty | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (1145.162338ms)
-name inside the wrap's public JSON | killed | 0a2a9f86e dirty | ../../scripts/capped node --test test/profile.test.js | ✖ envelope: whole files (protected visible, protected hidden, unprotected) reopen (1.175134ms)
-anchorCompare: any difference is rollback (ahead not followed) | killed | 0a2a9f86e dirty | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (1246.582869ms)
+the HMAC file name over the item name only (no part) | killed | f44ae1201 dirty | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (5727.880567ms)
+the last-chunk flag ignored at import (either flag accepted) | killed | f44ae1201 dirty | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (4719.774126ms)
+rev left out of the item AD | killed | f44ae1201 dirty | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (1132.498025ms)
+name inside the wrap's public JSON | killed | f44ae1201 dirty | ../../scripts/capped node --test test/profile.test.js | ✖ envelope: whole files (protected visible, protected hidden, unprotected) reopen (1.144888ms)
+anchorCompare: any difference is rollback (ahead not followed) | killed | f44ae1201 dirty | ../../scripts/capped node --test test/profile.test.js | ✖ the generator reproduces the four files byte for byte (1108.799847ms)
 5 mutants, 5 killed, 0 survived, 0 not loaded, 0 other failure

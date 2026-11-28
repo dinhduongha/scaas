@@ -49,7 +49,8 @@ MUTANTS = [
      [(H, "        taken(found, &info.id)?;\n", "        drop(found);\n")],
      T + "g7_duplicates"),
     ("last written on a hidden open",
-     [(H, "        self.open_found(&f).inspect_err(|_| f.keys.lock())\n",
+     [(H, "        };\n        self.open_found(&f).inspect_err(|_| f.keys.lock())\n",
+       "        };\n"
        "        {\n"
        "            let _r = self.root_lock()?;\n"
        "            let (mut ix, at) = self.index_locked()?;\n"

@@ -27,6 +27,8 @@ MUTANTS = [
           "        StoreError::ProfilePassphraseRequired => SdkError::ProfilePassphraseRequired,\n"
           "        StoreError::ProfileRollback => SdkError::ProfileRollback,\n"
           "        StoreError::ProfileDamaged => SdkError::ProfileDamaged,\n"
+          "        StoreError::ProfileBusy => SdkError::ProfileBusy,\n"
+          "        StoreError::ProfilePartFull => SdkError::ProfilePartFull,\n"
           "        StoreError::Io | StoreError::Unavailable | StoreError::Unexpected => SdkError::VaultIo,\n",
        "        _ => SdkError::VaultIo,\n")],
      LIB + "vault::tests::store_codes_map_by_name"),

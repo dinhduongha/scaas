@@ -44,8 +44,8 @@ MUTANTS = [
           "            }\n", "")],
      T + "a1_journal_beside_an_older_envelope"),
     ("A-5 the tombstone removed before its keychain items",
-     [(P, "                    Some(_held) => self.remove_keychain(id).and_then(|()| remove_dir(&path)),\n",
-       "                    Some(_held) => remove_dir(&path).and_then(|()| self.remove_keychain(id)),\n")],
+     [(P, "                        .and_then(|()| self.remove_keychain(id))\n                        .and_then(|()| remove_dir(&path)),\n",
+       "                        .and_then(|()| remove_dir(&path))\n                        .and_then(|()| self.remove_keychain(id)),\n")],
      T + "a5_tombstone_kept_until_its_keychain_items_go"),
     ("A-6 a clean-up failure fatal at start",
      [(P, "            if cleaned.is_err() {\n"
