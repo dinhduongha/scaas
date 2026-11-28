@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """The JSON ABI items pqchat-core reads and writes (src/abi.json), cut from forge's build of the contracts' interfaces:
 `IPqChat` whole (its tree entries take `IPqGroupTree`'s `TreeAdd` / `TreeRemove`, review A-6: forge inlines them as tuples, so
-that file adds no item and is read to fail loudly if it moves), the registry's and the factory's views the crate reads.
+that file adds no item and is read to fail loudly if it moves), the registry's and the factory's views the crate reads,
+`PqChatStore`'s `supportsInterface`.
 Generated, never edited by hand.
   python3 -I clients/pqchat-core/runs/gen_abi.py [--check]     (after `forge build` in smartcontracts/evm)"""
 import json
@@ -17,6 +18,8 @@ PICK = {
     "IPqGroupTree.sol/IPqGroupTree.json": [],
     "IUARegistry.sol/IUARegistry.json": ["kemKeyOf", "kemKeyAt", "checkedOf", "memberAccepted", "msigOf", "registrationOf", "msigStateOf", "msigAt"],
     "IOpenFactory.sol/IOpenFactory.json": ["infoOf", "contractsPage"],
+    # a `chainstore` entry's identity (CLI-PQC-02, owner 2026-11-28); its store entries are `IPqChat`'s (CTR-CHAT-22)
+    "PqChatStore.sol/PqChatStore.json": ["supportsInterface"],
 }
 
 

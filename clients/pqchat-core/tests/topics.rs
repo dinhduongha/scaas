@@ -77,6 +77,7 @@ fn two_chains(w: &World) -> Arc<PqChat> {
     c.chains.push(ChainConf {
         chain: OTHER.into(),
         chain_uid: uid(8),
+        chain_id: None,
         registry: REGISTRY.into(),
         factory: FACTORY.into(),
         tree_gas: None,

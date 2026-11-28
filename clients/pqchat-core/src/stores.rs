@@ -73,10 +73,6 @@ fn prefs_key(session: &str) -> String {
     format!("prefs/{}", session.to_ascii_lowercase())
 }
 
-fn is_chain(e: &StoreEntry) -> bool {
-    matches!(e, StoreEntry::Chain { .. })
-}
-
 fn is_matrix(e: &StoreEntry) -> bool {
     matches!(e, StoreEntry::Matrix { .. })
 }
@@ -145,9 +141,11 @@ impl PqChat {
         info.stores
             .iter()
             .filter(|e| match e {
-                StoreEntry::Chain { chain_uid, .. } => self.conf.chains.iter().any(|c| {
-                    c.chain_uid.eq_ignore_ascii_case(chain_uid) && c.chain.ends_with("-testnet")
-                }),
+                StoreEntry::Chain { chain_uid, .. } | StoreEntry::Chainstore { chain_uid, .. } => {
+                    self.conf.chains.iter().any(|c| {
+                        c.chain_uid.eq_ignore_ascii_case(chain_uid) && c.chain.ends_with("-testnet")
+                    })
+                }
                 _ => false,
             })
             .cloned()
@@ -255,7 +253,7 @@ impl PqChat {
             post: None,
         };
         let typing = matches!(content, Some(Content::Typing { .. }));
-        let chain_listed = info.stores.iter().any(is_chain);
+        let chain_listed = info.stores.iter().any(StoreEntry::on_chain);
         if matches!(content, Some(Content::Receipt { .. }))
             && !prefs.receipts.unwrap_or(!chain_listed)
         {
@@ -282,7 +280,7 @@ impl PqChat {
         if targets.iter().any(|e| is_matrix(e)) && self.matrix().is_none() {
             return Err(PqChatError::MatrixDetached);
         }
-        if (post || targets.iter().any(|e| is_chain(e))) && !prefs.chain_spend {
+        if (post || targets.iter().any(|e| e.on_chain())) && !prefs.chain_spend {
             return Err(PqChatError::ChainCostUnconfirmed);
         }
         let (v, key, upload) = match body {
@@ -344,7 +342,9 @@ impl PqChat {
                 .await?;
                 Ok(String::new())
             }
-            StoreEntry::Chain { .. } => self.store_message(e, out, payer).await,
+            StoreEntry::Chain { .. } | StoreEntry::Chainstore { .. } => {
+                self.store_message(e, out, payer).await
+            }
             _ => Err(PqChatError::StoreUnsupported),
         }
     }

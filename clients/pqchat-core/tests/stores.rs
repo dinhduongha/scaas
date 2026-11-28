@@ -73,6 +73,42 @@ fn chain(contract: &str) -> Value {
     json!({"kind": "chain", "chainId": "31337", "chainUid": hex(&[7; 32]), "contract": contract})
 }
 
+/// A `PqChatStore` (CTR-CHAT-22) at `contract`.
+const STORE: &str = "0x5ca00000000000000000000000000000000000d1";
+
+/// `type(IPqChatStore).interfaceId`: its four selectors XORed (PqChatStore.t.sol `test_erc165`).
+const STORE_ID: &str = "0xf33ad180";
+
+fn chainstore_on(chain_id: &str, contract: &str) -> Value {
+    json!({"kind": "chainstore", "chainId": chain_id, "chainUid": hex(&[7; 32]), "contract": contract})
+}
+
+fn chainstore(contract: &str) -> Value {
+    chainstore_on("31337", contract)
+}
+
+/// `contract` answers `supportsInterface(IPqChatStore)` with `yes`.
+fn store_at(w: &World, contract: &str, yes: bool) {
+    w.net.answer(
+        contract,
+        "PqChatStore.supportsInterface",
+        json!({"id": STORE_ID}),
+        json!({"0": yes}),
+    );
+}
+
+/// The `storeMessage` writes prepared: (contract, arguments).
+fn stored(w: &World) -> Vec<(String, Value)> {
+    w.net
+        .writes
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|x| x.1 == "IPqChat.storeMessage")
+        .map(|x| (x.0.clone(), x.2.clone()))
+        .collect()
+}
+
 fn entry(v: &Value) -> StoreEntry {
     serde_json::from_value(v.clone()).unwrap()
 }
@@ -732,6 +768,7 @@ async fn store_list_invalid() {
             json!({"kind": "matrix", "room": "!other:example.org"}),
         ],
         vec![chain(HOME), chain(HOME)],
+        vec![chainstore(STORE), chainstore(STORE)],
     ] {
         let w = ready().await;
         let (b, s) = alice_sends(&w, stores.clone()).await;
@@ -848,6 +885,7 @@ async fn test_chain_store_warned() {
     c.chains.push(ChainConf {
         chain: "sepolia-testnet".into(),
         chain_uid: hex(&[0x5e; 32]),
+        chain_id: Some(11155111),
         registry: REGISTRY.into(),
         factory: FACTORY.into(),
         tree_gas: None,
@@ -990,4 +1028,234 @@ fn the_scope_has_pqchat_s_app_id() {
         pqchat_core::APP_ID,
         hex(&scaas_ua::wallet::pqchat::app_id())
     );
+}
+
+/// Bob's crate over `w`'s port, `s`'s epoch `b` open and in use, accepted without the spend consent; its stores confirmed
+/// only when `confirm`.
+async fn bob_reads(
+    w: &World,
+    s: &SessionRef,
+    b: &Built,
+    confirm: bool,
+) -> (Arc<PqChat>, Arc<OpenEpoch>) {
+    let bob = PqChat::with_net(
+        w.app.clone(),
+        w.net.clone(),
+        Arc::new(MemoryStore::new()),
+        conf(),
+    );
+    let ep = bob
+        .open_epoch(s, &b.e.id, &w.bob.key, &w.bob.ua, None)
+        .await
+        .unwrap();
+    let ep = bob.use_epoch(s, ep).await.unwrap();
+    if confirm {
+        bob.confirm_stores(&ep).unwrap();
+    }
+    bob.accept(s, false).unwrap();
+    (bob, ep)
+}
+
+/// The owner's ruling of 2026-11-28: a `chainstore` entry (a `PqChatStore`, CTR-CHAT-22) is a message store this build serves.
+/// One send writes the same bytes to the room, the `PqChat` chain store and the `PqChatStore` (`storeMessage` at the store's own
+/// address, after its trusted `supportsInterface(IPqChatStore)` read); bob pages the store by `storedRange` at its address; the
+/// largest text's envelope fits the store's 24,416 B.
+#[tokio::test(flavor = "multi_thread")]
+async fn chainstore_written_and_read() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    store_at(&w, STORE, true);
+    let (b, s) = alice_sends(&w, vec![room(), chain(HOME), chainstore(STORE)]).await;
+    let r = Arc::new(Room::default());
+    w.pq.attach_matrix(r.clone());
+    let rep =
+        w.pq.send_content(&s, &me(&w.alice), &txt("hi"), None, &opts(&w))
+            .await
+            .unwrap();
+    assert_eq!(rep.stores.len(), 3);
+    assert!(rep.stores.iter().all(|(_, d)| sent(d)), "{rep:?}");
+    let st = stored(&w);
+    assert_eq!(
+        st.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(),
+        [HOME, STORE]
+    );
+    assert_eq!(st[0].1, st[1].1, "the same bytes to every store");
+    let ev = r.0.lock().unwrap().clone();
+    let (_, env) = pqchat_core::matrix::parse(ev[0].1.to_string().as_bytes()).unwrap();
+    assert_eq!(st[1].1["env"], hex(&env));
+    // the identity read, at the store, under the trusted mark
+    let ids: Vec<_> = w
+        .net
+        .reads
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|x| x.1 == "PqChatStore.supportsInterface")
+        .map(|x| x.0.clone())
+        .collect();
+    assert_eq!(ids, [STORE]);
+    assert_eq!(
+        pqchat_core::net::trust("PqChatStore.supportsInterface").unwrap(),
+        pqchat_core::net::Trust::Trusted
+    );
+    // bob reads the store at its own address
+    let (bob, ep) = bob_reads(&w, &s, &b, true).await;
+    let hint = w.app.pqchat_hint(b.k.clone()).unwrap();
+    let m = sealed(
+        &w,
+        &w.alice,
+        &b.e,
+        &b.k,
+        0,
+        r#"{"body":"read","type":"text"}"#,
+    )
+    .await;
+    w.net.answer(
+        STORE,
+        "IPqChat.storedRange",
+        json!({"hint": hex(&hint), "offset": "0", "limit": "16"}),
+        json!({"0": [hex(&m.payload)]}),
+    );
+    assert_eq!(
+        bob.read_chain_store(&ep, &entry(&chainstore(STORE)))
+            .await
+            .unwrap(),
+        1
+    );
+    // the largest text: its envelope within `PqChatStore`'s bound (24,576 B blob, `env` at most 24,416 B)
+    let n = stored(&w).len();
+    let rep =
+        w.pq.send_content(
+            &s,
+            &me(&w.alice),
+            &txt(&"a".repeat(BODY_MAX)),
+            None,
+            &opts(&w),
+        )
+        .await
+        .unwrap();
+    assert!(rep.stores.iter().all(|(_, d)| sent(d)), "{rep:?}");
+    let big = &stored(&w)[n + 1].1;
+    let len = unhex(big["env"].as_str().unwrap()).unwrap().len();
+    assert!(len <= 24_416, "{len}");
+}
+
+/// A `chainstore` address that does not answer `supportsInterface(IPqChatStore)` true is neither written nor read
+/// (`InstanceUnlisted`); the same session's store that does is (the positive control).
+#[tokio::test(flavor = "multi_thread")]
+async fn chainstore_identity_checked() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    store_at(&w, STORE, true);
+    store_at(&w, UNLISTED, false);
+    let (b, s) = alice_sends(&w, vec![chainstore(STORE), chainstore(UNLISTED)]).await;
+    let rep =
+        w.pq.send_content(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
+            .await
+            .unwrap();
+    assert!(sent(&rep.stores[0].1), "{rep:?}");
+    assert!(
+        matches!(&rep.stores[1].1, Delivery::Failed(c) if *c == "InstanceUnlisted"),
+        "{rep:?}"
+    );
+    assert_eq!(
+        stored(&w).iter().map(|x| x.0.as_str()).collect::<Vec<_>>(),
+        [STORE]
+    );
+    let (bob, ep) = bob_reads(&w, &s, &b, true).await;
+    let e = bob
+        .read_chain_store(&ep, &entry(&chainstore(UNLISTED)))
+        .await;
+    assert_eq!(code(e), "InstanceUnlisted");
+    assert_eq!(w.net.reads_of("IPqChat.storedRange"), 0);
+}
+
+/// A `chainstore` entry names its chain by `chainId` too (C-Chain and Fuji share `chainUid`): an entry whose chain id the app's
+/// chain does not state is neither written nor read (`InstanceUnlisted`, nothing read at the address); the entry with the chain's
+/// id is written.
+#[tokio::test(flavor = "multi_thread")]
+async fn chainstore_names_its_chain_id() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    store_at(&w, STORE, true);
+    let fuji = chainstore_on("43113", STORE);
+    let (_, s) = alice_sends(&w, vec![chainstore(STORE), fuji.clone()]).await;
+    let rep =
+        w.pq.send_content(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
+            .await
+            .unwrap();
+    assert!(sent(&rep.stores[0].1), "{rep:?}");
+    assert!(
+        matches!(&rep.stores[1].1, Delivery::Failed(c) if *c == "InstanceUnlisted"),
+        "{rep:?}"
+    );
+    assert_eq!(stored(&w).len(), 1);
+    assert_eq!(w.net.reads_of("PqChatStore.supportsInterface"), 1);
+}
+
+/// `chainstore` gas only under the session's spend consent: without it the send is refused before anything is signed
+/// (`ChainCostUnconfirmed`); consented, the store is written.
+#[tokio::test(flavor = "multi_thread")]
+async fn chainstore_cost_unconfirmed() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    store_at(&w, STORE, true);
+    let (b, s) = alice_sends(&w, vec![chainstore(STORE)]).await;
+    w.pq.consent_chain_spend(&s.session_id, false).unwrap();
+    let e =
+        w.pq.send_content(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
+            .await;
+    assert_eq!(code(e), "ChainCostUnconfirmed");
+    let d = w.pq.device().unwrap();
+    assert_eq!(
+        (w.pq.next_counter(&b.e.id, &d).unwrap(), w.net.writes()),
+        (0, 0)
+    );
+    w.pq.consent_chain_spend(&s.session_id, true).unwrap();
+    let rep =
+        w.pq.send_content(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
+            .await
+            .unwrap();
+    assert!(sent(&rep.stores[0].1), "{rep:?}");
+    assert_eq!(stored(&w).len(), 1);
+}
+
+/// A `chainstore` the user has not confirmed is neither read nor written (`StoreUnconfirmed`): nothing read at its address,
+/// nothing signed; once confirmed it is read.
+#[tokio::test(flavor = "multi_thread")]
+async fn chainstore_unconfirmed_neither_read_nor_written() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    store_at(&w, STORE, true);
+    let (b, s) = alice_sends(&w, vec![chainstore(STORE)]).await;
+    let (bob, ep) = bob_reads(&w, &s, &b, false).await;
+    bob.consent_chain_spend(&s.session_id, true).unwrap();
+    let st = entry(&chainstore(STORE));
+    assert_eq!(
+        code(bob.read_chain_store(&ep, &st).await),
+        "StoreUnconfirmed"
+    );
+    let e = bob
+        .send_content(&s, &me(&w.bob), &txt("x"), None, &opts(&w))
+        .await;
+    assert_eq!(code(e), "StoreUnconfirmed");
+    assert_eq!(w.net.writes(), 0);
+    assert_eq!(
+        (
+            w.net.reads_of("IPqChat.storedRange"),
+            w.net.reads_of("PqChatStore.supportsInterface")
+        ),
+        (0, 0)
+    );
+    // the positive control: confirmed, it is read
+    let hint = w.app.pqchat_hint(b.k.clone()).unwrap();
+    w.net.answer(
+        STORE,
+        "IPqChat.storedRange",
+        json!({"hint": hex(&hint), "offset": "0", "limit": "16"}),
+        json!({"0": []}),
+    );
+    bob.confirm_stores(&ep).unwrap();
+    assert_eq!(bob.read_chain_store(&ep, &st).await.unwrap(), 0);
+    assert_eq!(w.net.reads_of("IPqChat.storedRange"), 1);
 }

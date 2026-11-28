@@ -255,6 +255,7 @@ pub fn conf() -> PqChatConfig {
         chains: vec![ChainConf {
             chain: CHAIN.into(),
             chain_uid: hex(&[7; 32]),
+            chain_id: Some(31337),
             registry: REGISTRY.into(),
             factory: FACTORY.into(),
             tree_gas: None,

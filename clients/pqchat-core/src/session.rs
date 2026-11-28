@@ -67,9 +67,19 @@ impl StoreEntry {
     pub fn holds_messages(&self) -> bool {
         !matches!(self, StoreEntry::Libp2p)
     }
-    /// A store this build reads and writes (CLI-PQC-02: Matrix and `PqChat` chain stores).
+    /// A store this build reads and writes (CLI-PQC-02: Matrix, `PqChat` chain stores and `PqChatStore`s).
     pub fn implemented(&self) -> bool {
-        matches!(self, StoreEntry::Matrix { .. } | StoreEntry::Chain { .. })
+        matches!(
+            self,
+            StoreEntry::Matrix { .. } | StoreEntry::Chain { .. } | StoreEntry::Chainstore { .. }
+        )
+    }
+    /// A store on a chain, written by `storeMessage` (gas under the session's spend consent): `chain` or `chainstore`.
+    pub fn on_chain(&self) -> bool {
+        matches!(
+            self,
+            StoreEntry::Chain { .. } | StoreEntry::Chainstore { .. }
+        )
     }
 }
 
@@ -95,11 +105,7 @@ pub fn check_stores(i: &Info) -> Result<(), PqChatError> {
         count(|s| matches!(s, StoreEntry::Waku { .. })),
         count(|s| matches!(s, StoreEntry::Libp2p)),
     ];
-    let mut chains: Vec<&StoreEntry> = i
-        .stores
-        .iter()
-        .filter(|s| matches!(s, StoreEntry::Chain { .. } | StoreEntry::Chainstore { .. }))
-        .collect();
+    let mut chains: Vec<&StoreEntry> = i.stores.iter().filter(|s| s.on_chain()).collect();
     let n = chains.len();
     chains.sort();
     chains.dedup();

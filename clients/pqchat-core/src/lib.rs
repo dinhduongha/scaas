@@ -89,6 +89,10 @@ pub struct ChainConf {
     /// the SDK profile's key
     pub chain: String,
     pub chain_uid: String,
+    /// the chain's EIP-155 id, as the SDK profile states it: a `chainstore` entry is served only on the chain whose id and
+    /// `chain_uid` it names (C-Chain and Fuji share `chain_uid`); absent, no `chainstore` entry is served here
+    #[serde(default)]
+    pub chain_id: Option<u64>,
     pub registry: String,
     pub factory: String,
     /// The chain's TreeKEM gas rows (release data, the SDK's `PqTreeGas` as JSON; spec §13): the plan of a tree commit and the

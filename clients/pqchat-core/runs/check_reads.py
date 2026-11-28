@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 SRC = ROOT / "clients/pqchat-core/src"
 SPEC = ROOT / "docs/superpowers/specs/2026-11-17-pqchat-core.md"
-ITEM = r"I(?:PqChatTreeViews|PqChat|UARegistry|OpenFactory)\.\w+"
+ITEM = r"(?:I(?:PqChatTreeViews|PqChat|UARegistry|OpenFactory)|PqChatStore)\.\w+"
 
 
 def main():

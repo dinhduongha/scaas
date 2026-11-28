@@ -3,6 +3,8 @@
 //! hint; a reader pages `storedRange(hint, offset, 16)` (trusted reads) from its kept position, each payload decoded by the SDK
 //! (V2, bounded) and checked as any message (CLI-PQC-07): anyone may write under a known hint, so a stranger's or an empty
 //! envelope is dropped and paged past. `postMessage` posts the envelope's own record and signature at the home instance.
+//! A `chainstore` entry (a `PqChatStore`, CTR-CHAT-22: `PqChat`'s store selectors, event and error; owner 2026-11-28) takes the
+//! same path at the store's own address, after its own identity check (CLI-PQC-02): no factory lists it.
 use crate::message::{OpenEpoch, Outgoing};
 use crate::model::{at, bytes, hex};
 use crate::reads::SessionRef;
@@ -14,27 +16,69 @@ use serde_json::json;
 /// `storedRange`'s page (the contract's `STORED_RANGE_MAX`).
 pub const PAGE: usize = 16;
 
+/// `type(IPqChatStore).interfaceId`: `storeMessage`, `storedCount`, `storedAt` and `storedRange`'s selectors XORed (the forge
+/// pin `PqChatStore.t.sol` `test_erc165`).
+pub const IPQCHATSTORE_ID: &str = "0xf33ad180";
+
 impl PqChat {
-    /// The chain store `e` as this app serves it: its chain and instance, listed by that chain's factory (a trusted read).
+    /// The chain store `e` as this app serves it: its chain and contract. A `chain` entry's instance is listed by that chain's
+    /// factory (a trusted read); a `chainstore` entry resolves only to a served chain whose `chain_uid` and chain id it names
+    /// (C-Chain and Fuji share `chain_uid`), its contract a `PqChatStore` ([`PqChat::is_chat_store`]). `InstanceUnlisted`
+    /// otherwise, nothing read there.
     async fn chain_store(&self, e: &StoreEntry) -> Result<(ChainConf, String), PqChatError> {
-        let StoreEntry::Chain {
-            chain_uid,
-            contract,
-            ..
-        } = e
-        else {
-            return Err(PqChatError::StoreUnsupported);
+        let (chain_uid, contract, chainstore) = match e {
+            StoreEntry::Chain {
+                chain_uid,
+                contract,
+                ..
+            } => (chain_uid, contract, None),
+            StoreEntry::Chainstore {
+                chain_id,
+                chain_uid,
+                contract,
+            } => (chain_uid, contract, Some(chain_id)),
+            _ => return Err(PqChatError::StoreUnsupported),
         };
+        // a `chainstore` entry's chain id in decimal, as the served chain states it
+        let id_of = |c: &ChainConf, id: &String| c.chain_id.is_some_and(|i| i.to_string() == *id);
         let c = self
             .conf
             .chains
             .iter()
-            .find(|c| c.chain_uid.eq_ignore_ascii_case(chain_uid))
+            .find(|c| {
+                c.chain_uid.eq_ignore_ascii_case(chain_uid)
+                    && chainstore.is_none_or(|id| id_of(c, id))
+            })
             .ok_or(PqChatError::InstanceUnlisted)?
             .clone();
         let contract = contract.to_ascii_lowercase();
-        self.require_listed(&c.chain, &contract).await?;
+        let known = match chainstore {
+            None => self.listed(&c.chain, &contract).await?,
+            Some(_) => self.is_chat_store(&c.chain, &contract).await?,
+        };
+        if !known {
+            return Err(PqChatError::InstanceUnlisted);
+        }
         Ok((c, contract))
+    }
+
+    /// Whether `contract` on `chain` is a `PqChatStore`: it answers `supportsInterface(IPqChatStore)` true (a trusted read). An
+    /// address without code answers empty bytes, which do not decode as the answer (the SDK's `Argument`): not a store.
+    pub async fn is_chat_store(&self, chain: &str, contract: &str) -> Result<bool, PqChatError> {
+        let v = self
+            .net
+            .read(
+                chain,
+                contract,
+                "PqChatStore.supportsInterface",
+                json!({ "id": IPQCHATSTORE_ID }),
+            )
+            .await;
+        match v {
+            Ok(v) => Ok(at(&v, "0").as_bool() == Some(true)),
+            Err(PqChatError::Sdk(scaas_sdk::SdkError::Argument)) => Ok(false),
+            Err(e) => Err(e),
+        }
     }
 
     /// `out` written to the chain store `e` (`storeMessage`, prepared and submitted under the session's spend consent): the

@@ -192,6 +192,7 @@ impl Local {
             chains: vec![ChainConf {
                 chain: CHAIN.into(),
                 chain_uid: self.uid.clone(),
+                chain_id: Some(31337),
                 registry: self.registry.clone(),
                 factory: self.factory.clone(),
                 // the chain's TreeKEM gas rows, the release data an app ships (the path-less delta P8: on a node that

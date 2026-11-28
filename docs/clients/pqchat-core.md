@@ -56,13 +56,29 @@ live Matrix client" below is the open profile's: [CLI-PQC-20](../decisions.md#CL
 <a id="CLI-PQC-02"></a>**CLI-PQC-02** — **This round's scope: 1:1 sessions first, groups correct; Matrix and chain stores; public
 topics; attachments (owner 2026-11-21); no calls, no HCS, Waku or libp2p, no `msig` author** (owner 2026-11-10: the 2-person chat is the main case;
 controller call for the cut, owner may override; BUILT). In: sessions, epochs and rekeys, wraps in chunks, `leave`, `remove`,
-the home rule and replicas, `msig` expansion of members, the sender chains, the envelope, `postMessage` and `storeMessage`, dedupe
-and order, recovery from state, pending until accepted, the content types `text`, `edit`, `redact`, `react`, `receipt`,
+the home rule and replicas, `msig` expansion of members, the sender chains, the envelope, `postMessage` and `storeMessage`, the
+message stores `matrix`, `chain` (a `PqChat` instance) and `chainstore` (a `PqChatStore`, below), dedupe and order, recovery from state, pending until accepted, the content types `text`, `edit`, `redact`, `react`, `receipt`,
 `typing` and `file` (UA-7 §6.4.1), and public topics. Out, PLANNED in later tasks of the UA-7 plan: calls and their content types
 (`callMember`, `callOffer`, `callAnswer`, `callCandidates`, `callKey`), the HCS, Waku and libp2p adapters,
 device linking and the epoch-key export (UA-7 P6, §14 O5), and records authored by an `msig` (an `msig` admin's epoch or removal,
 an `msig` topic owner), whose co-signers need the full record on other devices (`MsigAuthorPlanned`). A content of a type out of
 scope is shown as unsupported and never acted on (UA-7 P49).
+
+<a id="chainstore-entry"></a>**The `chainstore` entry is served** (owner 2026-11-28): a session that lists
+`{"kind": "chainstore", "chainId", "chainUid", "contract"}` (a `PqChatStore`,
+[CTR-CHAT-22](../contracts/pqchat.md#CTR-CHAT-22)) sends and reads through it, where the build refused it before
+(`StoreUnsupported`). `PqChatStore` has `PqChat`'s store selectors, event and error, so the crate writes and reads it by the
+path of a `chain` store at the store's own address: `storeMessage(1, hint, env)` (anyone writes, unsigned), `storedRange(hint,
+offset, 16)` paged from the kept position (trusted reads, [ARCH-POS-15](../decisions.md#ARCH-POS-15)), each payload checked
+as any message (CLI-PQC-07). No factory lists it, so before each use the crate checks the contract itself: the entry resolves
+only to a chain the app serves whose `chain_uid` **and** chain id (`ChainConf.chain_id`) it names (C-Chain and Fuji share
+`chain_uid`), and the address answers `supportsInterface(type(IPqChatStore).interfaceId = 0xf33ad180)` true by a trusted read
+(an address without code answers no decodable value); otherwise `InstanceUnlisted`, nothing written or read there. Every rule of a
+`chain` store holds: its gas only under the session's spend consent (`ChainCostUnconfirmed`), a store the user has not
+confirmed neither written nor read (`StoreUnconfirmed`), the same envelope to every store of the list (CLI-PQC-06). Its blob is
+at most 24,576 B (`env` ≤ 24,416 B); the largest envelope the crate sends (a 16,000-B text in the 16,384-B bucket) fits it, a
+test. BUILT (`src/chain_store.rs`, `src/session.rs`, `src/stores.rs`; tests `tests/stores.rs` `chainstore_*`, on anvil
+`tests/chain_chainstore.rs`, the store deployed by `smartcontracts/evm/script/deploy_pqchatstore.py local --rpc`), UNAUDITED.
 
 ## 2. Secrets and signing
 
@@ -153,7 +169,7 @@ the crate does not implement cannot send; chain-store gas is spent only under th
 user confirms it** (UA-7 P27, P49; the refusal, the consent and the confirmation controller calls, the owner may override;
 BUILT). A send builds one signed record and one envelope and delivers the same bytes to each store the epoch's `sealedInfo` lists
 that the content type may use (UA-7 P49): every type in scope to the Matrix room and to each chain store by `storeMessage` (an
-instance the factory lists as class 3, version ≠ 0), except `typing`, which goes only to the Matrix room and is not sent when no
+instance the factory lists as class 3, version ≠ 0, or a `chainstore` entry's `PqChatStore`, [its check](#chainstore-entry)), except `typing`, which goes only to the Matrix room and is not sent when no
 Matrix room is listed. When the list names a message store kind this build does not implement (HCS or Waku in this round), the send
 is refused before anything is signed (`StoreUnsupported`) and the session stays readable from the stores it does implement. **Chain
 stores cost gas on every message:** the user gives a per-session consent to that spend, shown with the figure per message, at

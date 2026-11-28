@@ -32,11 +32,15 @@ chain id, nonce and fees given explicitly from the majority's reads, the signed 
   scripts/capped python3 -I script/deploy_pqchatstore.py local --out <forge out>
       the gate: a fresh `anvil --hardfork cancun --code-size-limit 24576` as a cancun profile `local-testnet`: deploy (sent),
       deploy again (done, no send), probe; books in a temp dir
+  python3 -I script/deploy_pqchatstore.py local --out <forge out> --rpc <url>
+      the same three steps on a running local anvil at amsterdam (a client's chain test, e.g. pqchat-core's), the key
+      `local-pqchatstore-testnet` with no profile file (forkcheck: amsterdam, nothing to check), its first account signing
   python3 -I script/deploy_pqchatstore.py cases     prints the cases NET-EVM-18 (4) runs at the chain's fork on the
       amsterdam artifact's bytes (generated here at each deploy, never a file edited by hand)
 <forge out>: `forge build src/pqchat/PqChatStore.sol test/forkcheck --extra-output evm.legacyAssembly --out <dir>`.
 UNAUDITED tooling."""
 
+import contextlib
 import json
 import os
 import re
@@ -436,19 +440,25 @@ def probe(
 # ---- the gate: a local anvil at cancun
 
 
-def local(out, say=print):
+def local(out, say=print, url=None):
+    """The gate on a fresh cancun anvil, or (`url`) on a running local amsterdam anvil the caller started and stops."""
     cancun = {"evmFork": "cancun", "codeSizeLimit": 24576, "initCodeSizeLimit": 49152}
-    with tempfile.TemporaryDirectory() as t, f.Anvil("cancun", cancun["codeSizeLimit"]) as rpc:
-        os.makedirs(os.path.join(t, "src/chains/local-testnet"))
-        with open(os.path.join(t, "src/chains/local-testnet/profile.json"), "w") as fh:
-            json.dump(cancun, fh)
+    key = "local-pqchatstore-testnet" if url else "local-testnet"
+    with (
+        tempfile.TemporaryDirectory() as t,
+        _running(url) if url else f.Anvil("cancun", cancun["codeSizeLimit"]) as rpc,
+    ):
+        if not url:
+            os.makedirs(os.path.join(t, "src/chains/local-testnet"))
+            with open(os.path.join(t, "src/chains/local-testnet/profile.json"), "w") as fh:
+                json.dump(cancun, fh)
         frm = rpc("eth_accounts", [])["result"][0]
         sign = cast_signer(rpc.url, ["--ethsign", "--from", frm])
         o = {
             "out": out,
             "books": t,
             "profiles": t,
-            "env": {"DEPLOY_NAME": "local-testnet"},
+            "env": {"DEPLOY_NAME": key},
             "say": say,
             "final": "latest",
         }
@@ -459,8 +469,16 @@ def local(out, say=print):
             raise StoreError("CHATSTORE_SEND: a second deploy sent")
         say("deploy again: done, no send")
         probe([rpc], sign, **o)
-        say(json.dumps(json.load(open(os.path.join(t, "deployments/local-testnet.json")))[NAME]))
+        say(json.dumps(json.load(open(os.path.join(t, f"deployments/{key}.json")))[NAME]))
     return 3
+
+
+@contextlib.contextmanager
+def _running(url):
+    """A running node at `url`, as `f.Anvil` yields one (left running)."""
+    rpc = f.http_node(url)
+    rpc.url = url
+    yield rpc
 
 
 # ---- NET-EVM-18 (4)'s cases for PqChatStore
@@ -574,8 +592,10 @@ def main(argv):
             print(json.dumps(cases(), indent=1))
             return 0
         say = lambda s: print(f"[chatstore] {s}", flush=True)  # noqa: E731
-        if argv[:1] == ["local"] and argv[1:2] == ["--out"] and len(argv) == 3:
-            n = local(os.path.abspath(argv[2]), say)
+        if argv[:1] == ["local"] and argv[1:2] == ["--out"] and len(argv) in (3, 5):
+            if len(argv) == 5 and argv[3] != "--rpc":
+                sys.exit(__doc__)
+            n = local(os.path.abspath(argv[2]), say, argv[4] if len(argv) == 5 else None)
             print(f"ok {n}/{n}")
             return 0
         if argv[:1] in (["deploy"], ["probe"]) and len(argv) >= 4 and argv[2] == "--out":

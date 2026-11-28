@@ -90,6 +90,8 @@ pub const READS: &[(&str, Trust)] = &[
     ("IUARegistry.msigOf", Trusted),
     ("IUARegistry.msigStateOf", Trusted),
     ("IUARegistry.registrationOf", Trusted),
+    // a `chainstore` entry's identity (owner 2026-11-28, CLI-PQC-02): its contract a `PqChatStore`
+    ("PqChatStore.supportsInterface", Trusted),
 ];
 
 /// Every write of the crate, by ABI item.

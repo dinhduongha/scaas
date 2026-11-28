@@ -8,7 +8,7 @@ use crate::matrix::room_of;
 use crate::message::OpenEpoch;
 use crate::model::{at, h};
 use crate::reads::SessionRef;
-use crate::session::{Me, StoreEntry};
+use crate::session::Me;
 use crate::{DropReason, Items, PqChat, PqChatError};
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -179,11 +179,7 @@ impl PqChat {
                 .collect(),
             admins: ep.epoch.admins.clone(),
             info: handle,
-            chain_stores: info
-                .stores
-                .iter()
-                .filter(|e| matches!(e, StoreEntry::Chain { .. }))
-                .count(),
+            chain_stores: info.stores.iter().filter(|e| e.on_chain()).count(),
             matrix: room_of(&info.stores).is_some(),
         })
     }
@@ -202,11 +198,7 @@ impl PqChat {
         self.confirm_stores(&ep)?;
         let info = self.info_of(&ep)?;
         let mut shown = 0;
-        for e in info
-            .stores
-            .iter()
-            .filter(|e| matches!(e, StoreEntry::Chain { .. }))
-        {
+        for e in info.stores.iter().filter(|e| e.on_chain()) {
             shown += self.read_chain_store(&ep, e).await?;
         }
         let mut room = crate::matrix::RoomUse::None;
