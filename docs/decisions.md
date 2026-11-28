@@ -13514,7 +13514,7 @@ submits and pays the gas for, the user's signed intent shown for a partner to re
 and a canonical byte form, chain-bound).
 
 <a id="CLI-QR-03"></a>
-Change (owner 2026-11-28, owner: yes): the QR spec's open questions Q1, Q4, Q5, Q6 ruled as recommended: Q1 the animated class bound k ≤ 72 (≈ 82 KB, ≈ 15–20 s at 5 frames a second), fixed after the §11 simulation and measurement; Q4 no bulk-by-hash node endpoint in this frame (the bulk file, a PqChat / Matrix attachment, later the Arweave store); Q5 no EIP-681 form, `scaas:` only; Q6 error correction L by default, M as a print export option. Q3 (the payee's signature) is still open.
+Change (owner 2026-11-28, owner: yes): the QR spec's open questions Q1, Q4, Q5, Q6 ruled as recommended: Q1 the animated class bound k ≤ 72 (≈ 82 KB, ≈ 15–20 s at 5 frames a second), fixed after the §11 simulation and measurement; Q4 no bulk-by-hash node endpoint in this frame (the bulk file, a PqChat / Matrix attachment, later the Arweave store); Q5 no EIP-681 form, `scaas:` only; Q6 error correction L by default, M as a print export option. Q3 ruled the same day: the payee's signature on a `pay-request` stays optional (its own off-chain purpose; the review names the signer and whether it is a known contact, an unsigned request under a Caution); verifying the payment details before paying is the payer's responsibility.
 
 ### CLI-QR-03 — Every QR decode is bounded by length and depth before it allocates, and refuses by name
 - old: — · status: current · owner: no · date: 2026-11-28 · normative: decisions.md#CLI-QR-03 · superseded-by: —

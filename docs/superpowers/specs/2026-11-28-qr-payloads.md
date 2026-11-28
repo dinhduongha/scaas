@@ -629,7 +629,7 @@ phones for each class and for signature parts above version 30, reported, not a 
   `n2048-kmax1024` goes by animated QR, fixed after the simulation and measurement of §11; the alternative is k ≤ 24 (≈ 27 KB,
   about 5 to 6 s), Zether only, PQZ always by the bulk file.
 - **Q2. Payment requests without a payer.** Ruled (owner 2026-11-28): a `pay-request` only carries what the payer needs to pay; `payer` is optional and anyone may pay it. Whether a request counts as paid (one or several payments by `entryRef`, partial payments, refunds, CTR-MTX-03 / CTR-MTX-31) is the payee's reconciliation from the chain's events, never the QR's or the payer's client's: the scanner pays and shows only its own history of payments to the same payee and `pay_no` as a Caution.
-- **Q3. The payee's signature on a payment request.** Recommendation: keep it optional, under its own off-chain purpose (§3.2);
+- **Q3. The payee's signature on a payment request.** Ruled (owner 2026-11-28): as recommended, the signature stays optional; checking the payment details before paying is the payer's own responsibility (the review shows what the payer needs, the signer and whether it is a known contact). Recommendation: keep it optional, under its own off-chain purpose (§3.2);
   the review shows "signed by <UA>, a known contact" or "not a known contact", and an unsigned request carries a Caution that
   anyone can show it.
 - **Q4. Bulk by hash from a node.** Ruled (owner 2026-11-28): as recommended. Recommendation: not in this frame; the bulk file and a PqChat or Matrix attachment cover it,
