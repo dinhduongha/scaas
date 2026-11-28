@@ -744,6 +744,19 @@ Change (owner: yes, 2026-11-28): one exception to the 14-day line: alloy 2.6.1 (
 Change (owner: yes, 2026-11-28): major bumps are not deferred: every Rust major behind the line moves before the pre-freeze
 tag, like the minors; only a written exception (a ruling or an upstream constraint) keeps one behind.
 
+Change (owner: yes, 2026-11-28, on the inventory of the same day): (1) the Rust toolchain stays at 1.97.1 (ARCH-POS-12) with a
+dated exception, reviewed after the tag, although cargo-near 0.23.0 exists; (2) the contract toolchain moves before reset
+8b-6 in one contract round: solc 0.8.37 to 0.8.38, Foundry 1.8.5 to 1.9.0, OpenZeppelin from the 2025-03 master commit to
+the v5.7.0 release, with the full forge matrix at the four sets, every gas pin old to new, the size gate, and the layout and
+typehash pins; (3) ARCH-POS-25's contract-family clause holds only where the host SDK itself holds the crate's older
+generation; where it does not (NEAR p256, Cosmos sha3 / ripemd), the crate takes the new generation like any other;
+(4) the check fails on a major or minor behind the line and only warns on a patch behind.
+
+Change (controller, owner: no, owner may override, 2026-11-28): (1) the `wasm-streams` pin of CLI-SDK-33 (`=0.4.2`, for
+reqwest 0.12) moves with the alloy lane to the 0.5.x line reqwest 0.13 requires, restated there as an exact pin; (2) the
+stark-backup `p3-*` `=0.9.0-rc.1` pins keep a dated exception (backup proof system, not built into any shipped crate),
+reviewed with the next stark-backup change.
+
 ## 2. Node — General
 
 ### NODE-GEN-01 — Node holds no subject funds or keys
