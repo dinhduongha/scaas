@@ -781,22 +781,34 @@ async fn a_file_item_is_signed_only_after_its_object_was_read() {
         w.pv.unlock(&w.me, st.clone(), &Passphrase::Off)
             .await
             .unwrap();
-    let f = pqvault_core::file::FileToSave {
-        file: (0..1000u32).map(|i| (i % 251) as u8).collect(),
-        title: "Passport scan".into(),
+    let bytes: Vec<u8> = (0..1000u32).map(|i| (i % 251) as u8).collect();
+    let f = |title: &str| pqvault_core::file::FileToSave {
+        file: zeroize::Zeroizing::new(bytes.clone()),
+        title: title.into(),
         media_type: "application/pdf".into(),
         name: "passport.pdf".into(),
         max_object: (1u64 << 17) + 16,
     };
+    // the cheap refusals come before the seal (review E-5)
+    assert!(matches!(
+        w.pv.prepare_file(&u, f(""), pay()).await,
+        Err(Error::Shape)
+    ));
     let n = signs(&w);
-    let unread = w.pv.prepare_file(&u, &f, pay()).await.unwrap();
+    let unread =
+        w.pv.prepare_file(&u, f("Passport scan"), pay())
+            .await
+            .unwrap();
     assert!(unread.upload().url.starts_with("ar://"));
     assert!(matches!(
-        w.pv.confirm_file(unread).await,
+        w.pv.confirm_file(&unread).await,
         Err(Error::FileNotRead)
     ));
     assert_eq!(signs(&w), n, "nothing signed before the read");
-    let mut p = w.pv.prepare_file(&u, &f, pay()).await.unwrap();
+    let mut p =
+        w.pv.prepare_file(&u, f("Passport scan"), pay())
+            .await
+            .unwrap();
     let (id, object) = object_of(p.upload());
     let served = Arc::new(Mutex::new(vec![(id.clone(), vec![0u8; object.len()])]));
     let files = gateway(served.clone()).await;
@@ -809,9 +821,11 @@ async fn a_file_item_is_signed_only_after_its_object_was_read() {
     w.pv.check_uploaded(&mut p, &files).await.unwrap();
     assert!(p.read_back());
     let rec = p.prepared().record().clone();
-    let c = w.pv.confirm_file(p).await.unwrap();
+    let c = w.pv.confirm_file(&p).await.unwrap();
     assert_eq!(signs(&w), n + 1, "signed once, after the read");
     assert_eq!(c.signed.record, rec);
+    // the prepared file stays the caller's: a retry signs the same record, no second object (review E-4)
+    assert_eq!(w.pv.confirm_file(&p).await.unwrap().signed.record, rec);
     // the stored version, opened as a reader opens it, and its file
     let vid = st.vault_id;
     let iid = item_id(vid, w.a, rec.nonce.0);
@@ -842,7 +856,40 @@ async fn a_file_item_is_signed_only_after_its_object_was_read() {
         (1000, format!("ar://{id}").as_str())
     );
     let opened = w.pv.open_file(&u, &v1, object.clone()).unwrap();
-    assert_eq!(opened.with(|b| b.to_vec()), f.file);
+    assert_eq!(opened.with(|b| b.to_vec()), bytes);
+    // a `file` item is written by `prepare_file` only: not by create_item / create_items (review E-1)
+    assert!(matches!(
+        w.pv.create_item(&u, &item, pay()).await,
+        Err(Error::Shape)
+    ));
+    // an edit never names another object (review E-2)
+    for (k, val) in [
+        ("url", json!(format!("ar://{}", "B".repeat(43)))),
+        ("size", json!(999)),
+        ("sha256", json!(format!("0x{}", "00".repeat(32)))),
+        ("ctSha256", json!(format!("0x{}", "00".repeat(32)))),
+    ] {
+        let mut other = item.clone();
+        other.set(k, Field::Plain(val));
+        assert!(
+            matches!(
+                w.pv.edit_item(&u, &v1, &other, pay()).await,
+                Err(Error::Shape)
+            ),
+            "{k}"
+        );
+    }
+    // a note edited into a `file` item has no wrap to move
+    let mut note = Item::new("note");
+    note.set("title", Field::Plain(json!("n")));
+    let as_note = ItemVersion {
+        value: Ok(note),
+        ..version_at(iid, vid, 1, &rec.ciphertext.0)
+    };
+    assert!(matches!(
+        w.pv.edit_item(&u, &as_note, &item, pay()).await,
+        Err(Error::Shape)
+    ));
     let mut bad = object.clone();
     bad[20] ^= 1;
     assert!(w.pv.open_file(&u, &v1, bad).is_err(), "a tampered object");
@@ -854,7 +901,7 @@ async fn a_file_item_is_signed_only_after_its_object_was_read() {
     let item2 = v2.value.as_ref().unwrap();
     assert_ne!(item2.plain("keyWrap"), item.plain("keyWrap"), "a new wrap");
     let opened = w.pv.open_file(&u, &v2, object.clone()).unwrap();
-    assert_eq!(opened.with(|b| b.to_vec()), f.file);
+    assert_eq!(opened.with(|b| b.to_vec()), bytes);
     let stale = ItemVersion {
         version: 1,
         version_count: 1,

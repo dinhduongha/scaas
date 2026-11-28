@@ -19,15 +19,17 @@ use scaas_sdk::arweave::ArweaveFiles;
 use scaas_sdk::op::KeyRef;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use zeroize::Zeroizing;
 
 /// The upload key's ANS-104 signature type: ed25519 (as PqChat's, pqchat-core T10b).
 pub const SIGNATURE_TYPE: u16 = 2;
 
-/// A file to save in a vault: its bytes, the item's title (1–256 B), its media type (1–64 B) and display name (1–255 B), and
-/// the bundler profile's largest single request (`FileTooLarge` above its bucket).
-#[derive(Clone)]
+/// A file to save in a vault: its bytes (1 B to 16 MiB, wiped when dropped; moved into the seal, never copied), the item's
+/// title (1–256 B), its media type (1–64 B) and display name (1–255 B), and the bundler profile's largest single request
+/// (`FileTooLarge` above its bucket): the same `max_object` as the `ArweaveFiles` profile that will post it, else
+/// `upload_file` refuses the item after the review (review E-10).
 pub struct FileToSave {
-    pub file: Vec<u8>,
+    pub file: Zeroizing<Vec<u8>>,
     pub title: String,
     pub media_type: String,
     pub name: String,
@@ -68,7 +70,9 @@ impl PreparedFile {
     }
 }
 
-/// A `file` item's public fields, as the app shows and fetches by (`name` display only, never a path without making it safe).
+/// A `file` item's public fields, as the app shows and fetches by. Another member wrote them: `name` and `media_type` are
+/// display text only (a front-end strips control characters and never uses `name` as a path without making it safe), and
+/// `size` is shown before the user asks for the fetch (review E-7).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileInfo {
     pub media_type: String,
@@ -83,57 +87,75 @@ fn b32_of(v: Option<&Value>) -> Option<[u8; 32]> {
     unhex(v?.as_str()?, 32)?.try_into().ok()
 }
 
-/// The public fields of a `file` item, else `None` (another type, a field missing or of another shape).
+/// The public fields of a `file` item, else `None` (another type, a field missing or of another shape, a url not `ar://`:
+/// the form before C14).
 pub fn file_info(item: &Item) -> Option<FileInfo> {
     if item.ty != "file" {
         return None;
     }
     let s = |k: &str| item.plain(k).and_then(Value::as_str).map(String::from);
+    let url = s("url").filter(|u| crate::content::ar_url_ok(u))?;
     Some(FileInfo {
         media_type: s("mediaType")?,
         name: s("name")?,
         size: item.plain("size").and_then(Value::as_u64)?,
-        url: s("url")?,
+        url,
         sha256: b32_of(item.plain("sha256"))?,
         ct_sha256: b32_of(item.plain("ctSha256"))?,
     })
 }
 
+/// The item of a file: its public fields and the key wrap.
+fn file_item(f: &FileToSave, size: u64, sha: &[u8], ct: &[u8], url: &str, wrap: &[u8]) -> Item {
+    let mut item = Item::new("file");
+    let p = |v: Value| Field::Plain(v);
+    item.set("title", p(json!(f.title)))
+        .set("mediaType", p(json!(f.media_type)))
+        .set("name", p(json!(f.name)))
+        .set("size", p(json!(size)))
+        .set("sha256", p(json!(hex(sha))))
+        .set("ctSha256", p(json!(hex(ct))))
+        .set("url", p(json!(url)))
+        .set("keyWrap", p(json!(hex(wrap))));
+    item
+}
+
+/// The fields an edit of a `file` item never changes: they name the object the key opens (review E-2).
+const FIXED: [&str; 4] = ["url", "size", "sha256", "ctSha256"];
+
 impl PqVault {
     /// `f` as a new `file` item of `v` (version 1 under the newest epoch), prepared for the review and paid by `payer`, with its
-    /// upload: the SDK's `seal_for_arweave` under `v`'s account, the file key sealed under the item's `kFile` (the handle wiped
-    /// here), the item checked by the writer's bounds. Nothing is signed or posted.
+    /// upload: first the cheap refusals (a member of the newest epoch, the item's bounds with the file's size), then the
+    /// SDK's `seal_for_arweave` under `v`'s account (the file moved in, wiped there), the file key sealed under the item's
+    /// `kFile` (the handle wiped here). Nothing is signed or posted.
     pub async fn prepare_file(
         &self,
         v: &Unlocked,
-        f: &FileToSave,
+        mut f: FileToSave,
         payer: KeyRef,
     ) -> Result<PreparedFile> {
         self.p1(&v.account).await?;
-        let e = v.write_epoch()?.id;
+        let e = v.write_epoch()?;
+        if e.member_at(v.state.me).is_none() || e.removed().contains(&v.state.me) {
+            return Err(Error::NotMember);
+        }
+        let e = e.id;
+        let size = f.file.len() as u64;
+        let z = [0u8; 60];
+        let url0 = format!("ar://{}", "A".repeat(43));
+        file_item(&f, size, &z[..32], &z[..32], &url0, &z).check()?;
         let nonce = self.item_nonce(v)?;
         let iid = crate::records::item_id(v.state.vault_id, v.state.me, nonce);
-        let a = self.core.seal_for_arweave(
-            v.account.clone(),
-            f.file.clone(),
-            SIGNATURE_TYPE,
-            f.max_object,
-        )?;
+        let file = std::mem::take(&mut *f.file);
+        let a =
+            self.core
+                .seal_for_arweave(v.account.clone(), file, SIGNATURE_TYPE, f.max_object)?;
         let x = v.at(e, iid, 1, v.state.me);
         let kv = v.keys.get(&e).ok_or(Error::Unreadable)?;
         let wrap = keys::seal_file_key(&self.core, kv, &x, a.key.clone());
         let _ = self.core.destroy(a.key);
         let ct_sha256: [u8; 32] = a.ct_sha256.try_into().map_err(|_| Error::Shape)?;
-        let mut item = Item::new("file");
-        let p = |v: Value| Field::Plain(v);
-        item.set("title", p(json!(f.title)))
-            .set("mediaType", p(json!(f.media_type)))
-            .set("name", p(json!(f.name)))
-            .set("size", p(json!(a.size)))
-            .set("sha256", p(json!(hex(&a.sha256))))
-            .set("ctSha256", p(json!(hex(&ct_sha256))))
-            .set("url", p(json!(a.url)))
-            .set("keyWrap", p(json!(hex(&wrap?))));
+        let item = file_item(&f, a.size, &a.sha256, &ct_sha256, &a.url, &wrap?);
         item.check()?;
         let rec = self.item_record_at(v, &item, nonce)?;
         let prepared = self.prepare_in(v, rec, payer).await?;
@@ -159,12 +181,13 @@ impl PqVault {
     }
 
     /// Signs a prepared `file` item on the user's confirm ([`PqVault::confirm`]), only after [`PqVault::check_uploaded`]
-    /// passed; before it, `FileNotRead` and nothing is signed.
-    pub async fn confirm_file(&self, p: PreparedFile) -> Result<Confirmed<ItemRecord>> {
+    /// passed; before it, `FileNotRead` and nothing is signed. `p` stays the caller's: a failed signing call is retried
+    /// with the same upload, never a second object (review E-4).
+    pub async fn confirm_file(&self, p: &PreparedFile) -> Result<Confirmed<ItemRecord>> {
         if !p.read {
             return Err(Error::FileNotRead);
         }
-        self.confirm(p.prepared).await
+        self.confirm(p.prepared.again()).await
     }
 
     /// The file of `object` (fetched by the app on its user's action, `ArweaveFiles::fetch_file` with [`file_info`]'s `url`,
@@ -203,24 +226,36 @@ impl PqVault {
         Ok(Arc::new(opened?))
     }
 
-    /// `value` with a `file` item's `keyWrap` re-sealed from `base`'s version (its epoch, item, version) to `version` under
-    /// `epoch` (an edit's new version: `kFile` binds both); any other item unchanged. A wrap that does not open: `Unreadable`.
+    /// `value` with a `file` item's `keyWrap` re-sealed from `src`'s version (its epoch, item, version: `src`'s own wrap) to
+    /// `version` under `epoch` (an edit's new version: `kFile` binds both); any other item unchanged. `src` not a readable
+    /// `file` item, or `value` naming another object (`url`, `size`, `sha256`, `ctSha256` changed): `Shape`; a wrap that does
+    /// not open: `Unreadable`.
     pub(crate) fn rewrap_file(
         &self,
         v: &Unlocked,
-        base: &ItemVersion,
+        src: &ItemVersion,
         epoch: B32,
         version: u32,
         value: &Item,
     ) -> Result<Item> {
-        let Some(wire) = (value.ty == "file")
-            .then(|| value.plain("keyWrap"))
-            .flatten()
+        if value.ty != "file" {
+            return Ok(value.clone());
+        }
+        let was = src
+            .value
+            .as_ref()
+            .ok()
+            .filter(|i| i.ty == "file")
+            .ok_or(Error::Shape)?;
+        if FIXED.iter().any(|k| was.plain(k) != value.plain(k)) {
+            return Err(Error::Shape);
+        }
+        let wire = was
+            .plain("keyWrap")
             .and_then(Value::as_str)
             .and_then(|h| unhex(h, 60))
-        else {
-            return Ok(value.clone());
-        };
+            .ok_or(Error::Unreadable)?;
+        let base = src;
         let old = v.at(base.epoch_id, base.item_id, base.version, base.author);
         let kv_old = v.keys.get(&base.epoch_id).ok_or(Error::Unreadable)?;
         let key = keys::open_file_key(&self.core, kv_old, &old, &wire)?;

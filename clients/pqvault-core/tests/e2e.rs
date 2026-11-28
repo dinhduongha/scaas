@@ -2243,14 +2243,15 @@ async fn file_item_on_arweave() {
     }))
     .unwrap();
     let files = scaas_sdk::arweave::ArweaveFiles::new(&cfg, |_| None).unwrap();
+    let bytes: Vec<u8> = (0..5000u32).map(|i| (i * 7 % 256) as u8).collect();
     let f = pqvault_core::file::FileToSave {
-        file: (0..5000u32).map(|i| (i * 7 % 256) as u8).collect(),
+        file: zeroize::Zeroizing::new(bytes.clone()),
         title: "Recovery sheet".into(),
         media_type: "application/pdf".into(),
         name: "sheet.pdf".into(),
         max_object: (1u64 << 17) + 16,
     };
-    let mut p = pv.prepare_file(&u, &f, d.payer.clone()).await.unwrap();
+    let mut p = pv.prepare_file(&u, f, d.payer.clone()).await.unwrap();
     {
         let up = p.upload();
         let mut k = kept.lock().unwrap();
@@ -2261,7 +2262,7 @@ async fn file_item_on_arweave() {
     assert_eq!(out.url, p.upload().url);
     assert_eq!(out.paid, scaas_sdk::arweave::Paid::FreeTier);
     pv.check_uploaded(&mut p, &files).await.unwrap();
-    let c = pv.confirm_file(p).await.unwrap();
+    let c = pv.confirm_file(&p).await.unwrap();
     send(&d, c.call.unwrap()).await;
     say("file item written after its object was read back");
     let latest = pv.open_latest(&u).await.unwrap();
@@ -2274,7 +2275,57 @@ async fn file_item_on_arweave() {
         .fetch_file(&fi.url, fi.size, fi.ct_sha256)
         .await
         .unwrap();
-    let opened = pv.open_file(&u, v, object).unwrap();
-    assert_eq!(opened.with(|b| b.to_vec()), f.file);
+    let opened = pv.open_file(&u, v, object.clone()).unwrap();
+    assert_eq!(opened.with(|b| b.to_vec()), bytes);
     say("fetched on action and opened, equal byte for byte");
+    // review F-4: a rekey, then an edit re-seals the file key under the new epoch's kFile
+    let item = v.value.as_ref().unwrap().clone();
+    let (e, _) = pv
+        .rekey(
+            &u,
+            &u.state.newest().unwrap().members,
+            &[u.state.me],
+            None,
+            Link::Prev,
+            d.payer.clone(),
+        )
+        .await
+        .unwrap();
+    sent(&pv, &d, e).await;
+    let s = pv.load(&at, u.state.vault_id, u.state.me).await.unwrap();
+    let u = pv.unlock(&k1, s, &Passphrase::Off).await.unwrap();
+    let v1 = pv.history(&u, v.item_id).await.unwrap().pop().unwrap();
+    let mut renamed = item.clone();
+    renamed.set("title", Field::Plain(json!("Recovery sheet (2031)")));
+    let ed = pv
+        .edit_item(&u, &v1, &renamed, d.payer.clone())
+        .await
+        .unwrap();
+    assert_ne!(ed.record().epoch_id, v1.epoch_id, "the new epoch");
+    sent(&pv, &d, ed).await;
+    let v2 = pv.history(&u, v.item_id).await.unwrap().pop().unwrap();
+    assert_eq!(v2.version, 2);
+    let opened = pv.open_file(&u, &v2, object.clone()).unwrap();
+    assert_eq!(opened.with(|b| b.to_vec()), bytes);
+    say("an edit after a rekey opens under the new epoch");
+    // review E-3: a rename kept against a tombstone (resolve): the key re-sealed from the version whose wrap it kept
+    let gone = pv
+        .edit_item(&u, &v2, &Item::deleted(), d.payer.clone())
+        .await
+        .unwrap();
+    sent(&pv, &d, gone).await;
+    let base = v2.value.as_ref().unwrap();
+    let mut ours = base.clone();
+    ours.set("title", Field::Plain(json!("Recovery sheet (kept)")));
+    let (r, _) = pv
+        .resolve(&u, base, &ours, v.item_id, d.payer.clone())
+        .await
+        .unwrap();
+    sent(&pv, &d, r).await;
+    let v4 = pv.history(&u, v.item_id).await.unwrap().pop().unwrap();
+    assert_eq!(v4.version, 4);
+    assert_eq!(v4.value.as_ref().unwrap().ty, "file", "the edit kept");
+    let opened = pv.open_file(&u, &v4, object).unwrap();
+    assert_eq!(opened.with(|b| b.to_vec()), bytes);
+    say("a rename kept against a delete opens");
 }

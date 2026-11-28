@@ -439,6 +439,23 @@ impl<R> Confirmed<R> {
     }
 }
 
+impl<R: Clone> Prepared<R> {
+    /// The same prepared record again, for a confirm that may be retried (`confirm_file`, review E-4); never public, so a
+    /// front-end holds one `Prepared` per review.
+    pub(crate) fn again(&self) -> Prepared<R> {
+        Prepared {
+            record: self.record.clone(),
+            wraps: self.wraps.clone(),
+            quote: self.quote.clone(),
+            signer: self.signer.clone(),
+            path: self.path.clone(),
+            at: self.at.clone(),
+            typed: self.typed.clone(),
+            payer: self.payer.clone(),
+        }
+    }
+}
+
 impl<R> Prepared<R> {
     /// The unsigned record.
     pub fn record(&self) -> &R {
@@ -1433,6 +1450,10 @@ impl PqVault {
     }
 
     fn item_record(&self, v: &Unlocked, value: &Item) -> Result<ItemRecord> {
+        // a `file` item is written by `prepare_file` only, after its object was read back (C14; review E-1, F-3)
+        if value.ty == "file" {
+            return Err(Error::Shape);
+        }
         let nonce = self.item_nonce(v)?;
         self.item_record_at(v, value, nonce)
     }
@@ -1485,6 +1506,19 @@ impl PqVault {
         value: &Item,
         payer: KeyRef,
     ) -> Result<Prepared<EditRecord>> {
+        self.edit_from(v, base, base, value, payer).await
+    }
+
+    /// [`Self::edit_item`] whose `file` key is re-sealed from `src`'s version (`base` itself, or for a merge the version
+    /// whose `keyWrap` the merged item kept).
+    async fn edit_from(
+        &self,
+        v: &Unlocked,
+        base: &ItemVersion,
+        src: &ItemVersion,
+        value: &Item,
+        payer: KeyRef,
+    ) -> Result<Prepared<EditRecord>> {
         self.p1(&v.account).await?;
         let e = v.write_epoch()?;
         if e.member_at(v.state.me).is_none() || e.removed().contains(&v.state.me) {
@@ -1492,7 +1526,7 @@ impl PqVault {
         }
         let version = base.version_count.checked_add(1).ok_or(Error::Shape)?;
         // a `file` item's key re-sealed under the new version's `kFile` (spec §6.8: bound to the epoch and the version)
-        let value = &self.rewrap_file(v, base, e.id, version, value)?;
+        let value = &self.rewrap_file(v, src, e.id, version, value)?;
         let nonce = nonce_of(&self.core.random_bytes(&v.seed, 8)?);
         let rec = EditRecord {
             item_id: base.item_id,
@@ -1523,7 +1557,19 @@ impl PqVault {
         let merged = match &m {
             Merge::Clean(x) | Merge::Conflict(x, _) => x,
         };
-        Ok((self.edit_item(v, latest, merged, payer).await?, m))
+        // a merged `file` item keeps one version's `keyWrap`: the latest's, or (an edit kept against a tombstone) the newest
+        // version carrying the same wrap (review E-3)
+        let wrap = |i: &Item| i.plain("keyWrap").cloned();
+        let src = history
+            .iter()
+            .rev()
+            .find(|h| {
+                h.value
+                    .as_ref()
+                    .is_ok_and(|i| merged.ty == "file" && i.ty == "file" && wrap(i) == wrap(merged))
+            })
+            .unwrap_or(latest);
+        Ok((self.edit_from(v, latest, src, merged, payer).await?, m))
     }
 
     /// `items` as batches sized by `limits` (each under the gas bound and the SDK's 64-KiB typed-data cap), each one record
