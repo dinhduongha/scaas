@@ -2,7 +2,8 @@
 # cargo-audit of scaas-pqz-verifier (owner 2026-11-28): the vulnerabilities deny.toml ignores, with the same reasons.
 [advisories]
 ignore = [
-  # crypto-bigint 0.5.5: the verdict key signs through alloy 1.6's k256 0.13.4, remotely triggerable; exit alloy 2 /
-  # k256 0.14 or a verdict signer off crypto-bigint 0.5.5; review by 2026-12-31 (deny.toml)
+  # crypto-bigint 0.5.5 via alloy 1.6's k256 0.13.4 on public data only; the verdict key signs with k256 0.14.0
+  # (CTR-PQZ-28 Change, 2026-11-28); exit alloy on k256 >= 0.14 (checked alloy 2.6.1, 2026-11-28); review by 2027-02-28
+  # (deny.toml)
   "RUSTSEC-2026-0387",
 ]

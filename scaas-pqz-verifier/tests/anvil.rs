@@ -125,6 +125,12 @@ fn read_json(p: &str) -> Value {
         .unwrap()
 }
 
+/// The service's verdict key from the test's alloy signer (the same secret bytes, CTR-PQZ-28 Change).
+fn verdict_key(s: &PrivateKeySigner) -> scaas_pqz_verifier::VerdictKey {
+    scaas_pqz_verifier::VerdictKey::from_secret(zeroize::Zeroizing::new(s.to_bytes().to_vec()))
+        .unwrap()
+}
+
 fn deployer() -> PrivateKeySigner {
     DEPLOYER.parse().unwrap()
 }
@@ -743,7 +749,12 @@ rate_per_minute = 1000
     check_pins(&rpc_nodes, &cfg)
         .await
         .expect("the registry's generation() and chainUid() are the pinned ones (Fable R-4)");
-    let svc = Arc::new(Service::new(Arc::new(rpc_nodes), pqz, signer.clone(), &cfg));
+    let svc = Arc::new(Service::new(
+        Arc::new(rpc_nodes),
+        pqz,
+        verdict_key(&signer),
+        &cfg,
+    ));
     let app = http::router(svc.clone(), &cfg);
 
     // the OFFCHAIN token naming the service's UA
@@ -1110,7 +1121,7 @@ async fn strict_majority_on_three_anvils(
         let nodes = Rpc::connect(&cfg.rpc_urls, CHAIN_ID).await.unwrap();
         let pqz: Pqz = Arc::new(|_: &[u8]| Ok(VALID));
         http::router(
-            Arc::new(Service::new(Arc::new(nodes), pqz, signer.clone(), cfg)),
+            Arc::new(Service::new(Arc::new(nodes), pqz, verdict_key(signer), cfg)),
             cfg,
         )
     }

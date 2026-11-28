@@ -9,6 +9,7 @@
 pub mod abi;
 pub mod chain;
 pub mod http;
+mod key;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::net::SocketAddr;
@@ -18,8 +19,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use alloy::primitives::hex;
 use alloy::primitives::{keccak256, Address, Bytes, B256, U256};
-use alloy::signers::local::PrivateKeySigner;
-use alloy::signers::SignerSync;
 use alloy::sol_types::{Eip712Domain, SolCall, SolStruct, SolValue};
 use pqz_ffi::stmt::{self, Form};
 use serde::{Deserialize, Serialize};
@@ -30,6 +29,7 @@ use abi::{
 };
 use chain::{Block, Chain, ChainError};
 
+pub use key::{password_from_env, VerdictKey};
 pub use pqz_ffi::{Word, INVALID, VALID};
 
 /// pqz-ffi's verdict on a precompile input `u8(op) ‖ be32(len) ‖ statement ‖ proof`; in production [`offchain`].
@@ -732,7 +732,7 @@ impl Keys {
 pub struct Service {
     chain: Arc<dyn Chain>,
     pqz: Pqz,
-    signer: PrivateKeySigner,
+    signer: VerdictKey,
     ua: B256,
     chain_id: u64,
     chain_uid: B256,
@@ -778,7 +778,7 @@ fn leg_owner(blob: &[u8], leg: U256) -> Option<B256> {
 }
 
 impl Service {
-    pub fn new(chain: Arc<dyn Chain>, pqz: Pqz, signer: PrivateKeySigner, cfg: &Config) -> Self {
+    pub fn new(chain: Arc<dyn Chain>, pqz: Pqz, signer: VerdictKey, cfg: &Config) -> Self {
         Self {
             chain: chain.clone(),
             pqz,
@@ -1561,17 +1561,14 @@ impl Service {
             self.ua,
             verdict_digest(&v, self.chain_uid),
         );
-        let sig = self
-            .signer
-            .sign_hash_sync(&auth)
-            .map_err(|e| refuse("SIGNER_FAULT", e.to_string()))?;
+        let sig = self.signer.sign_hash(&auth);
         tracing::info!(token = %t.at, statement_hash = %statement_hash, proof_hash = %proof_hash, epoch,
             valid_until = v.validUntil, "pqz verdict signed");
         Ok(Signed {
             pqz_verdict: v,
             pqz_verdict_sig: WireSig {
                 key_data: Bytes::new(),
-                signature: sig.as_bytes().to_vec().into(),
+                signature: sig.to_vec().into(),
                 members: vec![],
             },
         })

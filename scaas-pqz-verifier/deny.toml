@@ -16,21 +16,21 @@ yanked = "deny"
 unsound = "all"
 ignore = [
   # crypto-bigint 0.5.5 (timing variability in constant-time operations: subtraction, zero counting, division and
-  # Montgomery multiplication may branch on secrets depending on compiler and CPU; fix only in 0.7.6+) reaches the graph
-  # through alloy 1.6 (alloy-signer / alloy-signer-local / alloy-primitives -> k256 0.13.4 -> elliptic-curve 0.13.8, the
-  # last 0.13); every alloy release still requires k256 ^0.13. The secret on this path is the verifier's key: the binary
-  # signs every PqzVerdict with alloy's PrivateKeySigner (k256 0.13.4: sbb / sub_mod / add_mod / neg_mod of crypto-bigint
-  # on the secret scalar and nonce). That key decides proof acceptance on every OFFCHAIN token that names this verifier (a
-  # false verdict can create value and drain the token's shielded pool), and signing is triggered remotely: anyone who
-  # can reach POST /v1/pqz-verdict with a proof that verifies gets one signature and can time it. Accepted until the exit: the
-  # affected branches depend on compiler and CPU and need a timing channel through the HTTP answer; the operator runs the
-  # verifier as its own trust role (README "A separate trust role") and may rate-limit it (`rate_per_minute`). Exit: alloy
-  # 2 on k256 0.14, or a verdict signing path that avoids crypto-bigint 0.5.5 (owner 2026-11-28, item (2), before the tag).
-  { id = "RUSTSEC-2026-0387", reason = "the verdict key signs through alloy 1.6's k256 0.13.4, remotely triggerable; exit alloy 2 / k256 0.14 or a verdict signer off crypto-bigint 0.5.5; review by 2026-12-31" },
+  # Montgomery multiplication may branch on secrets depending on compiler and CPU; fix only in 0.7.6+) stays in the graph
+  # through alloy 1.6 (alloy-primitives / alloy-signer -> k256 0.13.4 -> elliptic-curve 0.13.8, the last 0.13, and
+  # alloy-signer -> elliptic-curve 0.13.8 directly), on public data only in the normal graph: signature recovery and the
+  # types of the chain reads. With dev-dependencies in cargo-deny's graph this ignore also covers the dev-only
+  # alloy-signer-local path (the tests' keys); CI checks that alloy-signer-local stays out of the normal graph. The verdict key no longer touches it: since the
+  # CTR-PQZ-28 Change of 2026-11-28 the binary signs every PqzVerdict with k256 0.14.0 (crypto-bigint 0.7.10, src/key.rs),
+  # its secret read raw from the keystore; alloy's PrivateKeySigner is a dev-dependency only (the reference in
+  # tests/verdict_key.rs, the anvil tests' wallets). Exit: alloy on k256 >= 0.14 (checked alloy 2.6.1, 2026-11-28:
+  # alloy-signer and alloy-primitives 1.7.3 still require k256 ^0.13).
+  { id = "RUSTSEC-2026-0387", reason = "via alloy 1.6's k256 0.13.4 on public data only; the verdict key signs with k256 0.14.0; exit alloy on k256 >= 0.14 (checked alloy 2.6.1, 2026-11-28); review by 2027-02-28" },
   # lru 0.16.4 (unsound: `LruCache::pop` may use freed memory when a key's Drop panics and the panic is caught) via
   # alloy-provider 1.6.3, whose caches key on u64 block numbers and B256 hashes: no key Drop can panic. Fixed in lru
-  # 0.18.2, which needs alloy-provider >= 2.6 (alloy 2, its own round): remove with that move.
-  { id = "RUSTSEC-2026-0253", reason = "lru 0.16.4 via alloy-provider 1.6.3, u64 / B256 keys whose Drop cannot panic; fix needs alloy 2; review by 2027-02-28" },
+  # 0.18.2, which alloy-provider >= 2.4.0 (2026-08-12) requires (checked 2.6.1, 2026-11-28; 2.0-2.3 are still on ^0.16):
+  # remove with the move to alloy >= 2.4, its own round.
+  { id = "RUSTSEC-2026-0253", reason = "lru 0.16.4 via alloy-provider 1.6.3, u64 / B256 keys whose Drop cannot panic; fix needs alloy-provider >= 2.4 (checked 2.6.1, 2026-11-28); review by 2027-02-28" },
   # unmaintained, no vulnerability
   { id = "RUSTSEC-2024-0436", reason = "paste: proc macro of alloy-primitives and ark-ff 0.5, build-time only, not in the runtime" },
   { id = "RUSTSEC-2026-0441", reason = "pin-utils: wasm32 only (wasmtimer 0.4.3 of alloy 1.6), never built for the verifier; unmaintained, no vulnerability" },
@@ -68,10 +68,10 @@ multiple-versions = "warn"
 wildcards = "deny"
 allow-wildcard-paths = true
 deny = [{ crate = "aes", deny-multiple-versions = true }, { crate = "curve25519-dalek", deny-multiple-versions = true }]
-# aes 0.8.4 is eth-keystore 0.5.0's (alloy's `signer-keystore`: the verifier key's encrypted JSON keystore, AES-128-CTR,
-# read once at start); pqzl is on aes 0.9. Remove when alloy's keystore moves to aes 0.9.
+# aes 0.8.4 is eth-keystore 0.5.0's, the verifier's direct dependency (its keystore reader: AES-128-CTR, read once at
+# start); pqzl is on aes 0.9. Remove with an eth-keystore release on aes 0.9 or another keystore reader.
 skip = [
-  { crate = "aes@0.8.4", reason = "eth-keystore 0.5.0 of alloy signer-keystore (the verifier's keystore); pqzl is on aes 0.9" },
+  { crate = "aes@0.8.4", reason = "eth-keystore 0.5.0, the verifier's direct keystore reader; pqzl is on aes 0.9" },
 ]
 
 [sources]

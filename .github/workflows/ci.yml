@@ -24,6 +24,7 @@
 #   scaas-node:    first cargo deny --locked check -D index-failure and cargo audit (scaas-node/deny.toml, scaas-node/.cargo/audit.toml);
 #                  then cargo clippy --all-targets -- -D warnings; cargo test; cargo test --test e2e -- --ignored
 #   scaas-pqz-verifier: first cargo deny --locked check -D index-failure and cargo audit (its deny.toml, .cargo/audit.toml);
+#                  cargo tree --locked -e normal -i alloy-signer-local prints nothing (alloy's PrivateKeySigner dev-only);
 #                  cargo clippy --locked --all-targets -- -D warnings; cargo test --locked (tests/anvil.rs, opt-in, stays local)
 #   clients/scaas-rpc: first cargo deny --locked check -D index-failure and cargo audit (its deny.toml, .cargo/audit.toml); cargo test --locked --all-features; cargo clippy --locked --all-targets --all-features -- -D warnings;
 #                  cargo test --locked --features evm --test anvil -- --ignored (three anvils, foundry's);
@@ -620,6 +621,11 @@ jobs:
         run: |
           cargo deny --locked check -D index-failure
           cargo audit
+      # the RUSTSEC-2026-0387 accept rests on it (CTR-PQZ-28 Change, review VK-11): alloy's PrivateKeySigner is a dev-dependency
+      - name: alloy-signer-local stays out of the normal graph
+        run: |
+          out=$(cargo tree --locked -e normal -i alloy-signer-local 2>/dev/null)
+          if [ -n "$out" ]; then echo "$out"; echo "::error::alloy-signer-local is in the verifier's normal graph"; exit 1; fi
       - name: cargo clippy
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: cargo test
